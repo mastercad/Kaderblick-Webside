@@ -17,7 +17,7 @@ beforeEach(() => {
 
 describe('fetchGameSquad', () => {
   it('calls the correct endpoint with the given gameId', async () => {
-    mockApiJson.mockResolvedValue({ squad: [], hasParticipationData: false });
+    mockApiJson.mockResolvedValue({ squad: [], allPlayers: [], hasParticipationData: false });
 
     await fetchGameSquad(42);
 
@@ -29,6 +29,11 @@ describe('fetchGameSquad', () => {
       squad: [
         { id: 1, fullName: 'Max Mustermann', shirtNumber: 7, teamId: 10 },
         { id: 2, fullName: 'Erika Muster', shirtNumber: null, teamId: 10 },
+      ],
+      allPlayers: [
+        { id: 1, fullName: 'Max Mustermann', shirtNumber: 7, teamId: 10 },
+        { id: 2, fullName: 'Erika Muster', shirtNumber: null, teamId: 10 },
+        { id: 3, fullName: 'Karl Kühn', shirtNumber: 11, teamId: 10 },
       ],
       hasParticipationData: true,
     };
@@ -42,7 +47,7 @@ describe('fetchGameSquad', () => {
   });
 
   it('returns empty squad and hasParticipationData: false when no participations exist', async () => {
-    const fixture: GameSquadData = { squad: [], hasParticipationData: false };
+    const fixture: GameSquadData = { squad: [], allPlayers: [], hasParticipationData: false };
     mockApiJson.mockResolvedValue(fixture);
 
     const result = await fetchGameSquad(99);
@@ -52,7 +57,7 @@ describe('fetchGameSquad', () => {
   });
 
   it('returns empty squad and hasParticipationData: true when participations exist but nobody attending', async () => {
-    const fixture: GameSquadData = { squad: [], hasParticipationData: true };
+    const fixture: GameSquadData = { squad: [], allPlayers: [], hasParticipationData: true };
     mockApiJson.mockResolvedValue(fixture);
 
     const result = await fetchGameSquad(7);
@@ -74,7 +79,7 @@ describe('fetchGameSquad', () => {
       shirtNumber: 10,
       teamId: 2,
     };
-    mockApiJson.mockResolvedValue({ squad: [player], hasParticipationData: true });
+    mockApiJson.mockResolvedValue({ squad: [player], allPlayers: [player], hasParticipationData: true });
 
     const result = await fetchGameSquad(3);
     const first = result.squad[0];

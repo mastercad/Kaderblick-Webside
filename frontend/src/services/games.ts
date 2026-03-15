@@ -60,6 +60,8 @@ export interface SquadPlayer {
 
 export interface GameSquadData {
   squad: SquadPlayer[];
+  /** Alle aktiven Spieler der beteiligten Teams (unabhängig von Zusagen) */
+  allPlayers: SquadPlayer[];
   /** true wenn überhaupt Teilnahme-Daten für den CalendarEvent existieren */
   hasParticipationData: boolean;
 }

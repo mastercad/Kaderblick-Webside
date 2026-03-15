@@ -340,7 +340,7 @@ export default function ActivityOverview() {
                   <TableCell>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {user.roles
-                        .filter(r => r !== 'ROLE_USER' || user.roles.length === 1)
+                        .filter(r => r !== 'ROLE_RELATED_USER' && (r !== 'ROLE_USER' || user.roles.length === 1))
                         .map(r => (
                           <Chip
                             key={r}

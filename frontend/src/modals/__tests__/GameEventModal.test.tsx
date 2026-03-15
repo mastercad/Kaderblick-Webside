@@ -1,3 +1,13 @@
+/**
+ * Tests für GameEventModal – Spielerauswahl
+ *
+ * Geprüft wird:
+ *  - Kader-Chip (Info-Chip mit Anzahl zugesagter Spieler)
+ *  - Kein Toggle-Chip mehr – Chip ist statisch
+ *  - Gruppierte Spielerauswahl: "Kader" + "Weitere Spieler" ListSubheader
+ *  - Kein API-Fallback über /api/teams/{id}/players mehr
+ *  - Robustheit bei fehlendem allPlayers-Feld im Response
+ */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -28,7 +38,7 @@ jest.mock('../../services/games', () => ({
   updateGameEvent: jest.fn(),
 }));
 
-// apiJson direkt im Modal (für Spieler-Fallback via /api/teams/{id}/players)
+// apiJson wird im Modal nicht mehr direkt verwendet (kein teams-Fallback mehr)
 jest.mock('../../utils/api', () => ({
   apiJson: jest.fn(),
   getApiErrorMessage: jest.fn(() => 'Ein Fehler ist aufgetreten'),
@@ -39,7 +49,6 @@ import {
   fetchSubstitutionReasons,
   fetchGameSquad,
 } from '../../services/games';
-import { apiJson } from '../../utils/api';
 
 // ── Fixture-Daten ────────────────────────────────────────────────────────────
 
@@ -59,7 +68,7 @@ const mockGame: Game = {
   },
 };
 
-/** Basiert auf dem Shape, das der Controller zurückgibt */
+/** existingEvent mit home-Team → Team ist vorausgewählt */
 const existingEventWithHomeTeam: any = {
   id: 1,
   teamId: HOME_TEAM_ID,
@@ -77,17 +86,31 @@ const defaultProps = {
   existingEvent: null as any,
 };
 
+/** Squad-Mock mit Kader + weiteren Spielern für HOME_TEAM */
+const mockSquadWithAll = {
+  squad: [
+    { id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID },
+    { id: 2, fullName: 'Lisa Lauf', shirtNumber: 9, teamId: HOME_TEAM_ID },
+  ],
+  allPlayers: [
+    { id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID },
+    { id: 2, fullName: 'Lisa Lauf', shirtNumber: 9, teamId: HOME_TEAM_ID },
+    { id: 3, fullName: 'Karl Kühn', shirtNumber: 11, teamId: HOME_TEAM_ID },
+    { id: 4, fullName: 'Anna Ausdauer', shirtNumber: null, teamId: HOME_TEAM_ID },
+  ],
+  hasParticipationData: true,
+};
+
 // ── Hilfsfunktion ─────────────────────────────────────────────────────────────
 
 function setupDefaultMocks() {
   (fetchGameEventTypes as jest.Mock).mockResolvedValue([]);
   (fetchSubstitutionReasons as jest.Mock).mockResolvedValue([]);
-  (apiJson as jest.Mock).mockResolvedValue([]);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('GameEventModal – Squad-Chip', () => {
+describe('GameEventModal – Spielerauswahl', () => {
   beforeAll(() => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -102,11 +125,12 @@ describe('GameEventModal – Squad-Chip', () => {
     setupDefaultMocks();
   });
 
-  // ── Kein ChipAnzeige ohne Participation-Daten ─────────────────────────────
+  // ── Kein Chip ohne Participation-Daten ────────────────────────────────────
 
-  it('zeigt keinen Squad-Chip wenn hasParticipationData: false', async () => {
+  it('zeigt keinen Kader-Chip wenn hasParticipationData: false', async () => {
     (fetchGameSquad as jest.Mock).mockResolvedValue({
       squad: [],
+      allPlayers: [],
       hasParticipationData: false,
     });
 
@@ -118,16 +142,18 @@ describe('GameEventModal – Squad-Chip', () => {
       expect(fetchGameSquad).toHaveBeenCalledWith(100);
     });
 
-    // Kein Chip – weder "zugesagt" noch "Keine Zusagen"
     expect(screen.queryByText(/zugesagt/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Keine Zusagen')).not.toBeInTheDocument();
   });
 
-  // ── "Keine Zusagen"-Chip wenn niemand erscheint ───────────────────────────
+  // ── "Keine Zusagen"-Chip ──────────────────────────────────────────────────
 
   it('zeigt "Keine Zusagen"-Chip wenn Teilnahmen existieren aber kein Spieler im Squad', async () => {
     (fetchGameSquad as jest.Mock).mockResolvedValue({
-      squad: [], // kein Spieler dieser Team
+      squad: [],
+      allPlayers: [
+        { id: 3, fullName: 'Karl Kühn', shirtNumber: 11, teamId: HOME_TEAM_ID },
+      ],
       hasParticipationData: true,
     });
 
@@ -140,16 +166,10 @@ describe('GameEventModal – Squad-Chip', () => {
     });
   });
 
-  // ── "X zugesagt"-Chip bei vorhandenen Squad-Spielern ─────────────────────
+  // ── Chip mit Anzahl zugesagter Spieler ────────────────────────────────────
 
   it('zeigt "X zugesagt"-Chip wenn Squad-Spieler vorhanden', async () => {
-    (fetchGameSquad as jest.Mock).mockResolvedValue({
-      squad: [
-        { id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID },
-        { id: 2, fullName: 'Lisa Lauf', shirtNumber: 9, teamId: HOME_TEAM_ID },
-      ],
-      hasParticipationData: true,
-    });
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
 
     await act(async () => {
       render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
@@ -160,48 +180,41 @@ describe('GameEventModal – Squad-Chip', () => {
     });
   });
 
-  // ── Chip-Klick wechselt zu "Alle Spieler" ────────────────────────────────
+  // ── Chip ist statisch – kein Toggle mehr ─────────────────────────────────
 
-  it('wechselt nach Klick auf Chip zu "Alle Spieler" und lädt alle Teamspieler', async () => {
-    (fetchGameSquad as jest.Mock).mockResolvedValue({
-      squad: [
-        { id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID },
-      ],
-      hasParticipationData: true,
-    });
-
-    const allTeamPlayers = [
-      { id: 1, fullName: 'Max Muster', shirtNumber: 7 },
-      { id: 3, fullName: 'Karl Kühn', shirtNumber: 11 },
-    ];
-    (apiJson as jest.Mock).mockImplementation((url: string) => {
-      if (url.includes(`/api/teams/${HOME_TEAM_ID}/players`)) {
-        return Promise.resolve(allTeamPlayers);
-      }
-      return Promise.resolve([]);
-    });
+  it('Chip-Klick ändert nichts mehr (kein Toggle)', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
 
     await act(async () => {
       render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
     });
 
-    // Warte bis Squad-Chip erscheint
     await waitFor(() => {
-      expect(screen.getByText('1 zugesagt')).toBeInTheDocument();
+      expect(screen.getByText('2 zugesagt')).toBeInTheDocument();
     });
 
-    // Klick auf den Chip
+    fireEvent.click(screen.getByText('2 zugesagt'));
+
+    // Label bleibt gleich – kein Toggle-Verhalten
+    expect(screen.getByText('2 zugesagt')).toBeInTheDocument();
+    expect(screen.queryByText('Alle Spieler')).not.toBeInTheDocument();
+  });
+
+  // ── Kein apiJson-Fallback-Aufruf mehr ────────────────────────────────────
+
+  it('ruft apiJson NICHT für /api/teams/{id}/players auf', async () => {
+    const { apiJson } = require('../../utils/api');
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
+
     await act(async () => {
-      fireEvent.click(screen.getByText('1 zugesagt'));
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
     });
 
-    // Chip-Label wechselt zu "Alle Spieler"
     await waitFor(() => {
-      expect(screen.getByText('Alle Spieler')).toBeInTheDocument();
+      expect(fetchGameSquad).toHaveBeenCalled();
     });
 
-    // apiJson für Teamspieler-Fallback wurde aufgerufen
-    expect(apiJson).toHaveBeenCalledWith(`/api/teams/${HOME_TEAM_ID}/players`);
+    expect(apiJson).not.toHaveBeenCalledWith(expect.stringContaining('/api/teams/'));
   });
 
   // ── fetchGameSquad wird mit korrekter gameId aufgerufen ──────────────────
@@ -209,6 +222,7 @@ describe('GameEventModal – Squad-Chip', () => {
   it('ruft fetchGameSquad mit der gameId der Props auf', async () => {
     (fetchGameSquad as jest.Mock).mockResolvedValue({
       squad: [],
+      allPlayers: [],
       hasParticipationData: false,
     });
 
@@ -224,13 +238,9 @@ describe('GameEventModal – Squad-Chip', () => {
   // ── Kein Chip wenn kein Team ausgewählt ──────────────────────────────────
 
   it('zeigt keinen Squad-Chip wenn kein Team ausgewählt (kein existingEvent)', async () => {
-    (fetchGameSquad as jest.Mock).mockResolvedValue({
-      squad: [{ id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID }],
-      hasParticipationData: true,
-    });
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
 
     await act(async () => {
-      // Kein existingEvent → kein Team vorausgewählt
       render(<GameEventModal {...defaultProps} existingEvent={null} />);
     });
 
@@ -238,8 +248,131 @@ describe('GameEventModal – Squad-Chip', () => {
       expect(fetchGameSquad).toHaveBeenCalled();
     });
 
-    // Kein Team → Chip wird nicht gerendert (formData.team ist '')
+    // kein Team vorausgewählt → Chip nicht sichtbar
     expect(screen.queryByText(/zugesagt/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Keine Zusagen')).not.toBeInTheDocument();
+  });
+
+  // ── Gruppierte Spielerliste: Kader-Header ─────────────────────────────────
+
+  it('zeigt "Kader"-ListSubheader in der Spielerauswahl wenn Squad vorhanden', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
+
+    await act(async () => {
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
+    });
+
+    await waitFor(() => expect(fetchGameSquad).toHaveBeenCalled());
+
+    // Select öffnen: das letzte combobox-Element ist die "Spieler"-Auswahl
+    const comboboxes = screen.getAllByRole('combobox');
+    await act(async () => {
+      fireEvent.mouseDown(comboboxes[comboboxes.length - 1]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(screen.getByText('Kader')).toBeInTheDocument();
+    });
+  });
+
+  // ── Gruppierte Spielerliste: Weitere-Spieler-Header ──────────────────────
+
+  it('zeigt "Weitere Spieler"-ListSubheader für nicht zugesagte Teamspieler', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue(mockSquadWithAll);
+
+    await act(async () => {
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
+    });
+
+    await waitFor(() => expect(fetchGameSquad).toHaveBeenCalled());
+
+    const comboboxes = screen.getAllByRole('combobox');
+    await act(async () => {
+      fireEvent.mouseDown(comboboxes[comboboxes.length - 1]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(screen.getByText('Weitere Spieler')).toBeInTheDocument();
+    });
+  });
+
+  // ── Nur "Weitere Spieler" wenn kein Squad vorhanden ──────────────────────
+
+  it('zeigt nur "Weitere Spieler"-Sektion wenn kein Spieler zugesagt hat', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue({
+      squad: [],
+      allPlayers: [
+        { id: 3, fullName: 'Karl Kühn', shirtNumber: 11, teamId: HOME_TEAM_ID },
+      ],
+      hasParticipationData: true,
+    });
+
+    await act(async () => {
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
+    });
+
+    await waitFor(() => expect(fetchGameSquad).toHaveBeenCalled());
+
+    const comboboxes = screen.getAllByRole('combobox');
+    await act(async () => {
+      fireEvent.mouseDown(comboboxes[comboboxes.length - 1]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(screen.queryByText('Kader')).not.toBeInTheDocument();
+      expect(screen.getByText('Weitere Spieler')).toBeInTheDocument();
+    });
+  });
+
+  // ── Keine Sektionen wenn gar keine Spieler vorhanden ─────────────────────
+
+  it('zeigt keine Spieler-Sektionen wenn keine Spieler für das Team verfügbar', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue({
+      squad: [],
+      allPlayers: [],
+      hasParticipationData: false,
+    });
+
+    await act(async () => {
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
+    });
+
+    await waitFor(() => {
+      expect(fetchGameSquad).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText('Kader')).not.toBeInTheDocument();
+    expect(screen.queryByText('Weitere Spieler')).not.toBeInTheDocument();
+  });
+
+  // ── Robustheit: allPlayers fehlt im Backend-Response ─────────────────────
+
+  it('crasht nicht wenn Backend kein allPlayers-Feld zurückgibt (Fallback auf [])', async () => {
+    (fetchGameSquad as jest.Mock).mockResolvedValue({
+      squad: [{ id: 1, fullName: 'Max Muster', shirtNumber: 7, teamId: HOME_TEAM_ID }],
+      // allPlayers absichtlich nicht enthalten (älteres Backend)
+      hasParticipationData: true,
+    });
+
+    await act(async () => {
+      render(<GameEventModal {...defaultProps} existingEvent={existingEventWithHomeTeam} />);
+    });
+
+    await waitFor(() => expect(fetchGameSquad).toHaveBeenCalled());
+
+    const comboboxes = screen.getAllByRole('combobox');
+    await act(async () => {
+      fireEvent.mouseDown(comboboxes[comboboxes.length - 1]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      // Kader-Header vorhanden, kein "Weitere Spieler" da allPlayers leer ist
+      expect(screen.getByText('Kader')).toBeInTheDocument();
+      expect(screen.queryByText('Weitere Spieler')).not.toBeInTheDocument();
+    });
   });
 });
