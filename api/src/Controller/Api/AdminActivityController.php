@@ -71,14 +71,18 @@ class AdminActivityController extends AbstractController
         $offset = ($page - 1) * $limit;
 
         $rows = $connection->fetchAllAssociative(
-            "SELECT id, email, first_name, last_name, roles, last_activity_at
+            "SELECT id, email, first_name, last_name, roles, is_verified, last_activity_at
              FROM users {$where} {$orderBy} LIMIT :limit OFFSET :offset",
             array_merge($params, ['limit' => $limit, 'offset' => $offset]),
             array_merge($types, ['limit' => ParameterType::INTEGER, 'offset' => ParameterType::INTEGER])
         );
 
+        // Roles that are computed dynamically by User::getRoles() and must never be read
+        // from the raw DB column (they may have been erroneously persisted in the past).
+        $dynamicRoles = ['ROLE_USER', 'ROLE_GUEST', 'ROLE_RELATED_USER'];
+
         $nowTs = $now->getTimestamp();
-        $userList = array_map(static function (array $row) use ($nowTs): array {
+        $userList = array_map(static function (array $row) use ($nowTs, $dynamicRoles): array {
             $lastActivity = $row['last_activity_at'];
             $minutesAgo = null;
             $isoDate = null;
@@ -87,7 +91,18 @@ class AdminActivityController extends AbstractController
                 $minutesAgo = (int) floor(($nowTs - $ts) / 60);
                 $isoDate = (new DateTimeImmutable($lastActivity))->format(DateTimeInterface::ATOM);
             }
-            $roles = $row['roles'] ? json_decode((string) $row['roles'], true) : ['ROLE_USER'];
+
+            // Read only the manually-assigned roles stored in the DB column, then strip
+            // any computed roles that may have been erroneously persisted there.
+            $storedRoles = $row['roles'] ? json_decode((string) $row['roles'], true) : [];
+            $storedRoles = array_values(array_filter(
+                is_array($storedRoles) ? $storedRoles : [],
+                static fn (string $r) => !in_array($r, $dynamicRoles, true)
+            ));
+
+            // Re-apply the same dynamic logic as User::getRoles()
+            $storedRoles[] = $row['is_verified'] ? 'ROLE_USER' : 'ROLE_GUEST';
+            $roles = array_values(array_unique($storedRoles));
 
             return [
                 'id' => (int) $row['id'],

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { apiJson, getApiErrorMessage } from '../utils/api';
+import { getApiErrorMessage } from '../utils/api';
 import {
   Button,
   TextField,
@@ -7,6 +7,7 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
+  ListSubheader,
   Box,
   Typography,
   Alert,
@@ -20,7 +21,7 @@ import {
   fetchGameSquad,
   type SquadPlayer,
 } from '../services/games';
-import { Game, GameEvent, GameEventType, Player, SubstitutionReason } from '../types/games';
+import { Game, GameEvent, GameEventType, SubstitutionReason } from '../types/games';
 import { getGameEventIconByCode } from '../constants/gameEventIcons';
 import BaseModal from './BaseModal';
 import {
@@ -106,15 +107,13 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [eventTypes, setEventTypes] = useState<GameEventType[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
   const [substitutionReasons, setSubstitutionReasons] = useState<SubstitutionReason[]>([]);
-  const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
   const [formData, setFormData] = useState(getInitialFormData);
-  /** Squad (Zugesagte) pro teamId, leer wenn keine Participation-Daten */
+  /** Squad (Zugesagte) pro teamId */
   const [squadByTeam, setSquadByTeam] = useState<Record<number, SquadPlayer[]>>({});
+  /** Alle aktiven Teamspieler pro teamId */
+  const [allPlayersByTeam, setAllPlayersByTeam] = useState<Record<number, SquadPlayer[]>>({});
   const [hasParticipationData, setHasParticipationData] = useState(false);
-  /** Wenn true: alle Teamspieler statt nur Zugesagte anzeigen */
-  const [showAllPlayers, setShowAllPlayers] = useState(false);
   const prevOpen = useRef(false);
 
   // ── Uhr ───────────────────────────────────────────────────────────────────
@@ -162,46 +161,36 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  useEffect(() => {
-    if (formData.team) {
-      const teamId = Number(formData.team);
-      const squadForTeam = squadByTeam[teamId] ?? [];
-      if (squadForTeam.length > 0 && !showAllPlayers) {
-        // Nur zugesagte Spieler (Kader) anzeigen
-        setTeamPlayers(squadForTeam as unknown as Player[]);
-      } else {
-        // Fallback: alle aktiven Teamspieler laden
-        apiJson(`/api/teams/${formData.team}/players`).then(p => {
-          const arr = Array.isArray(p) ? p : Object.values(p as Record<string, unknown>);
-          setTeamPlayers(arr as Player[]);
-        });
-      }
-    } else {
-      setTeamPlayers([]);
-    }
-  }, [formData.team, squadByTeam, showAllPlayers]);
+
 
   const loadInitialData = async () => {
     try {
       const [eventTypesRaw, reasonsData, squadData] = await Promise.all([
         fetchGameEventTypes(),
         fetchSubstitutionReasons(),
-        fetchGameSquad(gameId).catch(() => ({ squad: [], hasParticipationData: false })),
+        fetchGameSquad(gameId).catch(() => ({ squad: [], allPlayers: [], hasParticipationData: false })),
       ]);
       const eventTypesData = Array.isArray(eventTypesRaw)
         ? eventTypesRaw
         : ((eventTypesRaw as any).gameEventTypes || []);
       setEventTypes(eventTypesData);
-      setPlayers([]);
       setSubstitutionReasons(reasonsData);
 
-      // Squad nach teamId gruppieren
+      // Squad (Zugesagte) nach teamId gruppieren
       const byTeam: Record<number, SquadPlayer[]> = {};
       for (const p of squadData.squad) {
         if (!byTeam[p.teamId]) byTeam[p.teamId] = [];
         byTeam[p.teamId].push(p);
       }
       setSquadByTeam(byTeam);
+
+      // Alle aktiven Spieler nach teamId gruppieren
+      const allByTeam: Record<number, SquadPlayer[]> = {};
+      for (const p of (squadData.allPlayers ?? [])) {
+        if (!allByTeam[p.teamId]) allByTeam[p.teamId] = [];
+        allByTeam[p.teamId].push(p);
+      }
+      setAllPlayersByTeam(allByTeam);
       setHasParticipationData(squadData.hasParticipationData);
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -212,13 +201,64 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
   const handleInputChange = (field: string, value: string | number) => {
     if (field === 'team') {
       setFormData(prev => ({ ...prev, team: String(value), player: '', relatedPlayer: '' }));
-      setShowAllPlayers(false);
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
   };
 
-  const filteredPlayers = formData.team ? teamPlayers : [];
+  /**
+   * Gibt gruppierte MenuItems zurück:
+   * – "Kader" (zugesagte Spieler, fett + grün)
+   * – "Weitere Spieler" (alle aktiven Teamspieler, die nicht im Kader sind)
+   */
+  const renderPlayerOptions = (selectedTeamId: string | number): React.ReactNode[] => {
+    if (!selectedTeamId) return [<MenuItem key="" value="">Spieler wählen…</MenuItem>];
+    const teamId = Number(selectedTeamId);
+    const squadPlayers = squadByTeam[teamId] ?? [];
+    const allForTeam = allPlayersByTeam[teamId] ?? [];
+    const squadIds = new Set(squadPlayers.map(p => p.id));
+    const nonSquadPlayers = allForTeam.filter(p => !squadIds.has(p.id));
+
+    const items: React.ReactNode[] = [
+      <MenuItem key="__empty" value="">Spieler wählen…</MenuItem>,
+    ];
+
+    if (squadPlayers.length > 0) {
+      items.push(
+        <ListSubheader key="__header-kader" sx={{ lineHeight: '32px', fontWeight: 'bold' }}>
+          Kader
+        </ListSubheader>
+      );
+      for (const player of squadPlayers) {
+        items.push(
+          <MenuItem
+            key={`squad-${player.id}`}
+            value={player.id}
+            sx={{ fontWeight: 700, color: 'success.main' }}
+          >
+            {player.shirtNumber ? `#${player.shirtNumber} ` : ''}{player.fullName}
+          </MenuItem>
+        );
+      }
+    }
+
+    if (nonSquadPlayers.length > 0) {
+      items.push(
+        <ListSubheader key="__header-weitere" sx={{ lineHeight: '32px', fontWeight: 'bold' }}>
+          Weitere Spieler
+        </ListSubheader>
+      );
+      for (const player of nonSquadPlayers) {
+        items.push(
+          <MenuItem key={`all-${player.id}`} value={player.id}>
+            {player.shirtNumber ? `#${player.shirtNumber} ` : ''}{player.fullName}
+          </MenuItem>
+        );
+      }
+    }
+
+    return items;
+  };
 
   const isSubstitution = () => {
     const et = eventTypes.find(e => e.id === Number(formData.eventType));
@@ -451,30 +491,19 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
           </Select>
         </FormControl>
 
-        {/* ── Kader-Indikator: Nur bei Team-Auswahl mit vorhandenen Zusagen ── */}
-        {formData.team && (() => {
+        {/* ── Kader-Indikator: Chip wenn Participation-Daten vorhanden ── */}
+        {formData.team && hasParticipationData && (() => {
           const teamId = Number(formData.team);
           const squadCount = squadByTeam[teamId]?.length ?? 0;
-          if (!hasParticipationData) return null;
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
               <Chip
                 size="small"
-                color={!showAllPlayers && squadCount > 0 ? 'success' : 'default'}
-                variant={!showAllPlayers && squadCount > 0 ? 'filled' : 'outlined'}
-                label={
-                  squadCount > 0
-                    ? (showAllPlayers ? 'Alle Spieler' : `${squadCount} zugesagt`)
-                    : 'Keine Zusagen'
-                }
-                onClick={squadCount > 0 ? () => setShowAllPlayers(v => !v) : undefined}
-                sx={{ cursor: squadCount > 0 ? 'pointer' : 'default', fontSize: '0.75rem' }}
+                color={squadCount > 0 ? 'success' : 'default'}
+                variant={squadCount > 0 ? 'filled' : 'outlined'}
+                label={squadCount > 0 ? `${squadCount} zugesagt` : 'Keine Zusagen'}
+                sx={{ fontSize: '0.75rem', cursor: 'default' }}
               />
-              {!showAllPlayers && squadCount > 0 && (
-                <Typography variant="caption" color="text.secondary">
-                  Tippe zum Umschalten auf alle Teamspieler
-                </Typography>
-              )}
             </Box>
           );
         })()}
@@ -486,18 +515,7 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
             onChange={e => handleInputChange('player', e.target.value)}
             label="Spieler"
           >
-            <MenuItem value="">Spieler wählen…</MenuItem>
-            {Object.values(filteredPlayers).map(player => {
-              const shirtNumber = (player as any).shirtNumber;
-              const fullName =
-                (player as any).fullName ??
-                `${(player as any).firstName ?? ''} ${(player as any).lastName ?? ''}`.trim();
-              return (
-                <MenuItem key={player.id} value={player.id}>
-                  {shirtNumber ? `#${shirtNumber} ` : ''}{fullName}
-                </MenuItem>
-              );
-            })}
+            {renderPlayerOptions(formData.team)}
           </Select>
         </FormControl>
 
@@ -509,18 +527,7 @@ export const GameEventModal: React.FC<GameEventModalProps> = ({
               onChange={e => handleInputChange('relatedPlayer', e.target.value)}
               label="Eingewechselter Spieler"
             >
-              <MenuItem value="">Spieler wählen…</MenuItem>
-              {Object.values(filteredPlayers).map(player => {
-                const shirtNumber = (player as any).shirtNumber;
-                const fullName =
-                  (player as any).fullName ??
-                  `${(player as any).firstName ?? ''} ${(player as any).lastName ?? ''}`.trim();
-                return (
-                  <MenuItem key={player.id} value={player.id}>
-                    {shirtNumber ? `#${shirtNumber} ` : ''}{fullName}
-                  </MenuItem>
-                );
-              })}
+              {renderPlayerOptions(formData.team)}
             </Select>
           </FormControl>
         )}

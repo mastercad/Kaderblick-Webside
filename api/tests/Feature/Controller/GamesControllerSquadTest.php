@@ -316,8 +316,10 @@ class GamesControllerSquadTest extends WebTestCase
         $data = $this->requestSquad();
 
         $this->assertArrayHasKey('squad', $data);
+        $this->assertArrayHasKey('allPlayers', $data);
         $this->assertArrayHasKey('hasParticipationData', $data);
         $this->assertIsArray($data['squad']);
+        $this->assertIsArray($data['allPlayers']);
         $this->assertIsBool($data['hasParticipationData']);
 
         $player = $data['squad'][0];
@@ -325,6 +327,135 @@ class GamesControllerSquadTest extends WebTestCase
         $this->assertArrayHasKey('fullName', $player);
         $this->assertArrayHasKey('shirtNumber', $player);
         $this->assertArrayHasKey('teamId', $player);
+    }
+
+    // ── allPlayers-Tests ───────────────────────────────────────────────────────
+
+    public function testAllPlayersContainsAllActiveTeamPlayersRegardlessOfParticipation(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        // Nur playerA zugesagt – playerC hat keine Participation
+        $this->createParticipation($this->userPlayerA, $this->statusAttending);
+
+        $data = $this->requestSquad();
+
+        $this->assertArrayHasKey('allPlayers', $data);
+
+        $allPlayerIds = array_column($data['allPlayers'], 'id');
+
+        // Beide Spieler haben aktive Teamzuordnungen → beide in allPlayers
+        $this->assertContains(
+            $this->playerA->getId(),
+            $allPlayerIds,
+            'PlayerA (attending) muss in allPlayers erscheinen.'
+        );
+        $this->assertContains(
+            $this->playerC->getId(),
+            $allPlayerIds,
+            'PlayerC (nicht zugesagt) muss trotzdem in allPlayers erscheinen.'
+        );
+    }
+
+    public function testAllPlayersIsReturnedEvenWhenNobodyConfirmed(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        // Niemand hat Participation angelegt
+        $data = $this->requestSquad();
+
+        $this->assertArrayHasKey('allPlayers', $data);
+        $this->assertNotEmpty(
+            $data['allPlayers'],
+            'allPlayers muss aktive Teamspieler enthalten, auch wenn niemand zugesagt hat.'
+        );
+
+        $allPlayerIds = array_column($data['allPlayers'], 'id');
+        $this->assertContains($this->playerA->getId(), $allPlayerIds);
+        $this->assertContains($this->playerC->getId(), $allPlayerIds);
+    }
+
+    public function testAllPlayersReturnedWhenAllDeclined(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        // Alle haben abgesagt
+        $this->createParticipation($this->userPlayerA, $this->statusNotAttending);
+        $this->createParticipation($this->userPlayerC, $this->statusNotAttending);
+
+        $data = $this->requestSquad();
+
+        $this->assertEmpty($data['squad'], 'Squad muss leer sein.');
+        $this->assertNotEmpty(
+            $data['allPlayers'],
+            'allPlayers muss trotz Absagen aktive Teamspieler enthalten.'
+        );
+    }
+
+    public function testAllPlayersHasExpectedShape(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        $data = $this->requestSquad();
+
+        $this->assertNotEmpty($data['allPlayers']);
+        $player = $data['allPlayers'][0];
+
+        $this->assertArrayHasKey('id', $player);
+        $this->assertArrayHasKey('fullName', $player);
+        $this->assertArrayHasKey('shirtNumber', $player);
+        $this->assertArrayHasKey('teamId', $player);
+    }
+
+    public function testAllPlayersExcludesInactivePlayers(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        // Spieler D mit abgelaufener Teamzuordnung anlegen
+        $position = $this->em->getRepository(Position::class)->findOneBy([]);
+        $playerD = new Player();
+        $playerD->setFirstName('test-squad-PlayerD');
+        $playerD->setLastName('Inactive');
+        $playerD->setMainPosition($position);
+        $this->em->persist($playerD);
+
+        $ptaInactive = new PlayerTeamAssignment();
+        $ptaInactive->setPlayer($playerD);
+        $ptaInactive->setTeam($this->homeTeam);
+        $ptaInactive->setShirtNumber(99);
+        $ptaInactive->setStartDate(new DateTime('2020-01-01'));
+        $ptaInactive->setEndDate(new DateTime('2021-12-31')); // abgelaufen
+        $this->em->persist($ptaInactive);
+        $this->em->flush();
+
+        $data = $this->requestSquad();
+
+        $allPlayerIds = array_column($data['allPlayers'], 'id');
+        $this->assertNotContains(
+            $playerD->getId(),
+            $allPlayerIds,
+            'Inaktiver Spieler (endDate in der Vergangenheit) darf nicht in allPlayers erscheinen.'
+        );
+    }
+
+    public function testSquadPlayersAreSubsetOfAllPlayers(): void
+    {
+        $this->authenticateAsPlayerA();
+
+        $this->createParticipation($this->userPlayerA, $this->statusAttending);
+
+        $data = $this->requestSquad();
+
+        $squadIds = array_column($data['squad'], 'id');
+        $allPlayerIds = array_column($data['allPlayers'], 'id');
+
+        foreach ($squadIds as $id) {
+            $this->assertContains(
+                $id,
+                $allPlayerIds,
+                'Jeder Spieler aus squad muss auch in allPlayers enthalten sein.'
+            );
+        }
     }
 
     // ── Teardown ───────────────────────────────────────────────────────────────

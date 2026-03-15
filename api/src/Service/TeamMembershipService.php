@@ -14,6 +14,7 @@ use App\Entity\TeamRide;
 use App\Entity\User;
 use App\Enum\CalendarEventPermissionType;
 use App\Repository\ParticipationRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -165,8 +166,9 @@ class TeamMembershipService
             ->innerJoin('p.userRelations', 'ur')
             ->where('ur.user = :user')
             ->andWhere('pta.team = :team')
-            ->andWhere('pta.startDate IS NULL OR pta.startDate <= CURRENT_DATE()')
-            ->andWhere('pta.endDate IS NULL OR pta.endDate >= CURRENT_DATE()')
+            ->andWhere('pta.startDate IS NULL OR pta.startDate <= :today')
+            ->andWhere('pta.endDate IS NULL OR pta.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('user', $user)
             ->setParameter('team', $team)
             ->setMaxResults(1)
@@ -183,8 +185,9 @@ class TeamMembershipService
             ->innerJoin('c.userRelations', 'ur')
             ->where('ur.user = :user')
             ->andWhere('cta.team = :team')
-            ->andWhere('cta.startDate IS NULL OR cta.startDate <= CURRENT_DATE()')
-            ->andWhere('cta.endDate IS NULL OR cta.endDate >= CURRENT_DATE()')
+            ->andWhere('cta.startDate IS NULL OR cta.startDate <= :today')
+            ->andWhere('cta.endDate IS NULL OR cta.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('user', $user)
             ->setParameter('team', $team)
             ->setMaxResults(1)
@@ -202,8 +205,9 @@ class TeamMembershipService
             ->innerJoin('p.userRelations', 'ur')
             ->where('ur.user = :user')
             ->andWhere('pca.club = :club')
-            ->andWhere('pca.startDate <= CURRENT_DATE()')
-            ->andWhere('pca.endDate IS NULL OR pca.endDate >= CURRENT_DATE()')
+            ->andWhere('pca.startDate <= :today')
+            ->andWhere('pca.endDate IS NULL OR pca.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('user', $user)
             ->setParameter('club', $club)
             ->setMaxResults(1)
@@ -220,8 +224,9 @@ class TeamMembershipService
             ->innerJoin('c.userRelations', 'ur')
             ->where('ur.user = :user')
             ->andWhere('cca.club = :club')
-            ->andWhere('cca.startDate <= CURRENT_DATE()')
-            ->andWhere('cca.endDate IS NULL OR cca.endDate >= CURRENT_DATE()')
+            ->andWhere('cca.startDate <= :today')
+            ->andWhere('cca.endDate IS NULL OR cca.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('user', $user)
             ->setParameter('club', $club)
             ->setMaxResults(1)
@@ -249,8 +254,9 @@ class TeamMembershipService
             ->innerJoin('ur.player', 'p')
             ->innerJoin('p.playerTeamAssignments', 'pta')
             ->where('pta.team = :team')
-            ->andWhere('pta.startDate IS NULL OR pta.startDate <= CURRENT_DATE()')
-            ->andWhere('pta.endDate IS NULL OR pta.endDate >= CURRENT_DATE()')
+            ->andWhere('pta.startDate IS NULL OR pta.startDate <= :today')
+            ->andWhere('pta.endDate IS NULL OR pta.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('team', $team)
             ->getQuery()
             ->getResult();
@@ -266,8 +272,9 @@ class TeamMembershipService
             ->innerJoin('ur.coach', 'c')
             ->innerJoin('c.coachTeamAssignments', 'cta')
             ->where('cta.team = :team')
-            ->andWhere('cta.startDate IS NULL OR cta.startDate <= CURRENT_DATE()')
-            ->andWhere('cta.endDate IS NULL OR cta.endDate >= CURRENT_DATE()')
+            ->andWhere('cta.startDate IS NULL OR cta.startDate <= :today')
+            ->andWhere('cta.endDate IS NULL OR cta.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('team', $team)
             ->getQuery()
             ->getResult();
@@ -296,8 +303,9 @@ class TeamMembershipService
             ->innerJoin('ur.player', 'p')
             ->innerJoin('p.playerClubAssignments', 'pca')
             ->where('pca.club = :club')
-            ->andWhere('pca.startDate <= CURRENT_DATE()')
-            ->andWhere('pca.endDate IS NULL OR pca.endDate >= CURRENT_DATE()')
+            ->andWhere('pca.startDate <= :today')
+            ->andWhere('pca.endDate IS NULL OR pca.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('club', $club)
             ->getQuery()
             ->getResult();
@@ -313,8 +321,9 @@ class TeamMembershipService
             ->innerJoin('ur.coach', 'c')
             ->innerJoin('c.coachClubAssignments', 'cca')
             ->where('cca.club = :club')
-            ->andWhere('cca.startDate <= CURRENT_DATE()')
-            ->andWhere('cca.endDate IS NULL OR cca.endDate >= CURRENT_DATE()')
+            ->andWhere('cca.startDate <= :today')
+            ->andWhere('cca.endDate IS NULL OR cca.endDate >= :today')
+            ->setParameter('today', new DateTimeImmutable('today'))
             ->setParameter('club', $club)
             ->getQuery()
             ->getResult();
