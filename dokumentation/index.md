@@ -75,6 +75,12 @@ Diese Dokumentation richtet sich an **alle Nutzer** von Kaderblick:
 |---------|-------|-------------|
 | [20 - Administration](20-admin.md) | Admin-Bereich | Nutzer-Verknüpfungen, Titel & XP, Feedback, Stammdaten, Größen-Guide |
 
+### Entwicklung & Qualitätssicherung
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [22 - Load-Test-Fixtures](22-load-test-fixtures.md) | Testdaten | 25 Vereine, 101 Teams, ~70 000 Datensätze über 3 Jahre · Befehle, Umfang, Technik |
+
 ---
 
 ## Schnellzugriff nach Rolle
