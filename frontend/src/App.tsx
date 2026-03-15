@@ -70,6 +70,7 @@ import { PullToRefresh } from './components/PullToRefresh';
 import { PushWarningBanner } from './components/PushWarningBanner';
 import RegistrationContextDialog from './modals/RegistrationContextDialog';
 import QRCodeShareModal from './modals/QRCodeShareModal';
+import { PWAUpdateBanner } from './components/PWAUpdateBanner';
 
 
 function App() {
@@ -245,6 +246,7 @@ function App() {
                 onClose={() => setShowRegistrationContext(false)}
               />
               <QRCodeShareModal open={showQRShare} onClose={() => setShowQRShare(false)} />
+              <PWAUpdateBanner />
               {!isHome && (user ? (
                 <Box sx={{ pb: { xs: '56px', md: 0 } }}><FooterWithContact /></Box>
               ) : (

@@ -4,11 +4,14 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 declare let self: ServiceWorkerGlobalScope;
 
-// ====== Sofortige Aktivierung neuer SW-Versionen ======
-// skipWaiting(): Neuer SW überspringt den "waiting"-Status und wird sofort aktiv
-// clients.claim(): Übernimmt sofort alle offenen Tabs (auch ohne Reload)
-self.addEventListener('install', () => {
-  self.skipWaiting();
+// ====== Update-Steuerung ======
+// skipWaiting() wird NICHT automatisch aufgerufen – der neue SW wartet im
+// "waiting"-Status, bis die App per SKIP_WAITING-Message die Aktivierung auslöst.
+// Das ermöglicht die Update-Benachrichtigung im Frontend (PWAUpdateBanner).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

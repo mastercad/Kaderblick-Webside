@@ -1,4 +1,9 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
+
+// Globale Build-Variablen (injiziert von vite.config.js über define:)
+declare const __BUILD_COMMIT__: string;
+declare const __APP_VERSION__: string;
 
 // Deklaration für Bildimporte mit ?url Query
 declare module '*.png?url' {

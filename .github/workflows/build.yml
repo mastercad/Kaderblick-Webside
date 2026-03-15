@@ -16,11 +16,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write   # wird benötigt, um den Version-Bump-Commit zurückzupushen
       packages: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Voller Checkout-Verlauf für den Commit zurück auf main nötig.
+          # fetch-depth: 0 ist Standard; token ermöglicht Push auf protected branches.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ============================================================
+      # VERSIONING: Patch-Version in frontend/package.json erhöhen
+      # Läuft nur auf dem main-Branch (nicht bei PR-Builds), damit
+      # n-1 Builds keine doppelten Versionen erzeugen.
+      # "[skip ci]" im Commit verhindert eine erneute Pipeline-Ausführung.
+      # ============================================================
+      - name: Bump frontend patch version
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd frontend
+          npm version patch --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "✅ Neue Frontend-Version: $NEW_VERSION"
+
+      - name: Commit & push version bump
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/package.json
+          git commit -m "chore: bump frontend version to $NEW_VERSION [skip ci]"
+          git push
 
       - name: Login to GHCR
         uses: docker/login-action@v3
