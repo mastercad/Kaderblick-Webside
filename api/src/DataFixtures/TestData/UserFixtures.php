@@ -78,7 +78,8 @@ class UserFixtures extends Fixture implements DependentFixtureInterface, Fixture
                     $user->setPassword($hashedPassword);
                     $user->addRole($role['name']);
                     $user->setIsEnabled(true);
-                    $user->setIsVerified(true);
+                    // ROLE_GUEST users must be unverified so getRoles() returns ROLE_GUEST (not ROLE_USER)
+                    $user->setIsVerified('ROLE_GUEST' !== $role['name']);
                     $manager->persist($user);
                 }
                 $this->addReference('user_' . $userCount, $user);

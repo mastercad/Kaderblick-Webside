@@ -27,6 +27,10 @@ on:
         type: string
         default: 'latest'
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -255,40 +259,27 @@ jobs:
             mkdir -p api/var
 
       - name: Production setup (secrets / cache / migrations / JWT)
-        uses: appleboy/ssh-action@master
+        uses: ./.github/actions/symfony-app-setup
         with:
           host: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.ROOT_USER }}
           password: ${{ secrets.ROOT_PASSWORD }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd "${{ secrets.MAIN_PROJECT_PATH }}/production_current"
-            DC="docker compose -f docker-compose.yml -p production"
-            $DC exec -T --user www-data api bin/console secrets:decrypt-to-local --force --env=prod
-            $DC exec -T --user www-data api bin/console cache:warmup --env=prod
-            $DC exec -T --user www-data api bin/console doctrine:migrations:migrate --no-interaction --env=prod
-            if ! $DC exec -T api sh -c 'grep -q "BEGIN PRIVATE KEY" /var/www/symfony/config/jwt/private.pem 2>/dev/null'; then
-              echo "JWT-Keys fehlen oder veraltet – regeneriere (PKCS#8)..."
-              $DC exec -T --user www-data api php bin/console lexik:jwt:generate-keypair --overwrite --env=prod
-              mkdir -p "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt"
-              $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/private.pem' > "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt/private.pem" || true
-              $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/public.pem'  > "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt/public.pem"  || true
-            fi
+          env: prod
+          compose_project: production
+          compose_files: "-f docker-compose.yml"
+          work_dir: ${{ secrets.MAIN_PROJECT_PATH }}/production_current
+          main_project_path: ${{ secrets.MAIN_PROJECT_PATH }}
 
       - name: Load master fixtures on production
-        uses: appleboy/ssh-action@master
+        uses: ./.github/actions/symfony-load-fixtures
         with:
           host: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.ROOT_USER }}
           password: ${{ secrets.ROOT_PASSWORD }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd "${{ secrets.MAIN_PROJECT_PATH }}/production_current"
-            docker compose -f docker-compose.yml -p production \
-              exec -T --user www-data api \
-              bin/console doctrine:fixtures:load --env=prod --no-interaction --append --group=master
+          env: prod
+          compose_project: production
+          compose_files: "-f docker-compose.yml"
+          work_dir: ${{ secrets.MAIN_PROJECT_PATH }}/production_current
 
       - name: Production healthcheck
         uses: appleboy/ssh-action@master
@@ -305,6 +296,32 @@ jobs:
               echo "Warte... ($i/12, HTTP $HTTP)"; sleep 5
             done
 
+      # ============================================================
+      # FEHLERBEHANDLUNG & CLEANUP
+      # ============================================================
+
+      - name: Rollback production on failure
+        if: failure()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.ROOT_USER }}
+          password: ${{ secrets.ROOT_PASSWORD }}
+          script: |
+            OLD=$(cat "${{ secrets.MAIN_PROJECT_PATH }}/.rollback_to" 2>/dev/null || echo "")
+            if [ -n "$OLD" ] && [ -d "$OLD" ]; then
+              echo "Rollback auf $OLD ..."
+              docker compose -p production down --remove-orphans api frontend 2>/dev/null || true
+              ln -sfn "$OLD" "${{ secrets.MAIN_PROJECT_PATH }}/production_current"
+              cd "$OLD"
+              IMAGE_TAG=latest API_IMAGE_TAG=latest DATABASE_URL="${{ secrets.DATABASE_URL }}" XDEBUG_MODE=off \
+              docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend 2>/dev/null || true
+              echo "Rollback auf $OLD abgeschlossen."
+            else
+              echo "Kein Rollback-Ziel vorhanden."
+            fi
+            rm -f "${{ secrets.MAIN_PROJECT_PATH }}/.rollback_to"
+
       - name: Disable production maintenance
         if: always()
         uses: appleboy/ssh-action@master
@@ -314,11 +331,20 @@ jobs:
           password: ${{ secrets.ROOT_PASSWORD }}
           script: |
             rm -f "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_production.flag"
-            rm -f "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_staging.flag"
 
       # ============================================================
       # STAGING DEPLOYMENT (nach erfolgreichem Production-Healthcheck)
       # ============================================================
+
+      - name: Enable staging maintenance
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.ROOT_USER }}
+          password: ${{ secrets.ROOT_PASSWORD }}
+          script: |
+            touch "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_staging.flag"
+            chmod 644 "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_staging.flag"
 
       - name: Clone production DB to staging
         uses: appleboy/ssh-action@master
@@ -334,16 +360,6 @@ jobs:
             docker exec kaderblick-db mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON kaderblick_staging.* TO 'kaderblick'@'%'; FLUSH PRIVILEGES;"
             docker exec kaderblick-db sh -c "mysqldump -uroot -proot --single-transaction --quick kaderblick | mysql -uroot -proot kaderblick_staging"
             echo "DB-Klon abgeschlossen."
-
-      - name: Enable staging maintenance
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.PLESK_HOST }}
-          username: ${{ secrets.ROOT_USER }}
-          password: ${{ secrets.ROOT_PASSWORD }}
-          script: |
-            touch "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_staging.flag"
-            chmod 644 "${{ secrets.MAIN_PROJECT_PATH }}/maintenance_staging.flag"
 
       - name: Set staging_current symlink
         uses: appleboy/ssh-action@master
@@ -381,40 +397,27 @@ jobs:
             mkdir -p api/var
 
       - name: Staging setup (secrets / cache / migrations / JWT)
-        uses: appleboy/ssh-action@master
+        uses: ./.github/actions/symfony-app-setup
         with:
           host: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.ROOT_USER }}
           password: ${{ secrets.ROOT_PASSWORD }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd "${{ secrets.MAIN_PROJECT_PATH }}/staging_current"
-            DC="docker compose -f docker-compose.yml -f docker-compose.staging.yml -p staging"
-            $DC exec -T --user www-data api bin/console secrets:decrypt-to-local --force --env=staging
-            $DC exec -T --user www-data api bin/console cache:warmup --env=staging
-            $DC exec -T --user www-data api bin/console doctrine:migrations:migrate --no-interaction --env=staging
-            if ! $DC exec -T api sh -c 'grep -q "BEGIN PRIVATE KEY" /var/www/symfony/config/jwt/private.pem 2>/dev/null'; then
-              echo "JWT-Keys fehlen oder veraltet – regeneriere (PKCS#8)..."
-              $DC exec -T --user www-data api php bin/console lexik:jwt:generate-keypair --overwrite --env=staging
-              mkdir -p "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt"
-              $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/private.pem' > "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt/private.pem" || true
-              $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/public.pem'  > "${{ secrets.MAIN_PROJECT_PATH }}/api/config/jwt/public.pem"  || true
-            fi
+          env: staging
+          compose_project: staging
+          compose_files: "-f docker-compose.yml -f docker-compose.staging.yml"
+          work_dir: ${{ secrets.MAIN_PROJECT_PATH }}/staging_current
+          main_project_path: ${{ secrets.MAIN_PROJECT_PATH }}
 
       - name: Load master fixtures on staging
-        uses: appleboy/ssh-action@master
+        uses: ./.github/actions/symfony-load-fixtures
         with:
           host: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.ROOT_USER }}
           password: ${{ secrets.ROOT_PASSWORD }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd "${{ secrets.MAIN_PROJECT_PATH }}/staging_current"
-            docker compose -f docker-compose.yml -f docker-compose.staging.yml -p staging \
-              exec -T --user www-data api \
-              bin/console doctrine:fixtures:load --env=staging --no-interaction --append --group=master
+          env: staging
+          compose_project: staging
+          compose_files: "-f docker-compose.yml -f docker-compose.staging.yml"
+          work_dir: ${{ secrets.MAIN_PROJECT_PATH }}/staging_current
 
       - name: Disable staging maintenance
         if: always()
@@ -447,32 +450,6 @@ jobs:
             docker tag  ghcr.io/mastercad/kaderblick/${IMAGE}:${TAG} ghcr.io/mastercad/kaderblick/${IMAGE}:latest
             docker push ghcr.io/mastercad/kaderblick/${IMAGE}:latest
           done
-
-      # ============================================================
-      # FEHLERBEHANDLUNG & CLEANUP
-      # ============================================================
-
-      - name: Rollback production on failure
-        if: failure()
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.PLESK_HOST }}
-          username: ${{ secrets.ROOT_USER }}
-          password: ${{ secrets.ROOT_PASSWORD }}
-          script: |
-            OLD=$(cat "${{ secrets.MAIN_PROJECT_PATH }}/.rollback_to" 2>/dev/null || echo "")
-            if [ -n "$OLD" ] && [ -d "$OLD" ]; then
-              echo "Rollback auf $OLD ..."
-              docker compose -p production down --remove-orphans api frontend 2>/dev/null || true
-              ln -sfn "$OLD" "${{ secrets.MAIN_PROJECT_PATH }}/production_current"
-              cd "$OLD"
-              IMAGE_TAG=latest API_IMAGE_TAG=latest DATABASE_URL="${{ secrets.DATABASE_URL }}" XDEBUG_MODE=off \
-              docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend 2>/dev/null || true
-              echo "Rollback auf $OLD abgeschlossen."
-            else
-              echo "Kein Rollback-Ziel vorhanden."
-            fi
-            rm -f "${{ secrets.MAIN_PROJECT_PATH }}/.rollback_to"
 
       - name: Cleanup old releases
         if: always()

@@ -38,7 +38,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -71,7 +71,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -99,7 +99,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -117,7 +117,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -131,7 +131,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -174,7 +174,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -218,7 +218,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -242,7 +242,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 
@@ -276,7 +276,7 @@ class CalendarIntegrationsController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['error' => 'Nicht authentifiziert'], 401);
         }
 

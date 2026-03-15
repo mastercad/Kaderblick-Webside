@@ -152,7 +152,10 @@ export default function AuthModal({ open, onClose, initialTab }: AuthModalProps)
           </Alert>
         )}
         
-        {tab === 'login' ? <LoginForm onSuccess={handleClose} onClose={handleClose} /> : <RegisterForm />}
+        {tab === 'login'
+          ? <LoginForm onSuccess={handleClose} onClose={handleClose} />
+          : <RegisterForm onSwitchToLogin={() => setTab('login')} />
+        }
       </Box>
     </BaseModal>
   );

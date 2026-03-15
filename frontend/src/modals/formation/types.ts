@@ -1,9 +1,16 @@
 // ─── Shared type definitions for the Formation editor ─────────────────────────
 
+/** Origin of a dragged token – used by field pointer/touch drag. */
+export type DragSource = 'field' | 'bench';
+
 export interface Player {
   id: number;
   name: string;
   shirtNumber?: string | number;
+  /** Main position abbreviation from backend (e.g. 'TW', 'IV', 'ZM', 'ST') */
+  position?: string | null;
+  /** Alternative position abbreviations (e.g. ['ZM', 'DM']) */
+  alternativePositions?: string[];
 }
 
 export interface Team {
@@ -27,6 +34,8 @@ export interface PlayerData {
   playerId?: number | null;
   isRealPlayer?: boolean;
   position?: string;
+  /** Alternativpositionen – für Debug-Tooltip und Positionszuweisung. */
+  alternativePositions?: string[];
 }
 
 export interface FormationData {
@@ -34,6 +43,10 @@ export interface FormationData {
   players?: PlayerData[];
   bench?: PlayerData[];
   notes?: string;
+  /** @deprecated use tacticsBoardDataArr */
+  tacticsBoardData?: unknown;
+  /** Named tactic entries – multiple per formation */
+  tacticsBoardDataArr?: unknown;
 }
 
 export interface Formation {

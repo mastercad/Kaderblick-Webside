@@ -42,7 +42,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -91,7 +91,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -227,7 +227,7 @@ class ProfileController extends AbstractController
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -345,7 +345,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -363,7 +363,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -386,7 +386,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 

@@ -1,0 +1,47 @@
+name: 'Symfony Load Master Fixtures'
+description: 'Lädt Doctrine-Master-Fixtures in die Datenbank.'
+
+inputs:
+  host:
+    description: 'SSH-Host'
+    required: true
+  username:
+    description: 'SSH-Benutzername (root)'
+    required: true
+  password:
+    description: 'SSH-Passwort'
+    required: true
+  env:
+    description: 'Symfony-Umgebung (prod | staging)'
+    required: true
+  compose_project:
+    description: 'Docker Compose Projektname (z. B. production | staging)'
+    required: true
+  compose_files:
+    description: 'Docker Compose -f Flags als String'
+    required: true
+  work_dir:
+    description: 'Absoluter Pfad zum Arbeitsverzeichnis auf dem Server'
+    required: true
+  command_timeout:
+    description: 'SSH-Timeout'
+    required: false
+    default: '30m'
+
+runs:
+  using: composite
+  steps:
+    - name: Load master fixtures (${{ inputs.env }})
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ inputs.host }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+        command_timeout: ${{ inputs.command_timeout }}
+        script: |
+          set -e
+          cd "${{ inputs.work_dir }}"
+          docker compose ${{ inputs.compose_files }} -p ${{ inputs.compose_project }} \
+            exec -T --user www-data api \
+            bin/console doctrine:fixtures:load \
+            --env=${{ inputs.env }} --no-interaction --append --group=master

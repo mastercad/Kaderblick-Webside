@@ -1,7 +1,9 @@
 import React from 'react';
 import {
-  Button, Box, Typography, Alert, CircularProgress, TextField, MenuItem,
+  Button, Box, Typography, Alert, CircularProgress, TextField, MenuItem, Chip, Tooltip,
 } from '@mui/material';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import BaseModal from './BaseModal';
 import { useFormationEditor } from './formation/useFormationEditor';
 import TemplatePicker from './formation/components/TemplatePicker';
@@ -79,6 +81,52 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
         </TextField>
       </Box>
 
+      {/* ── Auto-fill banner: shown when placeholders exist and squad is loaded ───── */}
+      {editor.hasPlaceholders && editor.availablePlayers.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            px: 2, py: 1.25, mb: 2,
+            borderRadius: 2,
+            bgcolor: theme => theme.palette.mode === 'dark'
+              ? 'rgba(99,179,237,0.1)'
+              : 'rgba(33,150,243,0.07)',
+            border: '1px solid',
+            borderColor: 'primary.200',
+          }}
+        >
+          <AutoAwesomeIcon fontSize="small" color="primary" sx={{ flexShrink: 0 }} />
+          <Box flex={1} minWidth={0}>
+            <Typography variant="body2" fontWeight={600} color="primary.main" lineHeight={1.25}>
+              Spieler automatisch einsetzen
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {editor.placeholderCount} {editor.placeholderCount === 1 ? 'Platzhalter' : 'Platzhalter'} auf dem Feld
+              {' · '}
+              {editor.availablePlayers.length} {editor.availablePlayers.length === 1 ? 'Spieler' : 'Spieler'} im Kader
+            </Typography>
+          </Box>
+          <Chip
+            label={`${editor.placeholderCount} offen`}
+            size="small"
+            color="primary"
+            variant="outlined"
+            sx={{ fontWeight: 700, fontSize: '0.7rem', flexShrink: 0 }}
+          />
+          <Tooltip title="Ersetzt alle Platzhalter mit echten Spielern aus dem Kader. Position und Koordinaten bleiben erhalten. übrige Spieler kommen auf die Bank.">
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<GroupAddIcon />}
+              onClick={editor.fillWithTeamPlayers}
+              sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              Team einsetzen
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
+
       <Box display="flex" gap={2} alignItems="flex-start" sx={{ flexDirection: { xs: 'column', md: 'row' } }}>
         {/* ── Pitch + Bench ──────────────────────────────────────────────────── */}
         <Box sx={{ flex: { xs: 'none', md: 2 }, width: '100%', minWidth: 0 }}>
@@ -104,14 +152,20 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
               backgroundRepeat: 'no-repeat',
               bgcolor: '#2a5c27',
               position: 'relative',
-              cursor: editor.draggedPlayerId ? 'grabbing' : 'default',
+              cursor: editor.draggedPlayerId ? 'grabbing' : editor.squadDragPlayer ? 'copy' : 'default',
               userSelect: 'none',
+              // Subtle glow overlay while squad-player is being dragged over the pitch
+              outline: editor.squadDragPlayer ? '3px dashed rgba(255,255,255,0.5)' : 'none',
+              outlineOffset: '-4px',
+              transition: 'outline 0.15s',
             }}
             onMouseMove={editor.handlePitchMouseMove}
             onMouseUp={editor.handlePitchMouseUp}
             onMouseLeave={editor.handlePitchMouseUp}
             onTouchMove={editor.handlePitchTouchMove}
             onTouchEnd={editor.handlePitchTouchEnd}
+            onDragOver={editor.handlePitchDragOver}
+            onDrop={editor.handlePitchDrop}
           >
             {/* Zone labels – portrait field: top-anchored */}
             {[
@@ -134,6 +188,7 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
                 key={player.id}
                 player={player}
                 isDragging={editor.draggedPlayerId === player.id}
+                isHighlighted={editor.highlightedTokenId === player.id}
                 onMouseDown={e => editor.startDragFromField(player.id, e)}
                 onTouchStart={e => editor.startDragFromField(player.id, e)}
               />
@@ -160,6 +215,8 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
           onAddToField={p => editor.addPlayerToFormation(p, 'field')}
           onAddToBench={p => editor.addPlayerToFormation(p, 'bench')}
           onAddGeneric={editor.addGenericPlayer}
+          onSquadDragStart={editor.handleSquadDragStart}
+          onSquadDragEnd={editor.handleSquadDragEnd}
           fieldPlayers={editor.players}
           onRemoveFromField={editor.removePlayer}
           onSendToBench={editor.sendToBench}

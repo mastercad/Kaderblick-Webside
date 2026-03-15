@@ -3,18 +3,14 @@
 namespace App\Controller;
 
 use App\Entity\User;
-use App\Service\DefaultDashboardService;
-use App\Service\RegistrationNotificationService;
 use App\Service\UserVerificationService;
-use DateTime;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Throwable;
+use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api', name: 'api_')]
 class RegisterController extends AbstractController
@@ -22,8 +18,6 @@ class RegisterController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserVerificationService $verificationService,
-        private RegistrationNotificationService $registrationNotificationService,
-        private DefaultDashboardService $defaultDashboardService,
     ) {
     }
 
@@ -71,75 +65,5 @@ class RegisterController extends AbstractController
         $this->verificationService->sendVerificationEmail($user);
 
         return new JsonResponse(['message' => 'Registrierung erfolgreich. Bitte E-Mail bestätigen.'], 201);
-    }
-
-    #[Route('/verify-email/{token}', name: 'verify_email', methods: ['GET'])]
-    public function verifyEmail(string $token): JsonResponse
-    {
-        $user = $this->em->getRepository(User::class)->findOneBy(['verificationToken' => $token]);
-
-        if (!$user) {
-            return new JsonResponse(
-                ['error' => 'Der Verifizierungslink ist ungültig oder abgelaufen.'],
-                404
-            );
-        }
-
-        // Check if token is expired
-        if ($user->getVerificationExpires() && $user->getVerificationExpires() < new DateTime()) {
-            return new JsonResponse(
-                ['error' => 'Der Verifizierungslink ist abgelaufen.'],
-                410
-            );
-        }
-
-        $user->setIsVerified(true)
-             ->setIsEnabled(true)
-             ->setVerificationToken(null)
-             ->setVerificationExpires(null);
-
-        $this->em->flush();
-
-        // Create default dashboard for the verified user
-        try {
-            $this->defaultDashboardService->createDefaultDashboard($user);
-        } catch (Throwable) {
-            // Non-critical – don't fail the verification
-        }
-
-        // Notify admins about the newly verified user
-        try {
-            $this->registrationNotificationService->notifyAdminsAboutNewUser($user);
-        } catch (Throwable) {
-            // Non-critical – don't fail the verification
-        }
-
-        return new JsonResponse([
-            'message' => 'Deine E-Mail-Adresse wurde erfolgreich verifiziert. Du kannst dich jetzt anmelden.',
-            'needsContext' => true,
-        ], 200);
-    }
-
-    #[Route('/resend-verification/{userId}', name: 'resend_verification', methods: ['POST'])]
-    public function resendVerification(int $userId): JsonResponse
-    {
-        $user = $this->em->getRepository(User::class)->find($userId);
-
-        if (!$user) {
-            return new JsonResponse(
-                ['error' => 'Benutzer nicht gefunden.'],
-                404
-            );
-        }
-
-        $this->verificationService->createVerificationToken($user);
-        $this->em->flush();
-
-        $this->verificationService->sendVerificationEmail($user);
-
-        return new JsonResponse([
-            'success' => true,
-            'message' => 'Verifizierungslink wurde erfolgreich erneut gesendet.'
-        ], 200);
     }
 }

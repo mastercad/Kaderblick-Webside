@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { useToast } from '../../context/ToastContext';
-import { apiJson } from '../../utils/api';
-import type { Formation, FormationData, Player, PlayerData, Team } from './types';
-import { findFreePosition, getRelativePosition } from './helpers';
-import { FOOTBALL_TEMPLATES } from './templates';
+import type { DragSource, Formation, Player, PlayerData, Team } from './types';
 import type { FormationTemplate } from './templates';
-
-type DragSource = 'field' | 'bench';
+import { useFormationData } from './useFormationData';
+import { useFieldDrag } from './useFieldDrag';
+import { useSquadDrop } from './useSquadDrop';
+import { usePlayerActions } from './usePlayerActions';
+import { useFormationSave } from './useFormationSave';
 
 export interface FormationEditorState {
   // data
@@ -32,8 +32,15 @@ export interface FormationEditorState {
   setSelectedTeam: (v: number | '') => void;
   setSearchQuery: (v: string) => void;
   setShowTemplatePicker: (v: boolean) => void;
+  // derived ui helpers
+  hasPlaceholders: boolean;
+  placeholderCount: number;
+  // squad drag-and-drop
+  squadDragPlayer: Player | null;
+  highlightedTokenId: number | null;
   // actions
   applyTemplate: (t: FormationTemplate) => void;
+  fillWithTeamPlayers: () => void;
   addPlayerToFormation: (p: Player, target: DragSource) => void;
   addGenericPlayer: () => void;
   removePlayer: (id: number) => void;
@@ -46,6 +53,11 @@ export interface FormationEditorState {
   handlePitchTouchEnd: () => void;
   startDragFromField: (id: number, e: React.MouseEvent | React.TouchEvent) => void;
   startDragFromBench: (id: number, e: React.MouseEvent | React.TouchEvent) => void;
+  // squad DnD (HTML5 drag from squad list onto pitch)
+  handleSquadDragStart: (player: Player) => void;
+  handleSquadDragEnd: () => void;
+  handlePitchDragOver: (e: React.DragEvent) => void;
+  handlePitchDrop: (e: React.DragEvent) => void;
   handleSave: () => Promise<void>;
 }
 
@@ -56,270 +68,107 @@ export function useFormationEditor(
   onSaved?: (f: Formation) => void,
 ): FormationEditorState {
   const { showToast } = useToast();
-
-  const [formation, setFormation] = useState<Formation | null>(null);
-  const [players, setPlayers] = useState<PlayerData[]>([]);
-  const [benchPlayers, setBenchPlayers] = useState<PlayerData[]>([]);
-  const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [name, setName] = useState('');
-  const [notes, setNotes] = useState('');
-  const [selectedTeam, setSelectedTeam] = useState<number | ''>('');
-  const [nextPlayerNumber, setNextPlayerNumber] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-  const [draggedPlayerId, setDraggedPlayerId] = useState<number | null>(null);
-  const [draggedFrom, setDraggedFrom] = useState<DragSource | null>(null);
-
   const pitchRef = useRef<HTMLDivElement>(null);
 
-  // ── Show template picker for new formations ──────────────────────────────────
-  useEffect(() => {
-    setShowTemplatePicker(open && !formationId);
-  }, [open, formationId]);
+  // ── State + API-Calls ────────────────────────────────────────────────────
+  const data = useFormationData(open, formationId);
 
-  // ── Load teams (only active coach assignments) ────────────────────────────────
-  useEffect(() => {
-    if (!open) return;
-    apiJson<{ teams: Team[] }>('/formation/coach-teams')
-      .then(data => {
-        const loaded = Array.isArray(data.teams) ? data.teams : [];
-        setTeams(loaded);
-        if (loaded.length === 0) {
-          setError('Du bist aktuell keinem Team als Trainer zugeordnet. Bitte wende dich an einen Administrator.');
-        } else {
-          setSelectedTeam(loaded[0].id);
-        }
-      })
-      .catch(() => {
-        setTeams([]);
-        setError('Teams konnten nicht geladen werden.');
-      });
-  }, [open]);
+  // ── Pointer/Touch-Drag für Feld-Tokens ──────────────────────────────────
+  const fieldDrag = useFieldDrag({
+    players:        data.players,
+    setPlayers:     data.setPlayers,
+    benchPlayers:   data.benchPlayers,
+    setBenchPlayers: data.setBenchPlayers,
+    pitchRef,
+  });
 
-  // ── Load formation when editing ──────────────────────────────────────────────
-  useEffect(() => {
-    if (!open) return;
-    if (formationId) {
-      setLoading(true);
-      apiJson<any>(`/formation/${formationId}/edit`)
-        .then(data => {
-          const f = data.formation;
-          setFormation(f);
-          setName(f.name);
-          const fieldPlayers: PlayerData[] = Array.isArray(f.formationData?.players)
-            ? f.formationData.players.map((p: any) => ({ ...p, id: p.id ?? Date.now() + Math.random() }))
-            : [];
-          const bench: PlayerData[] = Array.isArray(f.formationData?.bench)
-            ? f.formationData.bench.map((p: any) => ({ ...p, id: p.id ?? Date.now() + Math.random() }))
-            : [];
-          setPlayers(fieldPlayers);
-          setBenchPlayers(bench);
-          setNotes(f.formationData?.notes ?? '');
-          const allNums = [...fieldPlayers, ...bench].map(p => (typeof p.number === 'number' ? p.number : 0));
-          setNextPlayerNumber(allNums.length > 0 ? Math.max(...allNums) + 1 : 1);
-          if (Array.isArray(data.availablePlayers?.players)) {
-            setAvailablePlayers(data.availablePlayers.players.map((e: any) => ({
-              id: e.player.id, name: e.player.name, shirtNumber: e.shirtNumber,
-            })));
-          }
-        })
-        .catch(err => setError(err?.message ?? 'Fehler beim Laden'))
-        .finally(() => setLoading(false));
-    } else {
-      // Reset for new formation
-      setFormation(null);
-      setName('');
-      setNotes('');
-      setPlayers([]);
-      setBenchPlayers([]);
-      setNextPlayerNumber(1);
-      setAvailablePlayers([]);
-      setSearchQuery('');
-      setError(null);
-    }
-  }, [open, formationId]);
+  // ── HTML5-Drag vom Squad-Panel aufs Feld ────────────────────────────────
+  const squadDrop = useSquadDrop({
+    players:            data.players,
+    setPlayers:         data.setPlayers,
+    benchPlayers:       data.benchPlayers,
+    setBenchPlayers:    data.setBenchPlayers,
+    nextPlayerNumber:   data.nextPlayerNumber,
+    setNextPlayerNumber: data.setNextPlayerNumber,
+    pitchRef,
+  });
 
-  // ── Load squad when team changes ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!open || !selectedTeam) {
-      if (!selectedTeam) setAvailablePlayers([]);
-      return;
-    }
-    apiJson<any>(`/formation/team/${selectedTeam}/players`)
-      .then(data => {
-        if (Array.isArray(data.players)) {
-          const mapped = data.players
-            .filter((e: any) => e?.id)
-            .map((e: any) => ({ id: e.id, name: e.name, shirtNumber: e.shirtNumber }));
-          setAvailablePlayers(mapped);
-          setError(mapped.length === 0 ? 'Keine Spieler für dieses Team gefunden.' : null);
-        } else {
-          setAvailablePlayers([]);
-        }
-      })
-      .catch(() => setAvailablePlayers([]));
-  }, [open, selectedTeam]);
+  // ── Spielerverwaltung, Template-Anwendung, Auto-Fill ────────────────────
+  const playerActions = usePlayerActions({
+    players:            data.players,
+    setPlayers:         data.setPlayers,
+    benchPlayers:       data.benchPlayers,
+    setBenchPlayers:    data.setBenchPlayers,
+    availablePlayers:   data.availablePlayers,
+    nextPlayerNumber:   data.nextPlayerNumber,
+    setNextPlayerNumber: data.setNextPlayerNumber,
+    setShowTemplatePicker: data.setShowTemplatePicker,
+    showToast,
+  });
 
-  // ─── Template ────────────────────────────────────────────────────────────────
-
-  const applyTemplate = (template: FormationTemplate) => {
-    const templatePlayers: PlayerData[] = template.players.map((tp, idx) => ({
-      id: Date.now() + idx,
-      x: tp.x, y: tp.y,
-      number: idx + 1,
-      name: tp.position,
-      position: tp.position,
-      playerId: null,
-      isRealPlayer: false,
-    }));
-    setPlayers(templatePlayers);
-    setBenchPlayers([]);
-    setNextPlayerNumber(templatePlayers.length + 1);
-    setShowTemplatePicker(false);
-  };
-
-  // ─── Drag & Drop ─────────────────────────────────────────────────────────────
-
-  const startDragFromField = (id: number, e: React.MouseEvent | React.TouchEvent) => {
-    setDraggedPlayerId(id);
-    setDraggedFrom('field');
-    e.stopPropagation();
-    // prevent native scroll on touch
-    if ('touches' in e) e.preventDefault?.();
-  };
-
-  const startDragFromBench = (id: number, e: React.MouseEvent | React.TouchEvent) => {
-    setDraggedPlayerId(id);
-    setDraggedFrom('bench');
-    e.stopPropagation();
-  };
-
-  const applyDragMove = (clientX: number, clientY: number) => {
-    if (draggedPlayerId === null || !pitchRef.current) return;
-    const pos = getRelativePosition(clientX, clientY, pitchRef.current);
-    if (draggedFrom === 'field') {
-      setPlayers(prev => prev.map(p => p.id === draggedPlayerId ? { ...p, ...pos } : p));
-    } else if (draggedFrom === 'bench') {
-      const benched = benchPlayers.find(p => p.id === draggedPlayerId);
-      if (benched) {
-        setBenchPlayers(prev => prev.filter(p => p.id !== draggedPlayerId));
-        setPlayers(prev => [...prev, { ...benched, ...pos }]);
-        setDraggedFrom('field');
-      }
-    }
-  };
-
-  const handlePitchMouseMove = (e: React.MouseEvent) => applyDragMove(e.clientX, e.clientY);
-
-  const handlePitchTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault();
-    applyDragMove(e.touches[0].clientX, e.touches[0].clientY);
-  };
-
-  const stopDrag = () => { setDraggedPlayerId(null); setDraggedFrom(null); };
-  const handlePitchMouseUp = stopDrag;
-  const handlePitchTouchEnd = stopDrag;
-
-  // ─── Player management ───────────────────────────────────────────────────────
-
-  const addPlayerToFormation = (player: Player, target: DragSource) => {
-    const alreadyIn = players.some(p => p.playerId === player.id) || benchPlayers.some(p => p.playerId === player.id);
-    if (alreadyIn) return;
-    const newPlayer: PlayerData = {
-      id: Date.now(), x: 0, y: 0,
-      number: player.shirtNumber ?? nextPlayerNumber,
-      name: player.name,
-      playerId: player.id,
-      isRealPlayer: true,
-    };
-    if (target === 'field') {
-      const pos = findFreePosition(players);
-      setPlayers(prev => [...prev, { ...newPlayer, ...pos }]);
-    } else {
-      setBenchPlayers(prev => [...prev, newPlayer]);
-    }
-    setNextPlayerNumber(n => n + 1);
-  };
-
-  const addGenericPlayer = () => {
-    const pos = findFreePosition(players);
-    setPlayers(prev => [...prev, {
-      id: Date.now(), ...pos,
-      number: nextPlayerNumber,
-      name: `Spieler ${nextPlayerNumber}`,
-      playerId: null, isRealPlayer: false,
-    }]);
-    setNextPlayerNumber(n => n + 1);
-  };
-
-  const removePlayer = (id: number) => setPlayers(prev => prev.filter(p => p.id !== id));
-  const removeBenchPlayer = (id: number) => setBenchPlayers(prev => prev.filter(p => p.id !== id));
-
-  const sendToBench = (id: number) => {
-    const p = players.find(pl => pl.id === id);
-    if (!p) return;
-    setPlayers(prev => prev.filter(pl => pl.id !== id));
-    setBenchPlayers(prev => [...prev, p]);
-  };
-
-  const sendToField = (id: number) => {
-    const p = benchPlayers.find(pl => pl.id === id);
-    if (!p) return;
-    setBenchPlayers(prev => prev.filter(pl => pl.id !== id));
-    setPlayers(prev => [...prev, { ...p, ...findFreePosition(players) }]);
-  };
-
-  // ─── Save ────────────────────────────────────────────────────────────────────
-
-  const handleSave = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const formationData: FormationData = {
-        ...(formation?.formationData ?? {}),
-        players,
-        bench: benchPlayers,
-        notes,
-      };
-      const url = formationId ? `/formation/${formationId}/edit` : '/formation/new';
-      const response = await apiJson(url, { method: 'POST', body: { name, team: selectedTeam, formationData } });
-      if (response?.error) { setError(response.error); return; }
-      showToast('Formation erfolgreich gespeichert!', 'success');
-      const saved: Formation = response?.formation ?? {
-        id: response?.id ?? Date.now(),
-        name,
-        formationType: {
-          name: formation?.formationType?.name ?? 'fußball',
-          cssClass: formation?.formationType?.cssClass ?? '',
-          backgroundPath: formation?.formationType?.backgroundPath ?? 'fussballfeld_haelfte.jpg',
-        },
-        formationData,
-      };
-      onSaved?.(saved);
-      onClose();
-    } catch (err: any) {
-      setError(err?.message ?? 'Fehler beim Speichern');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Speichern ────────────────────────────────────────────────────────────
+  const { handleSave } = useFormationSave({
+    formation:    data.formation,
+    players:      data.players,
+    benchPlayers: data.benchPlayers,
+    notes:        data.notes,
+    name:         data.name,
+    selectedTeam: data.selectedTeam,
+    formationId,
+    setLoading:   data.setLoading,
+    setError:     data.setError,
+    showToast,
+    onClose,
+    onSaved,
+  });
 
   return {
-    formation, players, benchPlayers, availablePlayers, teams,
-    name, notes, selectedTeam,
-    loading, error, searchQuery, showTemplatePicker, draggedPlayerId,
+    // ── Daten & Formularfelder ────────────────────────────────────────────
+    formation:          data.formation,
+    players:            data.players,
+    benchPlayers:       data.benchPlayers,
+    availablePlayers:   data.availablePlayers,
+    teams:              data.teams,
+    name:               data.name,
+    notes:              data.notes,
+    selectedTeam:       data.selectedTeam,
+    loading:            data.loading,
+    error:              data.error,
+    searchQuery:        data.searchQuery,
+    showTemplatePicker: data.showTemplatePicker,
+    setName:            data.setName,
+    setNotes:           data.setNotes,
+    setSelectedTeam:    data.setSelectedTeam,
+    setSearchQuery:     data.setSearchQuery,
+    setShowTemplatePicker: data.setShowTemplatePicker,
     pitchRef,
-    setName, setNotes, setSelectedTeam: setSelectedTeam as (v: number | '') => void,
-    setSearchQuery, setShowTemplatePicker,
-    applyTemplate,
-    addPlayerToFormation, addGenericPlayer,
-    removePlayer, removeBenchPlayer, sendToBench, sendToField,
-    handlePitchMouseMove, handlePitchMouseUp,
-    handlePitchTouchMove, handlePitchTouchEnd,
-    startDragFromField, startDragFromBench,
+    // ── Pointer/Touch-Drag (Feld-Tokens) ─────────────────────────────────
+    draggedPlayerId:    fieldDrag.draggedPlayerId,
+    startDragFromField: fieldDrag.startDragFromField,
+    startDragFromBench: fieldDrag.startDragFromBench,
+    handlePitchMouseMove: fieldDrag.handlePitchMouseMove,
+    handlePitchMouseUp:   fieldDrag.handlePitchMouseUp,
+    handlePitchTouchMove: fieldDrag.handlePitchTouchMove,
+    handlePitchTouchEnd:  fieldDrag.handlePitchTouchEnd,
+    // ── HTML5-Drag vom Squad-Panel ────────────────────────────────────────
+    squadDragPlayer:    squadDrop.squadDragPlayer,
+    highlightedTokenId: squadDrop.highlightedTokenId,
+    handleSquadDragStart: squadDrop.handleSquadDragStart,
+    handleSquadDragEnd:   squadDrop.handleSquadDragEnd,
+    handlePitchDragOver:  squadDrop.handlePitchDragOver,
+    handlePitchDrop:      squadDrop.handlePitchDrop,
+    // ── Spielerverwaltung & Auto-Fill ─────────────────────────────────────
+    hasPlaceholders:    playerActions.hasPlaceholders,
+    placeholderCount:   playerActions.placeholderCount,
+    applyTemplate:         playerActions.applyTemplate,
+    fillWithTeamPlayers:   playerActions.fillWithTeamPlayers,
+    addPlayerToFormation:  playerActions.addPlayerToFormation,
+    addGenericPlayer:      playerActions.addGenericPlayer,
+    removePlayer:          playerActions.removePlayer,
+    removeBenchPlayer:     playerActions.removeBenchPlayer,
+    sendToBench:           playerActions.sendToBench,
+    sendToField:           playerActions.sendToField,
+    // ── Speichern ─────────────────────────────────────────────────────────
     handleSave,
   };
 }

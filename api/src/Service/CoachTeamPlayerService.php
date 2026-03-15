@@ -7,6 +7,7 @@ use App\Entity\Team;
 use App\Entity\User;
 use DateTime;
 use DateTimeInterface;
+use Throwable;
 
 class CoachTeamPlayerService
 {
@@ -41,7 +42,7 @@ class CoachTeamPlayerService
     /**
      * Ermittelt alle Spieler eines Teams, die aktuell aktiv sind.
      *
-     * @return list<array{player: array{id: int|null, name: string}, shirtNumber: int|null}>
+     * @return list<array{player: array{id: int|null, name: string}, shirtNumber: int|null, position?: string|null, alternativePositions?: string[]}>
      */
     public function collectTeamPlayers(Team $team): array
     {
@@ -50,9 +51,26 @@ class CoachTeamPlayerService
         foreach ($team->getPlayerTeamAssignments() as $assignment) {
             if ($this->isCurrentAssignment($assignment->getStartDate(), $assignment->getEndDate())) {
                 $player = $assignment->getPlayer();
+                $mainPos = null;
+                $altPositions = [];
+                try {
+                    $mainPos = $player->getMainPosition()->getShortName()
+                        ?? $player->getMainPosition()->getName();
+                } catch (Throwable) {
+                    $mainPos = null;
+                }
+                try {
+                    foreach ($player->getAlternativePositions() as $pos) {
+                        $altPositions[] = $pos->getShortName() ?? $pos->getName();
+                    }
+                } catch (Throwable) {
+                    $altPositions = [];
+                }
                 $players[] = [
                     'player' => ['id' => $player->getId(), 'name' => $player->getFullName()],
-                    'shirtNumber' => $assignment->getShirtNumber()
+                    'shirtNumber' => $assignment->getShirtNumber(),
+                    'position' => $mainPos,
+                    'alternativePositions' => $altPositions,
                 ];
             }
         }

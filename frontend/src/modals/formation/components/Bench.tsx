@@ -12,6 +12,24 @@ interface BenchProps {
   onTouchStart: (id: number, e: React.TouchEvent) => void;
 }
 
+/** Rich tooltip für Bank-Chips: Name, Rückennummer, Positionen. */
+const buildBenchTooltip = (player: PlayerData): React.ReactNode => {
+  const posLine = [
+    player.position ? 'Pos: ' + player.position : '',
+    player.alternativePositions?.length ? 'Alt: ' + player.alternativePositions.join(', ') : '',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <Box component="div">
+      <Box component="div" sx={{ fontWeight: 700 }}>{player.name + ' #' + String(player.number)}</Box>
+      {posLine && (
+        <Box component="div" sx={{ fontSize: '0.72rem', opacity: 0.9, mt: 0.25 }}>{posLine}</Box>
+      )}
+      <Box component="div" sx={{ fontSize: '0.7rem', opacity: 0.65, mt: 0.5 }}>Klicken → aufs Feld</Box>
+    </Box>
+  );
+};
+
 /**
  * Ersatzbank: shows substitute players as compact chips.
  * Clicking a chip moves the player back onto the pitch.
@@ -40,7 +58,7 @@ const Bench: React.FC<BenchProps> = ({
 
     <Box display="flex" flexWrap="wrap" gap={0.75}>
       {benchPlayers.map(player => (
-        <Tooltip key={player.id} title="Klicken → aufs Feld" placement="top">
+        <Tooltip key={player.id} title={buildBenchTooltip(player)} placement="top">
           <Box
             sx={{
               display: 'flex', alignItems: 'center', gap: 0.5,

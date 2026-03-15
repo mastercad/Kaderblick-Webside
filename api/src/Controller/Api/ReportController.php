@@ -457,16 +457,15 @@ class ReportController extends AbstractController
                 $em->flush();
 
                 return $this->json(['status' => 'success', 'id' => $newReport->getId()]);
-            } else {
-                // Admin/SuperAdmin: update in-place.
-                // Also allow demoting the template back to a regular report.
-                if (isset($data['isTemplate']) && false === (bool) $data['isTemplate']) {
-                    $report->setIsTemplate(false);
-                    $report->setUser($user);
-                }
-                $report->setUpdatedAt(new DateTimeImmutable());
-                $em->flush();
             }
+            // Admin/SuperAdmin: update in-place.
+            // Also allow demoting the template back to a regular report.
+            if (isset($data['isTemplate']) && false === (bool) $data['isTemplate']) {
+                $report->setIsTemplate(false);
+                $report->setUser($user);
+            }
+            $report->setUpdatedAt(new DateTimeImmutable());
+            $em->flush();
         } else {
             // Allow Admin/SuperAdmin to promote/demote isTemplate on their own report
             if (

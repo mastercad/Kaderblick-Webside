@@ -122,7 +122,7 @@ final class CalendarEventVoter extends Voter
 
     /**
      * Returns all Team objects associated with a CalendarEvent.
-     * Checks both game teams (homeTeam/awayTeam) and TEAM-type permissions.
+     * Checks game teams (homeTeam/awayTeam), tournament teams, and TEAM-type permissions.
      *
      * @return Team[]
      */
@@ -136,6 +136,14 @@ final class CalendarEventVoter extends Voter
             }
             if ($event->getGame()->getAwayTeam()) {
                 $teams[] = $event->getGame()->getAwayTeam();
+            }
+        }
+
+        if ($event->getTournament()) {
+            foreach ($event->getTournament()->getTeams() as $tournamentTeam) {
+                if ($tournamentTeam->getTeam()) {
+                    $teams[] = $tournamentTeam->getTeam();
+                }
             }
         }
 
@@ -171,8 +179,40 @@ final class CalendarEventVoter extends Voter
             if ($awayTeam && $this->isUserInTeam($user, $awayTeam)) {
                 return true;
             }
+
+            // Game events are strictly team-private: a user who is neither a
+            // player nor a coach of either team must not see the event,
+            // regardless of any additional PUBLIC/CLUB/USER permissions on it.
+            return false;
         }
 
+        if ($calendarEvent->getTournament()) {
+            // Tournament events are strictly team-private.
+            foreach ($calendarEvent->getTournament()->getTeams() as $tournamentTeam) {
+                $team = $tournamentTeam->getTeam();
+                if ($team && $this->isUserInTeam($user, $team)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (null !== $calendarEvent->getTrainingSeriesId()) {
+            // Training events are strictly team-private; only TEAM-type permissions
+            // grant access – PUBLIC/CLUB/USER overrides are ignored for training.
+            foreach ($calendarEvent->getPermissions() as $permission) {
+                if (CalendarEventPermissionType::TEAM === $permission->getPermissionType() && $permission->getTeam()) {
+                    if ($this->isUserInTeam($user, $permission->getTeam())) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Generic event: access is governed entirely by configured permissions.
         if ($calendarEvent->getPermissions()->isEmpty()) {
             return false;
         }

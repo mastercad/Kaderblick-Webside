@@ -8,6 +8,10 @@
          failOnWarning="false"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
+         testdox="false"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
 >
     <php>
         <ini name="display_errors" value="1" />

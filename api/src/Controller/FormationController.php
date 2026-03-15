@@ -14,7 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 
 class FormationController extends AbstractController
 {
@@ -156,10 +156,13 @@ class FormationController extends AbstractController
         $playersData = array_map(function ($playerData) {
             $player = $playerData['player'];
 
+            /* @var array{player: array{id: int|null, name: string}, shirtNumber: int|null, position?: string|null, alternativePositions?: string[]} $playerData */
             return [
                 'id' => $player['id'],
                 'name' => $player['name'],
                 'shirtNumber' => $playerData['shirtNumber'],
+                'position' => $playerData['position'] ?? null,
+                'alternativePositions' => $playerData['alternativePositions'] ?? [],
             ];
         }, $players);
 

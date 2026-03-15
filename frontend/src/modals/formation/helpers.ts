@@ -6,7 +6,43 @@ export function getZoneColor(y: number): string {
   if (y > 30) return '#22c55e'; // Midfield – green
   return       '#ef4444';       // Attack   – red
 }
+// ─── Position category mapping ────────────────────────────────────────────────────────
+export type PosCategory = 'GK' | 'DEF' | 'MID' | 'FWD';
 
+// German shortName abbreviations
+const GK_CODES  = ['TW'];
+const DEF_CODES = ['IV', 'LV', 'RV', 'LIV', 'RIV', 'LVB', 'RVB', 'DV', 'AV', 'LAV', 'RAV'];
+const MID_CODES = ['ZM', 'DM', 'ZOM', 'OM', 'AM', 'LM', 'RM', 'LF', 'RF', 'VOM', 'DMF', 'ZMF', 'LAM', 'RAM', 'CM', 'CDM', 'CAM'];
+const FWD_CODES = ['ST', 'LA', 'RA', 'LS', 'RS', 'OA', 'MS', 'ZST', 'LFA', 'RFA', 'SS', 'CF', 'LW', 'RW'];
+
+// German full-name fallbacks (for positions without shortName in DB)
+const GK_NAMES  = ['torwart', 'goalkeeper', 'keeper'];
+const DEF_NAMES = ['innenverteidiger', 'linker verteidiger', 'rechter verteidiger',
+                   'verteidiger', 'abwehr', 'außenverteidiger', 'linksverteidiger', 'rechtsverteidiger',
+                   'libero', 'vorstopper', 'stopper'];
+const MID_NAMES = ['mittelfeldspieler', 'zentrales mittelfeld', 'defensives mittelfeld',
+                   'offensives mittelfeld', 'linkes mittelfeld', 'rechtes mittelfeld',
+                   'mittelfeld', 'flügel', 'flügelspieler', 'hängende spitze'];
+const FWD_NAMES = ['stürmer', 'mittelstürmer', 'linksaußen', 'rechtsaußen',
+                   'angriff', 'angreifer', 'zweite spitze', 'sturmspitze'];
+
+/** Maps a German football position abbreviation or full name (case-insensitive) to a broad role category. */
+export function positionCategory(pos: string | null | undefined): PosCategory | null {
+  if (!pos) return null;
+  const p = pos.toUpperCase().trim();
+  // Check shortName codes first (fast exact match)
+  if (GK_CODES.includes(p))  return 'GK';
+  if (DEF_CODES.includes(p)) return 'DEF';
+  if (MID_CODES.includes(p)) return 'MID';
+  if (FWD_CODES.includes(p)) return 'FWD';
+  // Fall back to full-name substring match (for positions without shortName)
+  const pl = pos.toLowerCase().trim();
+  if (GK_NAMES.some(n  => pl.includes(n))) return 'GK';
+  if (DEF_NAMES.some(n => pl.includes(n))) return 'DEF';
+  if (MID_NAMES.some(n => pl.includes(n))) return 'MID';
+  if (FWD_NAMES.some(n => pl.includes(n))) return 'FWD';
+  return null;
+}
 /** Truncate a player name to fit in a token label */
 export function truncateName(name: string, maxLen = 7): string {
   if (name.length <= maxLen) return name;

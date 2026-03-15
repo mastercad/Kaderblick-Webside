@@ -9,9 +9,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SportsIcon from '@mui/icons-material/Sports';
+import PresentToAllIcon from '@mui/icons-material/PresentToAll';
 import { apiJson } from '../utils/api';
 import FormationEditModal from '../modals/FormationEditModal';
 import FormationDeleteConfirmationModal from '../modals/FormationDeleteConfirmationModal';
+import TacticsBoardModal from '../modals/TacticsBoardModal';
 import { getZoneColor } from '../modals/formation/helpers';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,9 +25,14 @@ interface FormationType {
 }
 
 interface PlayerData {
+  id: number;
   x: number;
   y: number;
   number: string | number;
+  name: string;
+  playerId?: number | null;
+  isRealPlayer?: boolean;
+  position?: string;
 }
 
 interface FormationData {
@@ -33,6 +40,10 @@ interface FormationData {
   players?: PlayerData[];
   bench?: PlayerData[];
   notes?: string;
+  /** @deprecated use tacticsBoardDataArr */
+  tacticsBoardData?: unknown;
+  /** Named tactic entries – multiple per formation */
+  tacticsBoardDataArr?: unknown;
 }
 
 interface Formation {
@@ -119,10 +130,11 @@ interface FormationCardProps {
   onEdit: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onTactics: () => void;
 }
 
 const FormationCard: React.FC<FormationCardProps> = ({
-  formation, onEdit, onDuplicate, onDelete,
+  formation, onEdit, onDuplicate, onDelete, onTactics,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const fieldCount  = formation.formationData?.players?.length ?? 0;
@@ -199,6 +211,18 @@ const FormationCard: React.FC<FormationCardProps> = ({
         <Button size="small" startIcon={<EditIcon />} onClick={onEdit} variant="outlined" sx={{ flex: 1 }}>
           Bearbeiten
         </Button>
+        <Tooltip title="Taktik-Board öffnen">
+          <IconButton
+            size="small"
+            onClick={onTactics}
+            sx={{
+              color: 'primary.main',
+              '&:hover': { bgcolor: 'primary.main', color: 'white' },
+            }}
+          >
+            <PresentToAllIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Duplizieren">
           <IconButton size="small" onClick={onDuplicate} color="default">
             <ContentCopyIcon fontSize="small" />
@@ -222,6 +246,9 @@ const FormationCard: React.FC<FormationCardProps> = ({
         <MenuItem onClick={() => { onEdit(); setMenuAnchor(null); }}>
           <EditIcon fontSize="small" sx={{ mr: 1 }} /> Bearbeiten
         </MenuItem>
+        <MenuItem onClick={() => { onTactics(); setMenuAnchor(null); }}>
+          <PresentToAllIcon fontSize="small" sx={{ mr: 1 }} /> Taktik-Board
+        </MenuItem>
         <MenuItem onClick={() => { onDuplicate(); setMenuAnchor(null); }}>
           <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplizieren
         </MenuItem>
@@ -243,6 +270,7 @@ const Formations: React.FC = () => {
   const [editFormationId, setEditFormationId] = useState<number | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteFormation, setDeleteFormation] = useState<Formation | null>(null);
+  const [tacticsFormation, setTacticsFormation] = useState<Formation | null>(null);
 
   useEffect(() => {
     apiJson<{ formations: Formation[] }>('/formations')
@@ -291,6 +319,7 @@ const Formations: React.FC = () => {
               onEdit={() => { setEditFormationId(formation.id); setEditModalOpen(true); }}
               onDuplicate={() => handleDuplicate(formation)}
               onDelete={() => { setDeleteFormation(formation); setDeleteModalOpen(true); }}
+              onTactics={() => setTacticsFormation(formation)}
             />
           ))}
         </Box>
@@ -341,6 +370,17 @@ const Formations: React.FC = () => {
             setDeleteModalOpen(false);
             setDeleteFormation(null);
           }
+        }}
+      />
+
+      {/* Taktik-Board */}
+      <TacticsBoardModal
+        open={Boolean(tacticsFormation)}
+        onClose={() => setTacticsFormation(null)}
+        formation={tacticsFormation}
+        onBoardSaved={(saved: Formation) => {
+          setFormations(prev => prev.map(f => f.id === saved.id ? saved : f));
+          setTacticsFormation(saved);
         }}
       />
     </Box>

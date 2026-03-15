@@ -723,9 +723,9 @@ class ReportDataService
         if (empty($groupBy)) {
             if ('pie' === $diagramType) {
                 return $this->generateReportDataForPieWithoutGroup($events, $yField);
-            } else {
-                return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField);
             }
+
+            return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField);
         }
 
         return $this->generateReportDataForGroup($events, $xField, $groupBy);

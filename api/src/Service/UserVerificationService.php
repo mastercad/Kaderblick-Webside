@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use ApiPlatform\Metadata\UrlGeneratorInterface;
 use App\Entity\User;
 use DateTime;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
@@ -11,7 +10,7 @@ use Symfony\Component\Mailer\MailerInterface;
 class UserVerificationService
 {
     public function __construct(
-        private UrlGeneratorInterface $urlGenerator,
+        private string $frontendUrl,
         private MailerInterface $mailer
     ) {
     }
@@ -35,11 +34,7 @@ class UserVerificationService
      */
     public function sendVerificationEmail(User $user): void
     {
-        $url = $this->urlGenerator->generate(
-            'api_verify_email',
-            ['token' => $user->getVerificationToken()],
-            UrlGeneratorInterface::ABS_URL
-        );
+        $url = rtrim($this->frontendUrl, '/') . '/verify-email/' . $user->getVerificationToken();
 
         $email = (new TemplatedEmail())
             ->from('no-reply@kaderblick.de')

@@ -4,6 +4,10 @@ import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
+import Alert from '@mui/material/Alert';
+import InputAdornment from '@mui/material/InputAdornment';
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useAuth } from '../context/AuthContext';
 import GoogleLoginButton from './GoogleLoginButton';
 import { useNavigate } from 'react-router-dom';
@@ -47,55 +51,41 @@ export default function LoginForm({ onSuccess, onClose }: LoginFormProps) {
 
   return (
     <Box component="form"
-      sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}
+      sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}
       onSubmit={handleSubmit}
     >
       <GoogleLoginButton />
-      oder
-      <Divider />
+      <Divider sx={{ my: 1 }}>
+        <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.8rem', px: 1 }}>oder</Box>
+      </Divider>
       <TextField
-        label="E-Mail"
-        variant="standard"
+        label="E-Mail-Adresse"
+        type="email"
+        variant="outlined"
         size="small"
         fullWidth
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        autoComplete="email"
+        required
+        InputProps={{ startAdornment: <InputAdornment position="start"><EmailOutlinedIcon fontSize="small" color="action" /></InputAdornment> }}
       />
       <TextField
         label="Passwort"
         type="password"
-        variant="standard"
+        variant="outlined"
         size="small"
         fullWidth
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        autoComplete="current-password"
+        required
+        InputProps={{ startAdornment: <InputAdornment position="start"><LockOutlinedIcon fontSize="small" color="action" /></InputAdornment> }}
       />
       {error && (
-        <Box sx={{ color: 'error.main', mt: 1, mb: 1 }}>
-          {error}
-          {error.includes('Ungültige Zugangsdaten') && (
-            <Box sx={{ mt: 1 }}>
-              <Link
-                component="button"
-                type="button"
-                variant="body2"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (onClose) onClose();
-                  navigate('/forgot-password');
-                }}
-                sx={{ cursor: 'pointer' }}
-              >
-                Passwort vergessen?
-              </Link>
-            </Box>
-          )}
-        </Box>
+        <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
       )}
-      <Button type="submit" variant="contained" size="small" sx={{ mt: 2 }}>
-        Login
-      </Button>
-      <Box sx={{ textAlign: 'center', mt: 1 }}>
+      <Box sx={{ textAlign: 'right', mt: -1 }}>
         <Link
           component="button"
           type="button"
@@ -110,6 +100,14 @@ export default function LoginForm({ onSuccess, onClose }: LoginFormProps) {
           Passwort vergessen?
         </Link>
       </Box>
+      <Button
+        type="submit"
+        variant="contained"
+        fullWidth
+        sx={{ py: 1.2, borderRadius: 2, fontWeight: 600, textTransform: 'none', fontSize: '1rem' }}
+      >
+        Einloggen
+      </Button>
     </Box>
   );
 }

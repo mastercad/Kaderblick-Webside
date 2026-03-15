@@ -9,6 +9,8 @@ use App\Entity\Coach;
 use App\Entity\CoachTeamAssignment;
 use App\Entity\Game;
 use App\Entity\Team;
+use App\Entity\Tournament;
+use App\Entity\TournamentTeam;
 use App\Entity\User;
 use App\Entity\UserRelation;
 use App\Enum\CalendarEventPermissionType;
@@ -263,6 +265,309 @@ class CalendarEventVoterTest extends TestCase
         $this->assertEquals(VoterInterface::ACCESS_ABSTAIN, $result);
     }
 
+    // ─── VIEW permission tests – game events ───
+
+    public function testViewGameEventAsTeamMemberGranted(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($team);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $event = $this->createEvent(99, $game);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(true);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewGameEventAsNonMemberDenied(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($team);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $event = $this->createEvent(99, $game);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewGameEventWithPublicPermissionStillDeniedForNonMember(): void
+    {
+        // PUBLIC permission must NOT override the team-private rule for game events
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($team);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $publicPermission = $this->createMock(CalendarEventPermission::class);
+        $publicPermission->method('getPermissionType')->willReturn(CalendarEventPermissionType::PUBLIC);
+
+        $event = $this->createEvent(99, $game, new ArrayCollection([$publicPermission]));
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewGameEventAsCreatorGranted(): void
+    {
+        $user = $this->createUser(1);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn(null);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $event = $this->createEvent(1, $game); // createdBy ID matches user ID
+        $token = $this->createToken($user);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewGameEventAsAwayTeamMemberGranted(): void
+    {
+        $user = $this->createUser(1);
+        $awayTeam = $this->createMock(Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn(null);
+        $game->method('getAwayTeam')->willReturn($awayTeam);
+
+        $event = $this->createEvent(99, $game);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(true);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    // ─── VIEW permission tests – tournament events ───
+
+    public function testViewTournamentEventAsTeamMemberGranted(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $tournamentTeam = $this->createMock(TournamentTeam::class);
+        $tournamentTeam->method('getTeam')->willReturn($team);
+
+        $tournament = $this->createMock(Tournament::class);
+        $tournament->method('getTeams')->willReturn(new ArrayCollection([$tournamentTeam]));
+
+        $event = $this->createEvent(99, null, null, $tournament);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(true);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewTournamentEventAsNonMemberDenied(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $tournamentTeam = $this->createMock(TournamentTeam::class);
+        $tournamentTeam->method('getTeam')->willReturn($team);
+
+        $tournament = $this->createMock(Tournament::class);
+        $tournament->method('getTeams')->willReturn(new ArrayCollection([$tournamentTeam]));
+
+        $event = $this->createEvent(99, null, null, $tournament);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewTournamentEventWithPublicPermissionStillDeniedForNonMember(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $tournamentTeam = $this->createMock(TournamentTeam::class);
+        $tournamentTeam->method('getTeam')->willReturn($team);
+
+        $tournament = $this->createMock(Tournament::class);
+        $tournament->method('getTeams')->willReturn(new ArrayCollection([$tournamentTeam]));
+
+        $publicPermission = $this->createMock(CalendarEventPermission::class);
+        $publicPermission->method('getPermissionType')->willReturn(CalendarEventPermissionType::PUBLIC);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$publicPermission]), $tournament);
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewTournamentEventAsAdminGranted(): void
+    {
+        $admin = $this->createUser(1, ['ROLE_ADMIN']);
+        $tournament = $this->createMock(Tournament::class);
+        $tournament->method('getTeams')->willReturn(new ArrayCollection());
+
+        $event = $this->createEvent(99, null, null, $tournament);
+        $token = $this->createToken($admin);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    // ─── VIEW permission tests – training events ───
+
+    public function testViewTrainingEventAsTeamMemberGranted(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $permission = $this->createMock(CalendarEventPermission::class);
+        $permission->method('getPermissionType')->willReturn(CalendarEventPermissionType::TEAM);
+        $permission->method('getTeam')->willReturn($team);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$permission]), null, 'series-abc');
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(true);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewTrainingEventAsNonMemberDenied(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $permission = $this->createMock(CalendarEventPermission::class);
+        $permission->method('getPermissionType')->willReturn(CalendarEventPermissionType::TEAM);
+        $permission->method('getTeam')->willReturn($team);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$permission]), null, 'series-abc');
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewTrainingEventWithPublicPermissionStillDeniedForNonMember(): void
+    {
+        // PUBLIC permission must NOT override the team-private rule for training events
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $teamPermission = $this->createMock(CalendarEventPermission::class);
+        $teamPermission->method('getPermissionType')->willReturn(CalendarEventPermissionType::TEAM);
+        $teamPermission->method('getTeam')->willReturn($team);
+
+        $publicPermission = $this->createMock(CalendarEventPermission::class);
+        $publicPermission->method('getPermissionType')->willReturn(CalendarEventPermissionType::PUBLIC);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$teamPermission, $publicPermission]), null, 'series-abc');
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewTrainingEventAsAdminGranted(): void
+    {
+        $admin = $this->createUser(1, ['ROLE_ADMIN']);
+        $event = $this->createEvent(99, null, new ArrayCollection(), null, 'series-abc');
+        $token = $this->createToken($admin);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    // ─── VIEW permission tests – generic events ───
+
+    public function testViewGenericEventWithPublicPermissionGranted(): void
+    {
+        $user = $this->createUser(1);
+
+        $permission = $this->createMock(CalendarEventPermission::class);
+        $permission->method('getPermissionType')->willReturn(CalendarEventPermissionType::PUBLIC);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$permission]));
+        $token = $this->createToken($user);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewGenericEventWithTeamPermissionAsMemberGranted(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $permission = $this->createMock(CalendarEventPermission::class);
+        $permission->method('getPermissionType')->willReturn(CalendarEventPermissionType::TEAM);
+        $permission->method('getTeam')->willReturn($team);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$permission]));
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(true);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testViewGenericEventWithNoPermissionsDenied(): void
+    {
+        $user = $this->createUser(1);
+        $event = $this->createEvent(99, null, new ArrayCollection());
+        $token = $this->createToken($user);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
+    public function testViewGenericEventWithTeamPermissionAsNonMemberDenied(): void
+    {
+        $user = $this->createUser(1);
+        $team = $this->createMock(Team::class);
+
+        $permission = $this->createMock(CalendarEventPermission::class);
+        $permission->method('getPermissionType')->willReturn(CalendarEventPermissionType::TEAM);
+        $permission->method('getTeam')->willReturn($team);
+
+        $event = $this->createEvent(99, null, new ArrayCollection([$permission]));
+        $token = $this->createToken($user);
+        $this->mockRepositoryQuery(false);
+
+        $result = $this->voter->vote($token, $event, [CalendarEventVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
     // ─── No user on token ───
 
     public function testNoUserDenied(): void
@@ -300,10 +605,15 @@ class CalendarEventVoterTest extends TestCase
      *
      * @return CalendarEvent&\PHPUnit\Framework\MockObject\MockObject
      */
+    /**
+     * @phpstan-param Collection<int, mixed>|null $permissions
+     */
     private function createEvent(
         int $createdById,
         ?Game $game = null,
         ?Collection $permissions = null,
+        ?Tournament $tournament = null,
+        ?string $trainingSeriesId = null,
     ): CalendarEvent {
         $createdBy = $this->createMock(User::class);
         $createdBy->method('getId')->willReturn($createdById);
@@ -311,6 +621,8 @@ class CalendarEventVoterTest extends TestCase
         $event = $this->createMock(CalendarEvent::class);
         $event->method('getCreatedBy')->willReturn($createdBy);
         $event->method('getGame')->willReturn($game);
+        $event->method('getTournament')->willReturn($tournament);
+        $event->method('getTrainingSeriesId')->willReturn($trainingSeriesId);
         $event->method('getPermissions')->willReturn($permissions ?? new ArrayCollection());
 
         return $event;

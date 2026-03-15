@@ -9,6 +9,7 @@ use App\Repository\CalendarEventRepository;
 use App\Repository\DashboardWidgetRepository;
 use App\Repository\MessageRepository;
 use App\Repository\NewsRepository;
+use App\Service\DefaultDashboardService;
 use App\Service\PushNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,8 +22,12 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route('/', name: 'app_dashboard_')]
 class DashboardController extends AbstractController
 {
-    public function __construct(private CalendarEventRepository $calendarRepo, private MessageRepository $messagesRepo, private NewsRepository $newsRepo)
-    {
+    public function __construct(
+        private CalendarEventRepository $calendarRepo,
+        private MessageRepository $messagesRepo,
+        private NewsRepository $newsRepo,
+        private DefaultDashboardService $defaultDashboardService,
+    ) {
     }
 
     #[Route('/', name: 'index')]
@@ -41,15 +46,14 @@ class DashboardController extends AbstractController
 
         $hasDefaultDashboardWidget = $this->checkDashboardIsDefault($widgets);
 
+        // First-time user, or widgets were never created (e.g. silent error during
+        // e-mail verification) → create them on-the-fly so the dashboard is never empty.
         if (empty($widgets) && $user instanceof User) {
+            $this->defaultDashboardService->createDefaultDashboard($user);
+
             $widgets = $widgetRepo->findBy(
-                [
-                    'isEnabled' => true,
-                    'isDefault' => true
-                ],
-                [
-                    'position' => 'ASC'
-                ]
+                ['user' => $user, 'isEnabled' => true],
+                ['position' => 'ASC']
             );
         }
 
