@@ -12,6 +12,7 @@ use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ObjectManager;
 use RuntimeException;
 
 class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
@@ -29,8 +30,10 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
         ];
     }
 
-    public function load(EntityManagerInterface $manager): void
+    public function load(ObjectManager $manager): void
     {
+        assert($manager instanceof EntityManagerInterface);
+
         // ------------------------------------------------------------------
         // 1. Pre-load VideoType IDs by name
         // ------------------------------------------------------------------
@@ -76,7 +79,20 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
         )->getArrayResult();
 
         // ------------------------------------------------------------------
-        // 4. Create videos for ~40 % of finished games (every 5th game skipped twice = 40 %)
+        // 4. Pre-load existing (game_id, sort) pairs to prevent unique-constraint violations
+        //    on re-runs (uniq_game_sort: game_id + sort must be unique)
+        // ------------------------------------------------------------------
+        $existingRows = $manager->createQuery(
+            'SELECT IDENTITY(v.game) AS gameId, v.sort AS sort FROM App\Entity\Video v'
+        )->getArrayResult();
+        $existingVideos = [];
+        foreach ($existingRows as $row) {
+            $existingVideos[(int) $row['gameId'] . '_' . (int) $row['sort']] = true;
+        }
+        unset($existingRows);
+
+        // ------------------------------------------------------------------
+        // 5. Create videos for ~40 % of finished games (every 5th game skipped twice = 40 %)
         // ------------------------------------------------------------------
         $videoCount = 0;
         $batchSize = 100;
@@ -101,41 +117,45 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
             $title = "{$homeTeamName} vs. {$awayTeamName}";
 
             // ---- 1. Halbzeit ----
-            $half1Type = $manager->getReference(VideoType::class, $videoTypeIds['1.Halbzeit']);
-            $video1 = new Video();
-            $video1->setName("1. Halbzeit – {$title}");
-            $video1->setFilePath("videos/lt/game_{$gameId}_half_1.mp4");
-            $video1->setGame($gameProxy);
-            $video1->setVideoType($half1Type);
-            $video1->setCreatedFrom($adminUserProxy);
-            $video1->setUpdatedFrom($adminUserProxy);
-            $video1->setCreatedAt($createdAt);
-            $video1->setUpdatedAt($createdAt);
-            $video1->setLength(random_int(2400, 3000)); // 40–50 minutes in seconds
-            $video1->setSort(1);
-            $video1->setGameStart(0);
-            $manager->persist($video1);
-            ++$videoCount;
+            if (!isset($existingVideos["{$gameId}_1"])) {
+                $half1Type = $manager->getReference(VideoType::class, $videoTypeIds['1.Halbzeit']);
+                $video1 = new Video();
+                $video1->setName("1. Halbzeit – {$title}");
+                $video1->setFilePath("videos/lt/game_{$gameId}_half_1.mp4");
+                $video1->setGame($gameProxy);
+                $video1->setVideoType($half1Type);
+                $video1->setCreatedFrom($adminUserProxy);
+                $video1->setUpdatedFrom($adminUserProxy);
+                $video1->setCreatedAt($createdAt);
+                $video1->setUpdatedAt($createdAt);
+                $video1->setLength(random_int(2400, 3000)); // 40–50 minutes in seconds
+                $video1->setSort(1);
+                $video1->setGameStart(0);
+                $manager->persist($video1);
+                ++$videoCount;
+            }
 
             // ---- 2. Halbzeit ----
-            $half2Type = $manager->getReference(VideoType::class, $videoTypeIds['2.Halbzeit']);
-            $video2 = new Video();
-            $video2->setName("2. Halbzeit – {$title}");
-            $video2->setFilePath("videos/lt/game_{$gameId}_half_2.mp4");
-            $video2->setGame($gameProxy);
-            $video2->setVideoType($half2Type);
-            $video2->setCreatedFrom($adminUserProxy);
-            $video2->setUpdatedFrom($adminUserProxy);
-            $video2->setCreatedAt($createdAt);
-            $video2->setUpdatedAt($createdAt);
-            $video2->setLength(random_int(2400, 3200)); // 40–53 minutes in seconds
-            $video2->setSort(2);
-            $video2->setGameStart(2700); // roughly 45 minutes in
-            $manager->persist($video2);
-            ++$videoCount;
+            if (!isset($existingVideos["{$gameId}_2"])) {
+                $half2Type = $manager->getReference(VideoType::class, $videoTypeIds['2.Halbzeit']);
+                $video2 = new Video();
+                $video2->setName("2. Halbzeit – {$title}");
+                $video2->setFilePath("videos/lt/game_{$gameId}_half_2.mp4");
+                $video2->setGame($gameProxy);
+                $video2->setVideoType($half2Type);
+                $video2->setCreatedFrom($adminUserProxy);
+                $video2->setUpdatedFrom($adminUserProxy);
+                $video2->setCreatedAt($createdAt);
+                $video2->setUpdatedAt($createdAt);
+                $video2->setLength(random_int(2400, 3200)); // 40–53 minutes in seconds
+                $video2->setSort(2);
+                $video2->setGameStart(2700); // roughly 45 minutes in
+                $manager->persist($video2);
+                ++$videoCount;
+            }
 
             // Add Vorbereitung video for every 10th selected game
-            if (1 === $gameIndex % 50) {
+            if (1 === $gameIndex % 50 && !isset($existingVideos["{$gameId}_3"])) {
                 $prepType = $manager->getReference(VideoType::class, $videoTypeIds['Vorbereitung']);
                 $videoPrep = new Video();
                 $videoPrep->setName("Vorbereitung – {$title}");

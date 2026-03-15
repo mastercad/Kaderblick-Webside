@@ -28,6 +28,14 @@ class ReportFixtures extends Fixture implements FixtureGroupInterface, Dependent
     {
         $now = new DateTimeImmutable();
 
+        // Pre-load existing report names to skip duplicates on re-runs
+        $existingNameRows = $manager->getRepository(ReportDefinition::class)->findAll();
+        $existingNames = [];
+        foreach ($existingNameRows as $existing) {
+            $existingNames[$existing->getName()] = true;
+        }
+        unset($existingNameRows);
+
         // ------------------------------------------------------------------
         // Report definitions: mix of templates (5) and regular reports (15)
         // Users: admin for templates, lt_user_500-519 for club-specific ones
@@ -329,6 +337,11 @@ class ReportFixtures extends Fixture implements FixtureGroupInterface, Dependent
         ];
 
         foreach ($definitions as $data) {
+            // Skip if a definition with this name already exists (idempotency)
+            if (isset($existingNames[$data['name']])) {
+                continue;
+            }
+
             $report = new ReportDefinition();
             $report->setName($data['name']);
             $report->setDescription($data['description'] ?? null);

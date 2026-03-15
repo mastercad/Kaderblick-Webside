@@ -13,6 +13,7 @@ use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ObjectManager;
 use RuntimeException;
 
 class GameEventFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
@@ -30,8 +31,10 @@ class GameEventFixtures extends Fixture implements FixtureGroupInterface, Depend
         ];
     }
 
-    public function load(EntityManagerInterface $manager): void
+    public function load(ObjectManager $manager): void
     {
+        assert($manager instanceof EntityManagerInterface);
+
         // ------------------------------------------------------------------
         // 1. Pre-load game event type IDs (by code) – use getReference later
         // ------------------------------------------------------------------
@@ -91,6 +94,18 @@ class GameEventFixtures extends Fixture implements FixtureGroupInterface, Depend
         )->getArrayResult();
 
         // ------------------------------------------------------------------
+        // 3b. Pre-load game IDs that already have events to avoid duplicates on re-runs
+        // ------------------------------------------------------------------
+        $existingEventRows = $manager->createQuery(
+            'SELECT DISTINCT IDENTITY(e.game) AS gameId FROM App\Entity\GameEvent e'
+        )->getArrayResult();
+        $gamesWithEvents = [];
+        foreach ($existingEventRows as $row) {
+            $gamesWithEvents[(int) $row['gameId']] = true;
+        }
+        unset($existingEventRows);
+
+        // ------------------------------------------------------------------
         // 4. Main loop – create events per finished game
         // ------------------------------------------------------------------
         $eventCount = 0;
@@ -98,6 +113,12 @@ class GameEventFixtures extends Fixture implements FixtureGroupInterface, Depend
 
         foreach ($gamesData as $gameRow) {
             $gameId = (int) $gameRow['id'];
+
+            // Skip games that already have events (idempotency)
+            if (isset($gamesWithEvents[$gameId])) {
+                continue;
+            }
+
             $homeTeamId = (int) $gameRow['homeTeamId'];
             $awayTeamId = (int) $gameRow['awayTeamId'];
             $homeScore = (int) ($gameRow['homeScore'] ?? 0);

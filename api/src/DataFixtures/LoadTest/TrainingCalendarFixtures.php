@@ -14,6 +14,7 @@ use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ObjectManager;
 
 /**
  * Load-Test Fixtures: 3 Jahre Trainingskalender (Di + Do, je Team und Woche).
@@ -44,11 +45,21 @@ class TrainingCalendarFixtures extends Fixture implements FixtureGroupInterface,
         ];
     }
 
-    public function load(EntityManagerInterface $manager): void
+    public function load(ObjectManager $manager): void
     {
+        assert($manager instanceof EntityManagerInterface);
+
         /** @var CalendarEventType $trainingType */
         $trainingType = $this->getReference('calendar_event_type_training', CalendarEventType::class);
         $trainingTypeId = $trainingType->getId();
+
+        // Early return if training events already exist (idempotency guard)
+        $existingCount = (int) $manager->createQuery(
+            'SELECT COUNT(e.id) FROM App\Entity\CalendarEvent e WHERE e.calendarEventType = :typeId'
+        )->setParameter('typeId', $trainingTypeId)->getSingleScalarResult();
+        if ($existingCount > 0) {
+            return;
+        }
 
         // Alle Team-IDs und Namen vorab sammeln (für Proxy-Nutzung nach clear)
         $teamMeta = [];

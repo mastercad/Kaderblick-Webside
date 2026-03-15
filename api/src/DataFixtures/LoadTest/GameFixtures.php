@@ -84,6 +84,12 @@ class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFi
             $freundschaftType = $freundschaftType ?? $gameTypes[0];
         }
 
+        // Early return if games already exist (idempotency guard)
+        $existingGameCount = (int) $manager->getRepository(Game::class)->count([]);
+        if ($existingGameCount > 0) {
+            return;
+        }
+
         /** @var CalendarEventType $gameCalendarType */
         $gameCalendarType = $this->getReference('calendar_event_type_spiel', CalendarEventType::class);
 
