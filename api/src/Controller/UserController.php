@@ -109,6 +109,7 @@ class UserController extends AbstractController
 
         // User-Entity aktualisieren
         $user->setAvatarFilename($filename);
+        $user->setUseGoogleAvatar(false); // manual upload overrides Google avatar
         $this->entityManager->flush();
 
         // URL für Frontend
@@ -125,8 +126,10 @@ class UserController extends AbstractController
         $uploadDir = $this->getParameter('kernel.project_dir') . '/public/uploads/avatar';
         $old = $user->getAvatarFilename();
 
-        if ($old && file_exists($uploadDir . '/' . $old)) {
-            @unlink($uploadDir . '/' . $old);
+        if ($old) {
+            if (file_exists($uploadDir . '/' . $old)) {
+                @unlink($uploadDir . '/' . $old);
+            }
             $user->setAvatarFilename(null);
             $this->entityManager->flush();
         }
