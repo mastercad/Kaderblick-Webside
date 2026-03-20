@@ -82,14 +82,14 @@ describe('TacticsToolbar', () => {
     expect(PALETTE).toHaveLength(6);
   });
 
-  it('"Gegner" add button is shown in fullPitch mode', () => {
+  it('"+ Gegner" add button is shown in fullPitch mode', () => {
     render(<TacticsToolbar {...baseProps} fullPitch={true} />);
-    expect(screen.getByText('Gegner')).toBeInTheDocument();
+    expect(screen.getByText('+ Gegner')).toBeInTheDocument();
   });
 
-  it('"Gegner" add button is hidden in half-pitch mode', () => {
+  it('"+ Gegner" add button is hidden in half-pitch mode', () => {
     render(<TacticsToolbar {...baseProps} fullPitch={false} />);
-    expect(screen.queryByText('Gegner')).not.toBeInTheDocument();
+    expect(screen.queryByText('+ Gegner')).not.toBeInTheDocument();
   });
 
   it('shows save feedback message when saveMsg is set', () => {
