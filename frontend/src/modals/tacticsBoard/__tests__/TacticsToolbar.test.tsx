@@ -35,6 +35,13 @@ const baseProps: TacticsToolbarProps = {
   onClose: jest.fn(),
   onLoadPreset: jest.fn(),
   activeTactic: undefined,
+  selectedId: null,
+  onDeleteSelected: jest.fn(),
+  canUndo: false,
+  canRedo: false,
+  onRedo: jest.fn(),
+  showStepNumbers: false,
+  onToggleStepNumbers: jest.fn(),
 };
 
 beforeEach(() => jest.clearAllMocks());

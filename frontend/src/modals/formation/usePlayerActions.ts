@@ -47,7 +47,7 @@ export function usePlayerActions({
 
   // ─── Template anwenden ────────────────────────────────────────────────────
   const applyTemplate = (template: FormationTemplate) => {
-    const templatePlayers: PlayerData[] = template.players.map((tp) => ({
+    const templatePlayers: PlayerData[] = template.players.map((tp, idx) => ({
       id: nextId(),
       x: tp.x,
       y: tp.y,
