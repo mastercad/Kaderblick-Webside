@@ -2,12 +2,15 @@
 
 namespace App\DataFixtures\LoadTest;
 
+use App\DataFixtures\MasterData\NationalityFixtures;
 use App\DataFixtures\MasterData\PlayerTeamAssignmentTypeFixtures;
 use App\DataFixtures\MasterData\PositionFixtures;
 use App\DataFixtures\MasterData\StrongFootFixtures;
 use App\Entity\Club;
+use App\Entity\Nationality;
 use App\Entity\Player;
 use App\Entity\PlayerClubAssignment;
+use App\Entity\PlayerNationalityAssignment;
 use App\Entity\PlayerTeamAssignment;
 use App\Entity\PlayerTeamAssignmentType;
 use App\Entity\Position;
@@ -21,21 +24,22 @@ use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
 /**
- * Load-Test Fixtures: ~1818 Spieler (18 pro Team, 101 Teams).
- * Beinhaltet 3-Jahres-History durch frühere Team-Zuweisungen, Transfers und Leihgaben.
+ * Load-Test Fixtures: ~16488 Spieler (18 pro Team, 916 Teams).
+ * Bildet 5 Saisons (2021/22 – 2025/26) mit vollständiger History ab:
+ * Transfers, Leihgaben, doppelte Spielberechtigungen, Nationalitätszuweisungen.
  *
- * Konventionen:
- * - teamIdx % 3 == 0: Spieler seit 2023-07-01 im Team (3 Saisons)
- * - teamIdx % 3 == 1: Spieler seit 2024-07-01 im Team (2 Saisons), + früheres Team
- * - teamIdx % 3 == 2: Spieler seit 2025-07-01 im Team (1 Saison), + früheres Team
- * - playerLocalIdx % 15 == 0: Leihspieler (auch temp. Zuordnung zu Fremd-Team)
- * - Erste 400 globale Spieler bekommen Referenzen lt_player_0..lt_player_399 für UserRelation
+ * Szenario Deutschland / reales Jugendfußball-Modell:
+ * - Jedes Team hat 18 Spieler (Stammkader)
+ * - Saison-Rotation: teamIdx % 3 bestimmt das aktuelle Team-Startdatum
+ * - 25 % der Spieler haben eine frühere Team-Zuordnung (Transfer-History)
+ * - 5 % der Spieler sind Leihspieler (temporäre Zuordnung)
+ * - Nationalitäten: 70 % DE, 5 % TR, 3 % PL, Rest international (25 Länder)
  *
  * Gruppe: load_test
  */
 class PlayerFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
 {
-    private const TOTAL_TEAMS = 101;
+    private const TOTAL_TEAMS = 916;
     private const PLAYERS_PER_TEAM = 18;
     private const BATCH_SIZE = 100;
 
@@ -47,6 +51,9 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
 
     /** @var array<string, PlayerTeamAssignmentType> */
     private array $assignmentTypes = [];
+
+    /** @var array<int, Nationality> pre-built weighted wheel (100 entries, index % 100) */
+    private array $nationalityWheel = [];
 
     public static function getGroups(): array
     {
@@ -61,6 +68,7 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
             StrongFootFixtures::class,
             PositionFixtures::class,
             PlayerTeamAssignmentTypeFixtures::class,
+            NationalityFixtures::class,
         ];
     }
 
@@ -98,7 +106,6 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
             /** @var Team $currentTeam */
             $currentTeam = $this->getReference('lt_team_' . $teamIdx, Team::class);
             $clubs = $currentTeam->getClubs()->toArray();
-            $primaryClub = $clubs[0];
             $ageGroup = $currentTeam->getAgeGroup();
 
             // Bestimme Startdatum der aktuellen Zuordnung (Saison-Rotation)
@@ -138,10 +145,36 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
                 $strongFoot = $this->strongFeet[$footKeys[$globalIdx % 5]];
                 $player->setStrongFoot($strongFoot);
 
-                // Geburtsdatum basierend auf Altersgruppe
-                $player->setBirthdate($this->generateBirthdate($ageGroup->getCode()));
+                // Geburtsdatum: exakt altersgerecht zur aktuellen Saison (Bezug 01.01.2026)
+                $birthdate = $this->generateBirthdate($ageGroup->getCode());
+                $player->setBirthdate($birthdate);
 
                 $manager->persist($player);
+
+                // Nationalitätszuweisung (von Geburt an)
+                $natAssignment = new PlayerNationalityAssignment();
+                $natAssignment->setPlayer($player);
+                $natAssignment->setNationality($this->nationalityWheel[$globalIdx % count($this->nationalityWheel)]);
+                $natAssignment->setStartDate(DateTimeImmutable::createFromMutable($birthdate));
+                $natAssignment->setActive(true);
+                $manager->persist($natAssignment);
+
+                // Club-Zuordnung: Jeder Spieler gehört zu genau einem Verein.
+                // Bei Spielgemeinschaften stellt der Gründerverein (clubs[0]) die Mehrheit
+                // (~65%), die Partner-Vereine teilen sich den Rest – realistisch für SGs,
+                // bei denen ein Verein der treibende ist und mehr Spieler einbringt.
+                $clubCount = count($clubs);
+                if (1 === $clubCount) {
+                    $primaryClub = $clubs[0];
+                } else {
+                    $primaryThreshold = (int) ceil(self::PLAYERS_PER_TEAM * 0.65); // ~12 von 18
+                    if ($localIdx < $primaryThreshold) {
+                        $primaryClub = $clubs[0];
+                    } else {
+                        $otherClubs = array_slice($clubs, 1);
+                        $primaryClub = $otherClubs[($localIdx - $primaryThreshold) % count($otherClubs)];
+                    }
+                }
 
                 // Club-Zuordnung (aktuell, ohne Enddatum)
                 $clubAssignment = new PlayerClubAssignment();
@@ -262,6 +295,23 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
                 PlayerTeamAssignmentType::class
             );
         }
+
+        // Gewichtetes Nationalitäten-Rad (100 Einträge, index % 100 ergibt reale DE-Verteilung)
+        // DE 70%, TR 5%, PL 3%, HR/RS/BA/IT je 2%, Rest je 1%
+        $weights = [
+            'de' => 70, 'tr' => 5, 'pl' => 3,
+            'hr' => 2, 'rs' => 2, 'ba' => 2, 'it' => 2,
+            'es' => 1, 'fr' => 1, 'gr' => 1, 'pt' => 1,
+            'nl' => 1, 'ua' => 1, 'ro' => 1, 'at' => 1,
+            'br' => 1, 'ng' => 1, 'gh' => 1, 'ma' => 1, 'xk' => 1,
+        ];
+        foreach ($weights as $iso => $count) {
+            /** @var Nationality $nationality */
+            $nationality = $this->getReference('nationality_' . $iso, Nationality::class);
+            for ($i = 0; $i < $count; ++$i) {
+                $this->nationalityWheel[] = $nationality;
+            }
+        }
     }
 
     private function getAssignmentTypeByIndex(int $localIdx): PlayerTeamAssignmentType
@@ -277,23 +327,40 @@ class PlayerFixtures extends Fixture implements FixtureGroupInterface, Dependent
 
     private function generateBirthdate(string $ageGroupCode): DateTime
     {
-        // Geburtsjahre basierend auf Altersgruppe (Bezugsjahr 2026)
+        // Exakte Geburtsjahre je Altersgruppe, Bezugsdatum 01.01.2026.
+        // Altersberechnung: Alter am 01.01.2026 = 2026 - Geburtsjahr.
+        // Die Ranges sind non-overlapping, damit ein Spieler eindeutig
+        // seiner Altersgruppe zugeordnet werden kann.
+        //
+        // AgeGroup minAge/maxAge → Geburtsjahrgang:
+        //   SENIOREN   (≥19)      → ≤2006  → Testdaten: 1970-2006
+        //   A_JUNIOREN (17-18)    → 2007-2008
+        //   B_JUNIOREN (15-16)    → 2009-2010
+        //   C_JUNIOREN (13-14)    → 2011-2012
+        //   D_JUNIOREN (11-12)    → 2013-2014
+        //   E_JUNIOREN (9-10)     → 2015-2016
+        //   F_JUNIOREN (7-8)      → 2017-2018
+        //   G_JUNIOREN (0-6)      → 2019-2025
         $ranges = [
-            'SENIOREN' => [1988, 2007],
-            'A_JUNIOREN' => [2006, 2009],
-            'B_JUNIOREN' => [2008, 2011],
-            'C_JUNIOREN' => [2010, 2013],
-            'D_JUNIOREN' => [2012, 2015],
-            'E_JUNIOREN' => [2014, 2017],
-            'F_JUNIOREN' => [2015, 2019],
-            'G_JUNIOREN' => [2018, 2022],
+            'SENIOREN' => [1970, 2006],
+            'A_JUNIOREN' => [2007, 2008],
+            'B_JUNIOREN' => [2009, 2010],
+            'C_JUNIOREN' => [2011, 2012],
+            'D_JUNIOREN' => [2013, 2014],
+            'E_JUNIOREN' => [2015, 2016],
+            'F_JUNIOREN' => [2017, 2018],
+            'G_JUNIOREN' => [2019, 2025],
         ];
 
-        [$minYear, $maxYear] = $ranges[$ageGroupCode] ?? [1990, 2005];
+        [$minYear, $maxYear] = $ranges[$ageGroupCode] ?? [1980, 2005];
         $year = rand($minYear, $maxYear);
         $month = rand(1, 12);
         $day = rand(1, 28);
 
-        return new DateTime($year . '-' . str_pad((string) $month, 2, '0', STR_PAD_LEFT) . '-' . str_pad((string) $day, 2, '0', STR_PAD_LEFT));
+        return new DateTime(
+            $year . '-'
+            . str_pad((string) $month, 2, '0', STR_PAD_LEFT) . '-'
+            . str_pad((string) $day, 2, '0', STR_PAD_LEFT)
+        );
     }
 }

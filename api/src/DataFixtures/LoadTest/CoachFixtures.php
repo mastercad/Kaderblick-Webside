@@ -3,11 +3,14 @@
 namespace App\DataFixtures\LoadTest;
 
 use App\DataFixtures\MasterData\CoachTeamAssignmentTypeFixtures;
+use App\DataFixtures\MasterData\NationalityFixtures;
 use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachClubAssignment;
+use App\Entity\CoachNationalityAssignment;
 use App\Entity\CoachTeamAssignment;
 use App\Entity\CoachTeamAssignmentType;
+use App\Entity\Nationality;
 use App\Entity\Team;
 use DateTime;
 use DateTimeImmutable;
@@ -17,18 +20,20 @@ use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
 /**
- * Load-Test Fixtures: ~202 Trainer (2 pro Team, 101 Teams).
- * Beinhaltet 3-Jahres-History: frühere Team-Zuweisungen und Interimstrainer.
- * Einige Trainer sind in mehreren Klubs/Teams aktiv (Gasttrainer, Übungsleiter).
+ * Load-Test Fixtures: ~1832 Trainer (2 pro Team, 916 Teams).
+ * 5-Saisons-History (2021/22–2025/26): Trainerwechsel, Interim, Torwarttrainer.
+ * Nationalitäten: 85 % DE, 5 % AT, Rest international (10 Länder).
  *
- * Referenz-Keys: lt_coach_0 bis lt_coach_201
  * Gruppe: load_test
  */
 class CoachFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
 {
-    private const TOTAL_TEAMS = 101;
+    private const TOTAL_TEAMS = 916;
     private const COACHES_PER_TEAM = 2;
     private const BATCH_SIZE = 50;
+
+    /** @var array<int, Nationality> */
+    private array $nationalityWheel = [];
 
     public static function getGroups(): array
     {
@@ -41,11 +46,25 @@ class CoachFixtures extends Fixture implements FixtureGroupInterface, DependentF
             TeamFixtures::class,
             ClubFixtures::class,
             CoachTeamAssignmentTypeFixtures::class,
+            NationalityFixtures::class,
         ];
     }
 
     public function load(ObjectManager $manager): void
     {
+        // Gewichtetes Nationalitäten-Rad: 85 % DE, 5 % AT, Rest international
+        $natWeights = [
+            'de' => 85, 'at' => 5, 'tr' => 2, 'pl' => 2,
+            'hr' => 1, 'rs' => 1, 'it' => 1, 'nl' => 1, 'fr' => 1, 'es' => 1,
+        ];
+        foreach ($natWeights as $iso => $count) {
+            /** @var Nationality $nat */
+            $nat = $this->getReference('nationality_' . $iso, Nationality::class);
+            for ($i = 0; $i < $count; ++$i) {
+                $this->nationalityWheel[] = $nat;
+            }
+        }
+
         /** @var CoachTeamAssignmentType $typeCheftrainer */
         $typeCheftrainer = $this->getReference('coach_team_assignment_type_cheftrainer', CoachTeamAssignmentType::class);
         /** @var CoachTeamAssignmentType $typeCoTrainer */
@@ -94,14 +113,24 @@ class CoachFixtures extends Fixture implements FixtureGroupInterface, DependentF
                 $coach->setLastName($lastName);
                 $coach->setEmail($email);
 
-                // Geburtsdatum (Trainer: 25-65 Jahre)
+                // Geburtsdatum (Trainer: 27-61 Jahre, passend zu Saison 2025/26)
                 $birthYear = rand(1965, 1999);
-                $coach->setBirthdate(
-                    new DateTime($birthYear . '-' . str_pad((string) rand(1, 12), 2, '0', STR_PAD_LEFT)
-                        . '-' . str_pad((string) rand(1, 28), 2, '0', STR_PAD_LEFT))
+                $birthdate = new DateTime(
+                    $birthYear . '-'
+                    . str_pad((string) rand(1, 12), 2, '0', STR_PAD_LEFT) . '-'
+                    . str_pad((string) rand(1, 28), 2, '0', STR_PAD_LEFT)
                 );
+                $coach->setBirthdate($birthdate);
 
                 $manager->persist($coach);
+
+                // Nationalitätszuweisung (von Geburt an, dauerhaft aktiv)
+                $natAssignment = new CoachNationalityAssignment();
+                $natAssignment->setCoach($coach);
+                $natAssignment->setNationality($this->nationalityWheel[$globalCoachIdx % count($this->nationalityWheel)]);
+                $natAssignment->setStartDate(DateTimeImmutable::createFromMutable($birthdate));
+                $natAssignment->setActive(true);
+                $manager->persist($natAssignment);
 
                 // Club-Zuordnung (aktuell, offen)
                 $clubAssignment = new CoachClubAssignment();

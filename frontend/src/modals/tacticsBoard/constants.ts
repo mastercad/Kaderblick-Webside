@@ -1,12 +1,14 @@
 // ─── TacticsBoard – constants ──────────────────────────────────────────────────
 
+// Die ersten 4 Farben entsprechen exakt den Spieler-Token-Farben aus getZoneColor()
+// (formation/helpers.ts), damit Pfeile und Zonen visuell mit der Aufstellung matchen.
 export const PALETTE: { label: string; value: string }[] = [
-  { label: 'Weiß',   value: '#ffffff' },
-  { label: 'Gelb',   value: '#ffd600' },
-  { label: 'Rot',    value: '#f44336' },
-  { label: 'Cyan',   value: '#00e5ff' },
-  { label: 'Orange', value: '#ff9100' },
-  { label: 'Grün',   value: '#69f0ae' },
+  { label: 'Rot (Angriff)',    value: '#ef4444' }, // getZoneColor: Attack
+  { label: 'Grün (Mittelfeld)', value: '#22c55e' }, // getZoneColor: Midfield
+  { label: 'Blau (Abwehr)',    value: '#3b82f6' }, // getZoneColor: Defence
+  { label: 'Orange (TW)',      value: '#f59e0b' }, // getZoneColor: TW zone
+  { label: 'Weiß',             value: '#ffffff' }, // freie Markierungen
+  { label: 'Gelb',             value: '#ffd600' }, // freie Markierungen
 ];
 
 /**

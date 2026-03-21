@@ -10,6 +10,7 @@ use App\Entity\Player;
 use App\Entity\Team;
 use App\Entity\WeatherData;
 use App\Service\ReportDataService;
+use App\Service\ReportFieldAliasService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Query;
@@ -20,6 +21,15 @@ use stdClass;
 
 class ReportDataServiceTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        // Reset the static cache so tests do not pollute each other via shared closure state.
+        $ref = new ReflectionClass(ReportFieldAliasService::class);
+        $prop = $ref->getProperty('cache');
+        $prop->setAccessible(true);
+        $prop->setValue(null, null);
+    }
+
     public function testGenerateSpatialPointsNormalizesAndClamps(): void
     {
         $em = $this->createMock(EntityManagerInterface::class);
@@ -91,6 +101,11 @@ class ReportDataServiceTest extends TestCase
 
         // Create stub GameEventType with code 'goal'
         $typeGoal = new class {
+            public function getId(): int
+            {
+                return 1;
+            }
+
             public function getCode(): string
             {
                 return 'goal';

@@ -11,7 +11,7 @@ jest.mock('@mui/material', () => {
     Typography: (props: any) => <span {...props}>{props.children}</span>,
     FormControl: (props: any) => <div>{props.children}</div>,
     InputLabel: (props: any) => <label {...props}>{props.children}</label>,
-    Select: (props: any) => <select data-testid="team-select" onChange={props.onChange} value={props.value}>{props.children}</select>,
+    Select: (props: any) => <select data-testid={props.labelId === 'team-filter-label' ? 'team-select' : 'season-select'} onChange={props.onChange} value={props.value}>{props.children}</select>,
     MenuItem: (props: any) => <option value={props.value}>{props.children}</option>,
     Chip: (props: any) => <span data-testid="Chip">{props.label}</span>,
     Stack: (props: any) => <div {...props}>{props.children}</div>,

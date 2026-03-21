@@ -8,6 +8,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { getPositionColor } from '../helpers';
 import type { Player, PlayerData } from '../types';
 
 interface SquadListProps {
@@ -132,7 +133,7 @@ const SquadList: React.FC<SquadListProps> = ({
                   const r = size / 2;
                   ctx.beginPath();
                   ctx.arc(r, r, r - 1, 0, Math.PI * 2);
-                  ctx.fillStyle = '#1d4ed8';
+                  ctx.fillStyle = getPositionColor(player.position ?? null);
                   ctx.fill();
                   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
                   ctx.lineWidth = 2;
@@ -149,6 +150,7 @@ const SquadList: React.FC<SquadListProps> = ({
                 onSquadDragStart?.(player);
               }}
               onDragEnd={() => onSquadDragEnd?.()}
+              onTouchStart={isActive ? undefined : () => onSquadDragStart?.(player)}
               sx={{
                 opacity: isActive ? 0.4 : 1,
                 py: 0.2,

@@ -29,9 +29,10 @@ const squadPlayer = (id: number, name: string): Player => ({
 /**
  * Mock pitch element: Bounding box 0/0, 100×100px.
  * → getRelativePosition(clientX, clientY) = { x: clientX, y: clientY }
+ * right/bottom werden von den Touch-Handlern direkt ausgelesen.
  */
 const mockPitchEl = {
-  getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+  getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100 }),
 } as unknown as HTMLDivElement;
 
 const makeDragEvent = (clientX: number, clientY: number) =>
@@ -185,5 +186,87 @@ describe('handlePitchDrop – Duplikat-Schutz', () => {
     act(() => { result.current.handlePitchDrop(makeDragEvent(50, 50)); });
 
     expect(result.current.players.filter(p => p.playerId === 10)).toHaveLength(0);
+  });
+});
+
+// ─── Touch-Drag via globale document-Listener ─────────────────────────────────
+
+/**
+ * Erzeugt ein natives Event mit gemockten touches / changedTouches, damit
+ * document.dispatchEvent() die im useEffect registrierten Touch-Handler auslöst.
+ * Die Handler greifen nur auf e.touches[0] bzw. e.changedTouches[0] zu.
+ */
+const createTouchEvent = (
+  type: 'touchmove' | 'touchend',
+  clientX: number,
+  clientY: number,
+) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const touch = { clientX, clientY, identifier: 1, target: document.body };
+  Object.defineProperty(event, 'touches',        { value: [touch], configurable: true });
+  Object.defineProperty(event, 'changedTouches', { value: [touch], configurable: true });
+  return event;
+};
+
+describe('Touch-Drag via document-Listener', () => {
+  it('touchmove über dem Pitch aktualisiert highlightedTokenId', () => {
+    const ph = placeholder(1, 50, 50);
+    const { result } = setup([ph]);
+
+    act(() => { result.current.handleSquadDragStart(squadPlayer(10, 'Reus')); });
+    act(() => { document.dispatchEvent(createTouchEvent('touchmove', 50, 50)); });
+
+    expect(result.current.highlightedTokenId).toBe(1);
+  });
+
+  it('touchmove außerhalb des Pitch setzt highlightedTokenId auf null', () => {
+    const ph = placeholder(1, 50, 50);
+    const { result } = setup([ph]);
+
+    act(() => { result.current.handleSquadDragStart(squadPlayer(10, 'Reus')); });
+    act(() => { document.dispatchEvent(createTouchEvent('touchmove', 50, 50)); });  // über Pitch → highlight
+    act(() => { document.dispatchEvent(createTouchEvent('touchmove', 200, 200)); }); // außerhalb → null
+
+    expect(result.current.highlightedTokenId).toBeNull();
+  });
+
+  it('touchend über dem Pitch ersetzt Platzhalter (executeDropAt)', () => {
+    const ph = placeholder(1, 30, 30);
+    const { result } = setup([ph]);
+
+    act(() => { result.current.handleSquadDragStart(squadPlayer(10, 'Reus')); });
+    act(() => { document.dispatchEvent(createTouchEvent('touchend', 30, 30)); });
+
+    const slot = result.current.players.find(p => p.id === 1);
+    expect(slot?.isRealPlayer).toBe(true);
+    expect(slot?.name).toBe('Reus');
+    expect(result.current.squadDragPlayer).toBeNull();
+  });
+
+  it('touchend außerhalb des Pitch bricht den Drag ab (kein Drop)', () => {
+    const ph = placeholder(1, 50, 50);
+    const { result } = setup([ph]);
+
+    act(() => { result.current.handleSquadDragStart(squadPlayer(10, 'Reus')); });
+    act(() => { document.dispatchEvent(createTouchEvent('touchend', 200, 200)); }); // außerhalb
+
+    expect(result.current.squadDragPlayer).toBeNull(); // Drag abgebrochen
+    const slot = result.current.players.find(p => p.id === 1);
+    expect(slot?.name).toBe('PH');         // Platzhalter unverändert
+    expect(slot?.isRealPlayer).toBe(false);
+  });
+
+  it('nach handleSquadDragEnd reagiert touchend nicht mehr (Ref ist null)', () => {
+    const ph = placeholder(1, 30, 30);
+    const { result } = setup([ph]);
+
+    act(() => { result.current.handleSquadDragStart(squadPlayer(10, 'Reus')); });
+    act(() => { result.current.handleSquadDragEnd(); }); // Drag beendet, Ref geleert
+    act(() => { document.dispatchEvent(createTouchEvent('touchend', 30, 30)); }); // kein Drop
+
+    // Platzhalter muss unverändert sein (executeDropAt prüft player-Ref → null)
+    const slot = result.current.players.find(p => p.id === 1);
+    expect(slot?.name).toBe('PH');
+    expect(slot?.isRealPlayer).toBe(false);
   });
 });

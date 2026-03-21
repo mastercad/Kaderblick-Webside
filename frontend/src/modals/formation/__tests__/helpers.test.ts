@@ -3,7 +3,7 @@
  *
  * Prüft die reine Funktion positionCategory() und getZoneColor().
  */
-import { getZoneColor, positionCategory } from '../helpers';
+import { getZoneColor, getPositionColor, positionCategory } from '../helpers';
 
 // ─── positionCategory ─────────────────────────────────────────────────────────
 
@@ -74,4 +74,45 @@ describe('getZoneColor', () => {
   it('y > 30 → Midfield-Zone (green)',() => expect(getZoneColor(40)).toBe('#22c55e'));
   it('y = 30 → Attack-Zone (red)',  () => expect(getZoneColor(30)).toBe('#ef4444'));
   it('y = 0  → Attack-Zone (red)',  () => expect(getZoneColor(0)).toBe('#ef4444'));
+});
+
+// ─── getPositionColor ─────────────────────────────────────────────────────────
+
+describe('getPositionColor', () => {
+  // ── null / undefined / unbekannt → grau ──────────────────────────────────
+  it('null → grau',      () => expect(getPositionColor(null)).toBe('#6b7280'));
+  it('undefined → grau', () => expect(getPositionColor(undefined)).toBe('#6b7280'));
+  it('"XY" → grau',      () => expect(getPositionColor('XY')).toBe('#6b7280'));
+
+  // ── Torwart → amber (dieselbe Farbe wie TW-Zone in getZoneColor) ─────────
+  it('TW → amber (#f59e0b)',        () => expect(getPositionColor('TW')).toBe('#f59e0b'));
+  it('"Torwart" → amber',           () => expect(getPositionColor('Torwart')).toBe('#f59e0b'));
+  it('"goalkeeper" → amber',        () => expect(getPositionColor('goalkeeper')).toBe('#f59e0b'));
+
+  // ── Abwehr → blau ─────────────────────────────────────────────────────────
+  it('IV → blau (#3b82f6)',         () => expect(getPositionColor('IV')).toBe('#3b82f6'));
+  it('LV → blau',                   () => expect(getPositionColor('LV')).toBe('#3b82f6'));
+  it('RV → blau',                   () => expect(getPositionColor('RV')).toBe('#3b82f6'));
+  it('"Innenverteidiger" → blau',   () => expect(getPositionColor('Innenverteidiger')).toBe('#3b82f6'));
+  it('"Linksverteidiger" → blau',   () => expect(getPositionColor('Linksverteidiger')).toBe('#3b82f6'));
+
+  // ── Mittelfeld → grün ─────────────────────────────────────────────────────
+  it('ZM → grün (#22c55e)',         () => expect(getPositionColor('ZM')).toBe('#22c55e'));
+  it('DM → grün',                   () => expect(getPositionColor('DM')).toBe('#22c55e'));
+  it('OM → grün',                   () => expect(getPositionColor('OM')).toBe('#22c55e'));
+  it('"Zentrales Mittelfeld" → grün', () => expect(getPositionColor('Zentrales Mittelfeld')).toBe('#22c55e'));
+
+  // ── Angriff → rot ─────────────────────────────────────────────────────────
+  it('ST → rot (#ef4444)',          () => expect(getPositionColor('ST')).toBe('#ef4444'));
+  it('LA → rot',                    () => expect(getPositionColor('LA')).toBe('#ef4444'));
+  it('RA → rot',                    () => expect(getPositionColor('RA')).toBe('#ef4444'));
+  it('CF → rot',                    () => expect(getPositionColor('CF')).toBe('#ef4444'));
+  it('"Stürmer" → rot',             () => expect(getPositionColor('Stürmer')).toBe('#ef4444'));
+  it('"Linksaußen" → rot',          () => expect(getPositionColor('Linksaußen')).toBe('#ef4444'));
+
+  // ── Konsistenz: Farben stimmen mit getZoneColor-Palette überein ───────────
+  it('GK-Farbe entspricht TW-Zone (y=90)',  () => expect(getPositionColor('TW')).toBe(getZoneColor(90)));
+  it('DEF-Farbe entspricht DEF-Zone (y=65)', () => expect(getPositionColor('IV')).toBe(getZoneColor(65)));
+  it('MID-Farbe entspricht MID-Zone (y=45)', () => expect(getPositionColor('ZM')).toBe(getZoneColor(45)));
+  it('FWD-Farbe entspricht ATK-Zone (y=15)', () => expect(getPositionColor('ST')).toBe(getZoneColor(15)));
 });

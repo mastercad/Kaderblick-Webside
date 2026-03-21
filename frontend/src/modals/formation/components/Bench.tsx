@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { truncateName } from '../helpers';
+import { getPositionColor, truncateName } from '../helpers';
 import type { PlayerData } from '../types';
 
 interface BenchProps {
@@ -67,8 +67,9 @@ const Bench: React.FC<BenchProps> = ({
               borderColor: 'grey.300',
               borderRadius: 2,
               px: 1, py: 0.5,
-              cursor: 'pointer',
+              cursor: 'grab',
               touchAction: 'none',
+              userSelect: 'none',
               '&:hover': { bgcolor: 'primary.50', borderColor: 'primary.main' },
             }}
             onClick={() => onSendToField(player.id)}
@@ -79,7 +80,7 @@ const Bench: React.FC<BenchProps> = ({
             <Box sx={{
               width: 28, height: 28,
               borderRadius: '50%',
-              bgcolor: 'grey.500',
+              bgcolor: getPositionColor(player.position),
               color: 'white',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 700, fontSize: 12, flexShrink: 0,

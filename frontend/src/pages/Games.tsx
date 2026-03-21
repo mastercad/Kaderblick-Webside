@@ -60,6 +60,10 @@ export default function Games() {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<number | 'all'>('all');
   const [noTeamAssignment, setNoTeamAssignment] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState<number>(() => {
+    const today = new Date();
+    return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+  });
 
   const openWeatherModal = (eventId: number | null) => {
     setSelectedEventId(eventId);
@@ -70,11 +74,11 @@ export default function Games() {
     loadGamesOverview();
   }, []);
 
-  const loadGamesOverview = async (teamId?: number | 'all') => {
+  const loadGamesOverview = async (teamId?: number | 'all', season?: number) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await fetchGamesOverview(teamId);
+      const result = await fetchGamesOverview(teamId, season ?? selectedSeason);
       if ('error' in result) {
         throw new Error(String(result.error));
       }
@@ -547,56 +551,82 @@ export default function Games() {
   return (
     <Box sx={{ px: { xs: 1.5, sm: 3 }, py: { xs: 2, sm: 3 }, maxWidth: 960, mx: 'auto' }}>
       {/* Page Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: showTeamFilter ? 2 : 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <SoccerIcon sx={{ fontSize: { xs: 28, sm: 32 }, color: 'primary.main' }} />
         <Typography variant="h4" component="h1" sx={{ fontWeight: 700, fontSize: { xs: '1.4rem', sm: '1.8rem' } }}>
           Spiele & Turniere
         </Typography>
       </Box>
 
-      {/* Team Filter Dropdown */}
-      {showTeamFilter && (
-        <Box sx={{ mb: 3 }}>
-          <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 320 } }}>
-            <InputLabel id="team-filter-label">
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <FilterIcon sx={{ fontSize: 16 }} />
-                Team filtern
-              </Box>
-            </InputLabel>
-            <Select
-              labelId="team-filter-label"
-              label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><FilterIcon sx={{ fontSize: 16 }} />Team filtern</Box>}
-              value={selectedTeamId}
-              onChange={e => {
-                const v = e.target.value as number | 'all';
-                setSelectedTeamId(v);
-                loadGamesOverview(v);
-              }}
-            >
-              <MenuItem value="all">Alle Teams</MenuItem>
+      {/* Season + Team Filter */}
+      <Box sx={{ mb: 3 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={{ xs: 1.5, sm: 2 }}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
+            {/* Season selector – always visible */}
+            <FormControl size="small" sx={{ width: { xs: '100%', sm: 220 } }}>
+              <InputLabel id="season-filter-label">Saison</InputLabel>
+              <Select
+                labelId="season-filter-label"
+                label="Saison"
+                value={selectedSeason}
+                onChange={e => {
+                  const v = e.target.value as number;
+                  setSelectedSeason(v);
+                  loadGamesOverview(selectedTeamId === 'all' ? undefined : selectedTeamId, v);
+                }}
+              >
+                {(data?.availableSeasons ?? [selectedSeason]).map(y => (
+                  <MenuItem key={y} value={y}>{y}/{String(y + 1).slice(2)}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-              {myTeams.length > 0 && [
-                <ListSubheader key="my-header" sx={{ fontWeight: 700, lineHeight: '32px', fontSize: '0.75rem', color: 'primary.main' }}>
-                  Meine Teams
-                </ListSubheader>,
-                ...myTeams.map(([id, name]) => (
-                  <MenuItem key={`my-${id}`} value={id}>{name}</MenuItem>
-                )),
-              ]}
+            {/* Team filter – only for admins / coaches with multiple teams */}
+            {showTeamFilter && (
+              <FormControl size="small" sx={{ width: { xs: '100%', sm: 320 } }}>
+                <InputLabel id="team-filter-label">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <FilterIcon sx={{ fontSize: 16 }} />
+                    Team filtern
+                  </Box>
+                </InputLabel>
+                <Select
+                  labelId="team-filter-label"
+                  label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><FilterIcon sx={{ fontSize: 16 }} />Team filtern</Box>}
+                  value={selectedTeamId}
+                  onChange={e => {
+                    const v = e.target.value as number | 'all';
+                    setSelectedTeamId(v);
+                    loadGamesOverview(v, selectedSeason);
+                  }}
+                >
+                  <MenuItem value="all">Alle Teams</MenuItem>
 
-              {otherTeams.length > 0 && [
-                <ListSubheader key="other-header" sx={{ fontWeight: 700, lineHeight: '32px', fontSize: '0.75rem', color: 'text.secondary' }}>
-                  Weitere Teams
-                </ListSubheader>,
-                ...otherTeams.map(([id, name]) => (
-                  <MenuItem key={`other-${id}`} value={id}>{name}</MenuItem>
-                )),
-              ]}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
+                  {myTeams.length > 0 && [
+                    <ListSubheader key="my-header" sx={{ fontWeight: 700, lineHeight: '32px', fontSize: '0.75rem', color: 'primary.main' }}>
+                      Meine Teams
+                    </ListSubheader>,
+                    ...myTeams.map(([id, name]) => (
+                      <MenuItem key={`my-${id}`} value={id}>{name}</MenuItem>
+                    )),
+                  ]}
+
+                  {otherTeams.length > 0 && [
+                    <ListSubheader key="other-header" sx={{ fontWeight: 700, lineHeight: '32px', fontSize: '0.75rem', color: 'text.secondary' }}>
+                      Weitere Teams
+                    </ListSubheader>,
+                    ...otherTeams.map(([id, name]) => (
+                      <MenuItem key={`other-${id}`} value={id}>{name}</MenuItem>
+                    )),
+                  ]}
+                </Select>
+              </FormControl>
+            )}
+          </Stack>
+      </Box>
 
       {/* ── Running ── */}
       {runningCount > 0 && (

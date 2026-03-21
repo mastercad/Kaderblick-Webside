@@ -6,6 +6,20 @@ export function getZoneColor(y: number): string {
   if (y > 30) return '#22c55e'; // Midfield – green
   return       '#ef4444';       // Attack   – red
 }
+
+/**
+ * Color based on the player's *position abbreviation* (e.g. 'TW', 'IV', 'ZM', 'ST').
+ * Uses the same palette as getZoneColor so that drag previews match the final token color.
+ * Falls back to grey for unknown/null positions.
+ */
+export function getPositionColor(position: string | null | undefined): string {
+  const cat = positionCategory(position);
+  if (cat === 'GK')  return '#f59e0b';
+  if (cat === 'DEF') return '#3b82f6';
+  if (cat === 'MID') return '#22c55e';
+  if (cat === 'FWD') return '#ef4444';
+  return '#6b7280'; // grey – unbekannte Position
+}
 // ─── Position category mapping ────────────────────────────────────────────────────────
 export type PosCategory = 'GK' | 'DEF' | 'MID' | 'FWD';
 

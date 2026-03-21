@@ -26,9 +26,11 @@ const setup = (initialPlayers: PlayerData[], initialBench: PlayerData[] = []) =>
   return renderHook(() => {
     const [players,    setPlayers]    = useState<PlayerData[]>(initialPlayers);
     const [bench,      setBench]      = useState<PlayerData[]>(initialBench);
-    const pitchRef = useRef<HTMLDivElement>(mockPitchEl);
+    const pitchRef  = useRef<HTMLDivElement>(mockPitchEl);
+    // Empty tokenRefs map – finalizeDrop falls back to dragPosRef (correct fallback path)
+    const tokenRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-    const drag = useFieldDrag({ players, setPlayers, benchPlayers: bench, setBenchPlayers: setBench, pitchRef });
+    const drag = useFieldDrag({ players, setPlayers, benchPlayers: bench, setBenchPlayers: setBench, pitchRef, tokenRefs });
     return { players, bench, ...drag };
   });
 };
@@ -66,10 +68,13 @@ describe('startDragFromField', () => {
 
 describe('handlePitchMouseMove', () => {
   it('bewegt den gezogenen Feldspieler auf die neue Position', () => {
+    // Position wird erst beim finalizeDrop (mouseUp) in den State geschrieben;
+    // während des Drags wird nur der DOM via rAF aktualisiert.
     const { result } = setup([fieldPlayer(1, 10, 10)]);
 
     act(() => { result.current.startDragFromField(1, mouseEvent(10, 10)); });
     act(() => { result.current.handlePitchMouseMove(mouseEvent(40, 60)); });
+    act(() => { result.current.handlePitchMouseUp(); }); // committet dragPosRef → State
 
     const moved = result.current.players.find(p => p.id === 1);
     expect(moved?.x).toBeCloseTo(40, 0);
@@ -171,11 +176,12 @@ describe('handlePitchMouseUp', () => {
 // ─── handlePitchTouchMove ─────────────────────────────────────────────────────
 
 describe('handlePitchTouchMove', () => {
-  it('bewegt den Spieler via Touch-Event', () => {
+  it('bewegt den Spieler via Touch-Event (Position nach touchEnd)', () => {
+    // Wie bei mousemove: State-Update erfolgt erst in finalizeDrop (touchEnd)
     const { result } = setup([fieldPlayer(1, 10, 10)]);
-    // Wir müssen mouseEvent für startDrag nutzen, touch für move
     act(() => { result.current.startDragFromField(1, mouseEvent(0, 0)); });
     act(() => { result.current.handlePitchTouchMove(touchEvent(70, 20)); });
+    act(() => { result.current.handlePitchTouchEnd(); }); // committet dragPosRef → State
 
     const moved = result.current.players.find(p => p.id === 1);
     expect(moved?.x).toBeCloseTo(70, 0);

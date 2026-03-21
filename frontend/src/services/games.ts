@@ -10,13 +10,18 @@ export interface GamesOverviewData {
   userDefaultTeamId?: number;
   noTeamAssignment?: boolean;
   availableTeams: { id: number; name: string }[];
+  availableSeasons: number[];
+  selectedSeason: number;
 }
 
 // Spiele-Übersicht laden
-export async function fetchGamesOverview(teamId?: number | 'all'): Promise<GamesOverviewData> {
-  const params = teamId !== undefined ? `?teamId=${teamId}` : '';
+export async function fetchGamesOverview(teamId?: number | 'all', season?: number): Promise<GamesOverviewData> {
+  const params = new URLSearchParams();
+  if (teamId !== undefined) params.set('teamId', String(teamId));
+  if (season !== undefined) params.set('season', String(season));
+  const qs = params.toString() ? `?${params.toString()}` : '';
 
-  return apiJson<GamesOverviewData>(`/api/games/overview${params}`);
+  return apiJson<GamesOverviewData>(`/api/games/overview${qs}`);
 }
 
 // Einzelnes Spiel mit Details laden

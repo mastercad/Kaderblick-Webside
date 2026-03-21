@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Repository\TeamRepository;
 use App\Security\Voter\TeamVoter;
 use App\Service\CoachTeamPlayerService;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -86,6 +87,20 @@ class TeamsController extends AbstractController
         $limit = min(100, max(1, (int) $request->query->get('limit', 25)));
         $search = trim((string) $request->query->get('search', ''));
 
+        // Season metadata
+        $seasonParam = $request->query->get('season');
+        $now = new DateTimeImmutable();
+        $currentMonth = (int) $now->format('n');
+        $currentYear = (int) $now->format('Y');
+        $defaultSeasonYear = $currentMonth >= 7 ? $currentYear : ($currentYear - 1);
+        $seasonYear = (null !== $seasonParam && ctype_digit((string) $seasonParam))
+            ? (int) $seasonParam
+            : $defaultSeasonYear;
+        $availableSeasons = [];
+        for ($y = 2021; $y <= $defaultSeasonYear; ++$y) {
+            $availableSeasons[] = $y;
+        }
+
         /** @var User $user */
         $user = $this->getUser();
         /** @var TeamRepository $teamsRepository */
@@ -117,6 +132,8 @@ class TeamsController extends AbstractController
             'total' => $result['total'],
             'page' => $page,
             'limit' => $limit,
+            'availableSeasons' => $availableSeasons,
+            'selectedSeason' => $seasonYear,
         ]);
     }
 

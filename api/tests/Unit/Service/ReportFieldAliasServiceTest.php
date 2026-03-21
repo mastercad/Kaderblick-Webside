@@ -4,6 +4,7 @@ namespace App\Tests\Unit\Service;
 
 use App\Service\ReportFieldAliasService;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 
 class ReportFieldAliasServiceTest extends TestCase
 {
@@ -194,5 +195,98 @@ class ReportFieldAliasServiceTest extends TestCase
 
         $result = ($aliases['shotAccuracy']['aggregate'])([]);
         $this->assertSame(0, $result);
+    }
+
+    // =========================================================================
+    //  Cache-Verhalten
+    // =========================================================================
+
+    /**
+     * Calling fieldAliases without an EntityManager must not populate the
+     * static cache. This prevents cross-test pollution when feature tests call
+     * the controller which passes a real EntityManager: the closures capture
+     * $typesByCode at construction time, so a null-EM cached result would
+     * break type-based aggregates in subsequent EM-based calls.
+     */
+    public function testCallingWithoutEmNeverWritesToStaticCache(): void
+    {
+        // Reset the cache before the assertion so earlier test runs don't interfere.
+        $ref = new ReflectionClass(ReportFieldAliasService::class);
+        $prop = $ref->getProperty('cache');
+        $prop->setAccessible(true);
+        $prop->setValue(null, null);
+
+        ReportFieldAliasService::fieldAliases(null);
+
+        $this->assertNull(
+            $prop->getValue(null),
+            'Static $cache must remain null after calling fieldAliases(null).'
+        );
+    }
+
+    /**
+     * Two consecutive calls without EM must return the same set of field keys
+     * (deterministic, no DB required).
+     */
+    public function testCallingWithoutEmTwiceReturnsDeterministicFieldKeys(): void
+    {
+        $first = ReportFieldAliasService::fieldAliases(null);
+        $second = ReportFieldAliasService::fieldAliases(null);
+
+        $this->assertSame(
+            array_keys($first),
+            array_keys($second),
+            'Repeated null-EM calls must return the same set of field keys.'
+        );
+    }
+
+    /**
+     * The static cache is only populated when fieldAliases is called with
+     * a real EntityManager. Verify this by checking the reflection property
+     * after calling with an injected mock EM.
+     */
+    public function testCallingWithEmPopulatesStaticCache(): void
+    {
+        // Reset first
+        $ref = new ReflectionClass(ReportFieldAliasService::class);
+        $prop = $ref->getProperty('cache');
+        $prop->setAccessible(true);
+        $prop->setValue(null, null);
+
+        // Build a minimal mock EntityManager that returns empty arrays from repositories.
+        $repo = $this->createMock(\Doctrine\ORM\EntityRepository::class);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(\Doctrine\ORM\EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        ReportFieldAliasService::fieldAliases($em);
+
+        $cached = $prop->getValue(null);
+        $this->assertIsArray($cached, 'Static $cache must be set after calling fieldAliases($em).');
+        $this->assertNotEmpty($cached, 'Cached aliases array must not be empty.');
+    }
+
+    /**
+     * A second call with an EM must return the cached result (the EM's
+     * getRepository must NOT be called again).
+     */
+    public function testCallingWithEmTwiceUsesCache(): void
+    {
+        // Reset first
+        $ref = new ReflectionClass(ReportFieldAliasService::class);
+        $prop = $ref->getProperty('cache');
+        $prop->setAccessible(true);
+        $prop->setValue(null, null);
+
+        $repo = $this->createMock(\Doctrine\ORM\EntityRepository::class);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(\Doctrine\ORM\EntityManagerInterface::class);
+        // getRepository must only be called once (during the first call)
+        $em->expects($this->once())->method('getRepository')->willReturn($repo);
+
+        ReportFieldAliasService::fieldAliases($em);
+        ReportFieldAliasService::fieldAliases($em); // second call — must use cache
     }
 }

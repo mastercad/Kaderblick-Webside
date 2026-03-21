@@ -20,7 +20,7 @@ use Doctrine\Persistence\ObjectManager;
  * Load-Test Fixtures: 3 Jahre Trainingskalender (Di + Do, je Team und Woche).
  *
  * Zeitraum: 2023-01-03 bis 2026-03-12 = ~167 Wochen
- * Pro Team 2 Trainingseinheiten/Woche → ~334 Events/Team × 101 Teams = ~33.734 Cal.Events
+ * Pro Team 2 Trainingseinheiten/Woche → ~334 Events/Team × 368 Teams = ~122.912 Cal.Events
  * Plus je 1 CalendarEventPermission (Team-Sichtbarkeit) = ~67.468 Datensätze gesamt.
  *
  * Memory-Optimierung: flush+clear alle 500 Datensätze, Teamreferenz via Proxy.
@@ -28,7 +28,7 @@ use Doctrine\Persistence\ObjectManager;
  */
 class TrainingCalendarFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
 {
-    private const TOTAL_TEAMS = 101;
+    private const TOTAL_TEAMS = 916;
     private const BATCH_SIZE = 500;
 
     public static function getGroups(): array
