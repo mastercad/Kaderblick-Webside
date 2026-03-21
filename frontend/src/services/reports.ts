@@ -81,6 +81,21 @@ export async function fetchReportPresets(): Promise<{ presets: ReportPreset[] }>
 
 export interface ContextOption { id: number; name?: string; fullName?: string }
 
+/** Search players by name for the report builder filter autocomplete. */
+export async function searchReportPlayers(q: string): Promise<Array<{ id: number; fullName: string; firstName: string; lastName: string }>> {
+  if (q.trim().length < 2) return [];
+  return apiJson(`/api/report/player-search?q=${encodeURIComponent(q.trim())}`);
+}
+
+/** Resolve a single player by ID (used to restore saved player filters). */
+export async function fetchPlayerById(id: number): Promise<{ id: number; fullName: string } | null> {
+  try {
+    return await apiJson(`/api/players/${id}`);
+  } catch {
+    return null;
+  }
+}
+
 /** Lightweight – only returns teams and players for the context-selection modal. */
 export async function fetchReportContextData(): Promise<{
   teams: ContextOption[];

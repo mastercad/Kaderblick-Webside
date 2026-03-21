@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Tooltip } from '@mui/material';
-import { getZoneColor, truncateName } from '../helpers';
+import { getZoneColor, getPositionColor, truncateName } from '../helpers';
 import type { PlayerData } from '../types';
 
 interface PlayerTokenProps {
@@ -10,6 +10,8 @@ interface PlayerTokenProps {
   isHighlighted?: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
   onTouchStart: (e: React.TouchEvent) => void;
+  /** Forwarded ref to the root DOM element – used for direct style mutation during drag */
+  domRef?: React.Ref<HTMLDivElement>;
 }
 
 /** Baut den Debug-Tooltip-Inhalt: Name + Rückennummer + Positionen. */
@@ -39,10 +41,15 @@ const buildTooltip = (player: PlayerData): React.ReactNode => {
  * and the player's name in a label beneath it.
  * Also renders a subtle dashed-border ring around placeholders.
  * The tooltip shows name, shirt number and position data for debugging.
+ *
+ * Wrapped in React.memo to prevent re-renders for non-dragged tokens.
+ * `domRef` is passed by the formation editor to directly mutate `left`/`top`
+ * during drag without triggering React re-renders.
  */
-const PlayerToken: React.FC<PlayerTokenProps> = ({ player, isDragging, isHighlighted, onMouseDown, onTouchStart }) => (
+const PlayerToken: React.FC<PlayerTokenProps> = React.memo(({ player, isDragging, isHighlighted, onMouseDown, onTouchStart, domRef }) => (
   <Tooltip title={buildTooltip(player)} placement="top" disableInteractive>
     <Box
+      ref={domRef}
       sx={{
         position: 'absolute',
         left: player.x + '%',
@@ -63,7 +70,7 @@ const PlayerToken: React.FC<PlayerTokenProps> = ({ player, isDragging, isHighlig
       <Box sx={{
         width: 44,
         height: 44,
-        bgcolor: getZoneColor(player.y),
+        bgcolor: isDragging ? getPositionColor(player.position) : getZoneColor(player.y),
         color: 'white',
         borderRadius: '50%',
         display: 'flex',
@@ -107,6 +114,8 @@ const PlayerToken: React.FC<PlayerTokenProps> = ({ player, isDragging, isHighlig
       </Box>
     </Box>
   </Tooltip>
-);
+));
+
+PlayerToken.displayName = 'PlayerToken';
 
 export default PlayerToken;

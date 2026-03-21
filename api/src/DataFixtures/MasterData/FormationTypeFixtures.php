@@ -19,7 +19,7 @@ class FormationTypeFixtures extends Fixture implements FixtureGroupInterface
         $formationTypes = [
             [
                 'name' => 'fußball',
-                'background' => 'fussballfeld_haelfte_vertical.jpg',
+                'background' => 'fussballfeld_haelfte_horizontal.jpg',
                 'cssClass' => 'field-football'
             ],
             [

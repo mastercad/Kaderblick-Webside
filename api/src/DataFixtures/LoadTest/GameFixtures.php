@@ -15,32 +15,44 @@ use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectManager;
+use Exception;
 use RuntimeException;
 
 /**
- * Load-Test Fixtures: 3 Jahre Spielplan (2023/24, 2024/25, 2025/26).
+ * Load-Test Fixtures: 5 Spieljahre (2021/22 – 2025/26).
  *
  * Pro Team und Saison:
- * - 13 Ligaspiele (samstags)
- * - 1 Pokalspiel (dienstags in Herbst)
- * - 1 Freundschaftsspiel (dienstags in Frühjahr)
- * Gesamt: 101 Teams × 15 Spiele × 3 Saisons = ~4545 Spiele
+ * - 15 Ligaspiele (samstags)
+ * - 2 Pokalspiele (dienstags)
+ * - 1 Freundschaftsspiel (mittwochs)
+ * Gesamt: 368 Teams × 18 Spiele × 5 Saisons = ~33.120 Spiele
  *
- * Bereits vergangene Spiele: isFinished=true mit Ergebnissen.
- * Noch nicht gespielte Spiele: isFinished=false.
+ * Abgeschlossene Saisons: isFinished=true mit Ergebnissen.
+ * Aktuelle Saison 2025/26: Spiele vor heute abgeschlossen, danach geplant.
  *
  * Gruppe: load_test
  */
 class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
 {
-    private const TOTAL_TEAMS = 101;
-    private const BATCH_SIZE = 50;
+    private const TOTAL_TEAMS = 916;
+    private const BATCH_SIZE = 100;
 
-    // Saisonstart (erstes Spielwochenende)
+    // Saisonstart (erstes Spielwochenende) – 5 Saisons
     private const SEASON_STARTS = [
-        0 => '2023-08-05',
-        1 => '2024-08-03',
-        2 => '2025-08-02',
+        0 => '2021-08-07',  // 2021/22
+        1 => '2022-08-06',  // 2022/23
+        2 => '2023-08-05',  // 2023/24
+        3 => '2024-08-03',  // 2024/25
+        4 => '2025-08-02',  // 2025/26 (aktuell)
+    ];
+
+    // Saisonende (für isFinished-Bestimmung ganzer Saisons)
+    private const SEASON_ENDS = [
+        0 => '2022-06-30',
+        1 => '2023-06-30',
+        2 => '2024-06-30',
+        3 => '2025-06-30',
+        4 => '2026-06-30',  // noch nicht abgeschlossen
     ];
 
     public static function getGroups(): array
@@ -59,57 +71,78 @@ class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFi
 
     public function load(ObjectManager $manager): void
     {
-        // Game-Typen aus Repository laden
+        assert($manager instanceof EntityManagerInterface);
+
+        // Idempotency-Guard: check specifically for fixture games, not all games.
+        // Checking all games would skip fixture creation if the user has manually
+        // created games before running the fixtures.
+        try {
+            /** @var Team $firstFixtureTeam */
+            $firstFixtureTeam = $this->getReference('lt_team_0', Team::class);
+            $existingFixtureCount = (int) $manager->getRepository(Game::class)
+                ->createQueryBuilder('g')
+                ->select('COUNT(g.id)')
+                ->where('g.homeTeam = :team OR g.awayTeam = :team')
+                ->setParameter('team', $firstFixtureTeam)
+                ->getQuery()
+                ->getSingleScalarResult();
+            if ($existingFixtureCount > 0) {
+                return;
+            }
+        } catch (Exception) {
+            // Reference not available → skip guard, proceed with load
+        }
+
+        // GameTypes laden
         $gameTypes = $manager->getRepository(GameType::class)->findAll();
         if (empty($gameTypes)) {
             throw new RuntimeException('Keine GameTypes gefunden. Bitte master-Fixtures zuerst laden.');
         }
 
-        // Spezifische GameTypes suchen
         $ligaspielType = null;
         $pokalType = null;
         $freundschaftType = null;
         foreach ($gameTypes as $gt) {
-            if ('Ligaspiel' === $gt->getName()) {
-                $ligaspielType = $gt;
-            } elseif ('Pokalspiel' === $gt->getName()) {
-                $pokalType = $gt;
-            } elseif ('Freundschaftsspiel' === $gt->getName()) {
-                $freundschaftType = $gt;
-            }
+            match ($gt->getName()) {
+                'Ligaspiel' => ($ligaspielType = $gt),
+                'Pokalspiel' => ($pokalType = $gt),
+                'Freundschaftsspiel' => ($freundschaftType = $gt),
+                default => null,
+            };
         }
-        if (!$ligaspielType || !$pokalType || !$freundschaftType) {
-            // Fallback: ersten GameType verwenden
-            $ligaspielType = $ligaspielType ?? $gameTypes[0];
-            $pokalType = $pokalType ?? $gameTypes[0];
-            $freundschaftType = $freundschaftType ?? $gameTypes[0];
-        }
-
-        // Early return if games already exist (idempotency guard)
-        assert($manager instanceof EntityManagerInterface);
-        $existingGameCount = (int) $manager->getRepository(Game::class)->count([]);
-        if ($existingGameCount > 0) {
-            return;
-        }
+        $ligaspielType ??= $gameTypes[0];
+        $pokalType ??= $gameTypes[0];
+        $freundschaftType ??= $gameTypes[0];
 
         /** @var CalendarEventType $gameCalendarType */
         $gameCalendarType = $this->getReference('calendar_event_type_spiel', CalendarEventType::class);
 
-        $today = new DateTime('2026-03-15');
+        $today = new DateTime();
+
         $persistCount = 0;
 
         for ($teamIdx = 0; $teamIdx < self::TOTAL_TEAMS; ++$teamIdx) {
             /** @var Team $homeTeam */
             $homeTeam = $this->getReference('lt_team_' . $teamIdx, Team::class);
+            // Heimstätte des Vereins bestimmen (je nach Vereinsgröße)
+            if ($teamIdx < 312) {        // 24 große Klubs × 13 Teams
+                $clubIdx = intdiv($teamIdx, 13);
+            } elseif ($teamIdx < 636) {  // 36 mittlere Klubs × 9 Teams
+                $clubIdx = 24 + intdiv($teamIdx - 312, 9);
+            } else {                     // 40 kleine Klubs × 7 Teams
+                $clubIdx = 60 + intdiv($teamIdx - 636, 7);
+            }
             /** @var Location $location */
-            $location = $this->getReference('lt_location_' . ($teamIdx % 30), Location::class);
+            $location = $this->getReference('lt_location_' . $clubIdx, Location::class);
 
-            for ($season = 0; $season < 3; ++$season) {
-                $seasonStart = new DateTime(self::SEASON_STARTS[$season]);
+            foreach (self::SEASON_STARTS as $seasonIdx => $seasonStartStr) {
+                $seasonStart = new DateTime($seasonStartStr);
+                $seasonEndStr = self::SEASON_ENDS[$seasonIdx];
+                $seasonFullyPast = new DateTime($seasonEndStr) < $today;
 
-                // 13 Ligaspiele an Samstagen
-                for ($round = 0; $round < 13; ++$round) {
-                    $awayTeamIdx = ($teamIdx + $round * 7 + 1) % self::TOTAL_TEAMS;
+                // ── 15 Ligaspiele (samstags, jede Woche) ──────────────────────
+                for ($round = 0; $round < 15; ++$round) {
+                    $awayTeamIdx = ($teamIdx + $round * 7 + 3) % self::TOTAL_TEAMS;
                     if ($awayTeamIdx === $teamIdx) {
                         $awayTeamIdx = ($awayTeamIdx + 1) % self::TOTAL_TEAMS;
                     }
@@ -120,70 +153,73 @@ class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFi
                     $gameDate->modify('+' . ($round * 7) . ' days');
                     $gameDate->setTime(15, 0);
 
+                    $isPast = $seasonFullyPast || $gameDate < $today;
+
                     $game = $this->createGame(
-                        $manager,
                         $homeTeam,
                         $awayTeam,
                         $ligaspielType,
                         $gameCalendarType,
                         $location,
                         $gameDate,
-                        $today
+                        $isPast
                     );
                     $manager->persist($game);
                     ++$persistCount;
+                }
 
-                    if (0 === $persistCount % self::BATCH_SIZE) {
-                        $manager->flush();
+                // ── 2 Pokalspiele (dienstags, Herbst+Frühjahr) ────────────────
+                foreach ([30, 150] as $daysOffset) {
+                    $cupDate = clone $seasonStart;
+                    $cupDate->modify('+' . $daysOffset . ' days');
+                    $cupDate->modify('next tuesday');
+                    $cupDate->setTime(19, 30);
+
+                    $cupAwayIdx = ($teamIdx + 33 + $daysOffset) % self::TOTAL_TEAMS;
+                    if ($cupAwayIdx === $teamIdx) {
+                        $cupAwayIdx = ($cupAwayIdx + 1) % self::TOTAL_TEAMS;
                     }
+                    /** @var Team $cupAway */
+                    $cupAway = $this->getReference('lt_team_' . $cupAwayIdx, Team::class);
+
+                    $isPast = $seasonFullyPast || $cupDate < $today;
+
+                    $cupGame = $this->createGame(
+                        $homeTeam,
+                        $cupAway,
+                        $pokalType,
+                        $gameCalendarType,
+                        $location,
+                        $cupDate,
+                        $isPast
+                    );
+                    $manager->persist($cupGame);
+                    ++$persistCount;
                 }
 
-                // 1 Pokalspiel (Dienstag in Herbst, Runde 4 der Saison)
-                $cupDate = clone $seasonStart;
-                $cupDate->modify('+' . 30 . ' days'); // ~4 Wochen nach Saisonstart
-                $cupDate->modify('next tuesday');
-                $cupDate->setTime(19, 30);
-                $cupAwayTeamIdx = ($teamIdx + 33) % self::TOTAL_TEAMS;
-                if ($cupAwayTeamIdx === $teamIdx) {
-                    $cupAwayTeamIdx = ($cupAwayTeamIdx + 1) % self::TOTAL_TEAMS;
-                }
-                /** @var Team $cupAwayTeam */
-                $cupAwayTeam = $this->getReference('lt_team_' . $cupAwayTeamIdx, Team::class);
-
-                $cupGame = $this->createGame(
-                    $manager,
-                    $homeTeam,
-                    $cupAwayTeam,
-                    $pokalType,
-                    $gameCalendarType,
-                    $location,
-                    $cupDate,
-                    $today
-                );
-                $manager->persist($cupGame);
-                ++$persistCount;
-
-                // 1 Freundschaftsspiel (Mittwoch im Frühjahr, nach Winter-Pause)
+                // ── 1 Freundschaftsspiel (mittwochs, Frühjahr) ────────────────
                 $friendlyDate = clone $seasonStart;
-                $friendlyDate->modify('+' . (21 * 7) . ' days'); // ~21 Wochen nach Saisonstart
+                $friendlyDate->modify('+' . (21 * 7) . ' days');
                 $friendlyDate->modify('next wednesday');
                 $friendlyDate->setTime(18, 0);
-                $friendlyAwayTeamIdx = ($teamIdx + 51) % self::TOTAL_TEAMS;
-                if ($friendlyAwayTeamIdx === $teamIdx) {
-                    $friendlyAwayTeamIdx = ($friendlyAwayTeamIdx + 1) % self::TOTAL_TEAMS;
+
+                $friendlyAwayIdx = ($teamIdx + 51) % self::TOTAL_TEAMS;
+                if ($friendlyAwayIdx === $teamIdx) {
+                    $friendlyAwayIdx = ($friendlyAwayIdx + 1) % self::TOTAL_TEAMS;
                 }
-                /** @var Team $friendlyAwayTeam */
-                $friendlyAwayTeam = $this->getReference('lt_team_' . $friendlyAwayTeamIdx, Team::class);
+                /** @var Team $friendlyAway */
+                $friendlyAway = $this->getReference('lt_team_' . $friendlyAwayIdx, Team::class);
+
+                $isPast = $seasonFullyPast || $friendlyDate < $today;
 
                 $friendlyGame = $this->createGame(
-                    $manager,
                     $homeTeam,
-                    $friendlyAwayTeam,
+                    $friendlyAway,
                     $freundschaftType,
                     $gameCalendarType,
                     $location,
                     $friendlyDate,
-                    $today
+                    $isPast
                 );
                 $manager->persist($friendlyGame);
                 ++$persistCount;
@@ -198,18 +234,14 @@ class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFi
     }
 
     private function createGame(
-        ObjectManager $manager,
         Team $homeTeam,
         Team $awayTeam,
         GameType $gameType,
         CalendarEventType $calendarEventType,
         Location $location,
         DateTime $gameDate,
-        DateTime $today
+        bool $isPast
     ): Game {
-        $isPast = $gameDate < $today;
-
-        // Calendar-Event erstellen
         $calEvent = new CalendarEvent();
         $calEvent->setTitle($homeTeam->getName() . ' vs. ' . $awayTeam->getName());
         $calEvent->setStartDate(clone $gameDate);
@@ -219,32 +251,26 @@ class GameFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         $calEvent->setCalendarEventType($calendarEventType);
         $calEvent->setLocation($location);
 
-        // Spiel erstellen
         $game = new Game();
         $game->setHomeTeam($homeTeam);
         $game->setAwayTeam($awayTeam);
         $game->setGameType($gameType);
         $game->setLocation($location);
         $game->setCalendarEvent($calEvent);
-
-        // Halbzeitdauer: Vereinfachung mit 45 Minuten Standardwert
         $game->setHalfDuration(45);
         $game->setHalftimeBreakDuration(15);
 
         if ($isPast) {
-            // Zufälliges realistisches Ergebnis
-            $homeScore = rand(0, 4);
-            $awayScore = rand(0, 3);
-            // Manchmal klare Siege
-            if (rand(0, 10) < 2) {
-                $homeScore += rand(1, 3);
+            $homeScore = random_int(0, 4);
+            $awayScore = random_int(0, 3);
+            if (random_int(0, 9) < 2) {
+                $homeScore += random_int(1, 3);
             }
             $game->setHomeScore($homeScore);
             $game->setAwayScore($awayScore);
             $game->setIsFinished(true);
-            // Nachspielzeit für vergangene Spiele
-            $game->setFirstHalfExtraTime(rand(0, 5));
-            $game->setSecondHalfExtraTime(rand(1, 7));
+            $game->setFirstHalfExtraTime(random_int(0, 5));
+            $game->setSecondHalfExtraTime(random_int(1, 7));
         } else {
             $game->setIsFinished(false);
         }

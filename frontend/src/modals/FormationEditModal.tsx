@@ -175,8 +175,9 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
             ].map(z => (
               <Typography key={z.label} variant="caption" sx={{
                 position: 'absolute', top: z.top, left: '50%', transform: 'translateX(-50%)',
-                color: 'rgba(255,255,255,0.4)', fontWeight: 800, letterSpacing: 3,
+                color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: 3,
                 fontSize: '0.6rem', pointerEvents: 'none',
+                textShadow: '0 1px 4px rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.6)',
               }}>
                 {z.label}
               </Typography>
@@ -191,6 +192,10 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({ open, formation
                 isHighlighted={editor.highlightedTokenId === player.id}
                 onMouseDown={e => editor.startDragFromField(player.id, e)}
                 onTouchStart={e => editor.startDragFromField(player.id, e)}
+                domRef={el => {
+                  if (el) editor.tokenRefs.current.set(player.id, el);
+                  else    editor.tokenRefs.current.delete(player.id);
+                }}
               />
             ))}
           </Box>

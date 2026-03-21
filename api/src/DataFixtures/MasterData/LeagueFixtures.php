@@ -79,7 +79,7 @@ class LeagueFixtures extends Fixture implements FixtureGroupInterface
                     str_replace(
                         [' ', '-', '.'],
                         ['_', '_', ''],
-                        $leagueName
+                        strtr($leagueName, ['ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'Ä' => 'A', 'Ö' => 'O', 'Ü' => 'U', 'ß' => 'ss'])
                     )
                 )
             );

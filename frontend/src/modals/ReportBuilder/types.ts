@@ -19,7 +19,7 @@ export interface BuilderData {
   advancedFields?: FieldOption[];
   presets?: Array<{ key: string; label: string; config: Partial<Report['config']> }>;
   teams: Array<{ id: number; name: string }>;
-  players: Array<{ id: number; fullName: string; firstName: string; lastName: string }>;
+  players?: Array<{ id: number; fullName: string; firstName: string; lastName: string }>;
   eventTypes: Array<{ id: number; name: string }>;
   metrics?: Array<{ key: string; label: string }>;
   surfaceTypes?: Array<{ id: number; name: string }>;

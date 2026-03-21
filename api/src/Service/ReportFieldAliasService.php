@@ -8,6 +8,11 @@ use Doctrine\ORM\EntityManagerInterface;
 
 class ReportFieldAliasService
 {
+    /** In-process cache — reset once per request lifecycle.
+     * @var array<string, array<string, mixed>>|null
+     */
+    private static ?array $cache = null;
+
     /**
      * Returns a list of user-friendly report field aliases and their mapping to entity fields.
      * Designed for non-technical users (parents, coaches, players, youth).
@@ -16,6 +21,13 @@ class ReportFieldAliasService
      */
     public static function fieldAliases(?EntityManagerInterface $em = null): array
     {
+        // Cache only when an EntityManager is provided (production path).
+        // Calling without EM (e.g. in unit tests) must never pollute the cache
+        // because the closures capture $typesByCode at construction time.
+        if (null !== $em && null !== self::$cache) {
+            return self::$cache;
+        }
+
         // If an EntityManager is provided we can resolve GameEventType ids for code-based aliases
         $typesByCode = [];
         $typesById = [];
@@ -636,6 +648,10 @@ class ReportFieldAliasService
             }
         }
         unset($v);
+
+        if (null !== $em) {
+            self::$cache = $aliases;
+        }
 
         return $aliases;
     }

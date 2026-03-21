@@ -6,12 +6,15 @@ import TeamDetailsModal from '../modals/TeamDetailsModal';
 import TeamDeleteConfirmationModal from '../modals/TeamDeleteConfirmationModal';
 import TeamEditModal from '../modals/TeamEditModal';
 import { Team } from '../types/team';
+import { FormControl, InputLabel, Select, MenuItem, Stack } from '@mui/material';
 
 interface PaginatedTeamsResponse {
   teams: Team[];
   total: number;
   page: number;
   limit: number;
+  availableSeasons?: number[];
+  selectedSeason?: number;
 }
 
 const Teams = () => {
@@ -23,6 +26,15 @@ const Teams = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState<number>(() => {
+    const today = new Date();
+    return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+  });
+  const [availableSeasons, setAvailableSeasons] = useState<number[]>(() => {
+    const today = new Date();
+    const defaultY = today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+    return Array.from({ length: defaultY - 2020 }, (_, i) => 2021 + i);
+  });
   const [teamId, setTeamId] = useState<number | null>(null);
   const [teamDetailsModalOpen, setTeamDetailsModalOpen] = useState(false);
   const [teamEditModalOpen, setTeamEditModalOpen] = useState(false);
@@ -47,18 +59,20 @@ const Teams = () => {
       const params = new URLSearchParams({
         page: String(page + 1),
         limit: String(rowsPerPage),
+        season: String(selectedSeason),
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
 
       const res = await apiJson<PaginatedTeamsResponse>(`/api/teams?${params}`);
       setTeams(res?.teams || []);
       setTotalCount(res?.total || 0);
+      if (res?.availableSeasons?.length) setAvailableSeasons(res.availableSeasons);
     } catch {
       setError('Fehler beim Laden der Teams.');
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, debouncedSearch]);
+  }, [page, rowsPerPage, debouncedSearch, selectedSeason]);
 
   useEffect(() => { loadTeams(); }, [loadTeams]);
 
@@ -79,6 +93,24 @@ const Teams = () => {
     { header: 'Liga', render: t => t.league?.name || '' },
   ];
 
+  const seasonFilter = (
+    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1.5, sm: 2 }}>
+      <FormControl size="small" sx={{ width: { xs: '100%', sm: 200 } }}>
+        <InputLabel id="teams-season-label">Saison</InputLabel>
+        <Select
+          labelId="teams-season-label"
+          label="Saison"
+          value={selectedSeason}
+          onChange={e => { setSelectedSeason(e.target.value as number); setPage(0); }}
+        >
+          {availableSeasons.map(y => (
+            <MenuItem key={y} value={y}>{y}/{String(y + 1).slice(2)}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Stack>
+  );
+
   return (
     <AdminPageLayout
       icon={<GroupsIcon />}
@@ -93,6 +125,7 @@ const Teams = () => {
       searchPlaceholder="Team suchen..."
       snackbar={snackbar}
       onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+      filterControls={seasonFilter}
     >
       {teams.length === 0 && !loading ? (
         <AdminEmptyState icon={<GroupsIcon />} title="Keine Teams vorhanden" createLabel="Neues Team" onCreate={() => { setTeamId(null); setTeamEditModalOpen(true); }} />

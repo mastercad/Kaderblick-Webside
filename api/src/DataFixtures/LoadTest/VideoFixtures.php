@@ -2,6 +2,7 @@
 
 namespace App\DataFixtures\LoadTest;
 
+use App\DataFixtures\MasterData\VideoTypeFixtures;
 use App\Entity\Game;
 use App\Entity\User;
 use App\Entity\Video;
@@ -27,6 +28,7 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
         return [
             GameFixtures::class,
             UserFixtures::class,
+            VideoTypeFixtures::class,
         ];
     }
 
@@ -121,7 +123,8 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
                 $half1Type = $manager->getReference(VideoType::class, $videoTypeIds['1.Halbzeit']);
                 $video1 = new Video();
                 $video1->setName("1. Halbzeit – {$title}");
-                $video1->setFilePath("videos/lt/game_{$gameId}_half_1.mp4");
+                $hash = substr(md5((string) $gameId), 0, 8);
+                $video1->setFilePath("https://stream.kaderblick-demo.de/lt/{$gameId}/h1_{$hash}.mp4");
                 $video1->setGame($gameProxy);
                 $video1->setVideoType($half1Type);
                 $video1->setCreatedFrom($adminUserProxy);
@@ -140,7 +143,8 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
                 $half2Type = $manager->getReference(VideoType::class, $videoTypeIds['2.Halbzeit']);
                 $video2 = new Video();
                 $video2->setName("2. Halbzeit – {$title}");
-                $video2->setFilePath("videos/lt/game_{$gameId}_half_2.mp4");
+                $hash2 = substr(md5((string) ($gameId + 10000)), 0, 8);
+                $video2->setFilePath("https://stream.kaderblick-demo.de/lt/{$gameId}/h2_{$hash2}.mp4");
                 $video2->setGame($gameProxy);
                 $video2->setVideoType($half2Type);
                 $video2->setCreatedFrom($adminUserProxy);
@@ -159,7 +163,8 @@ class VideoFixtures extends Fixture implements FixtureGroupInterface, DependentF
                 $prepType = $manager->getReference(VideoType::class, $videoTypeIds['Vorbereitung']);
                 $videoPrep = new Video();
                 $videoPrep->setName("Vorbereitung – {$title}");
-                $videoPrep->setFilePath("videos/lt/game_{$gameId}_prep.mp4");
+                $hashP = substr(md5('prep' . $gameId), 0, 8);
+                $videoPrep->setFilePath("https://stream.kaderblick-demo.de/lt/{$gameId}/prep_{$hashP}.mp4");
                 $videoPrep->setGame($gameProxy);
                 $videoPrep->setVideoType($prepType);
                 $videoPrep->setCreatedFrom($adminUserProxy);

@@ -20,6 +20,8 @@ interface PaginatedPlayersResponse {
   total: number;
   page: number;
   limit: number;
+  availableSeasons?: number[];
+  selectedSeason?: number;
 }
 
 const Players = () => {
@@ -33,6 +35,15 @@ const Players = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState<string>(ALL_TEAMS);
+  const [selectedSeason, setSelectedSeason] = useState<number>(() => {
+    const today = new Date();
+    return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+  });
+  const [availableSeasons, setAvailableSeasons] = useState<number[]>(() => {
+    const today = new Date();
+    const defaultY = today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+    return Array.from({ length: defaultY - 2020 }, (_, i) => 2021 + i);
+  });
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerDetailsModalOpen, setPlayerDetailsModalOpen] = useState(false);
   const [playerEditModalOpen, setPlayerEditModalOpen] = useState(false);
@@ -73,21 +84,24 @@ const Players = () => {
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (selectedTeamId !== ALL_TEAMS) params.set('teamId', selectedTeamId);
+      params.set('season', String(selectedSeason));
 
       const res = await apiJson<PaginatedPlayersResponse>(`/api/players?${params}`);
       setPlayers(res?.players || []);
       setTotalCount(res?.total || 0);
+      if (res?.availableSeasons?.length) setAvailableSeasons(res.availableSeasons);
     } catch {
       setError('Fehler beim Laden der Spieler.');
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, debouncedSearch, selectedTeamId]);
+  }, [page, rowsPerPage, debouncedSearch, selectedTeamId, selectedSeason]);
 
   useEffect(() => { loadPlayers(); }, [loadPlayers]);
 
-  // Reset page when team filter changes
+  // Reset page when team or season filter changes
   useEffect(() => { setPage(0); }, [selectedTeamId]);
+  useEffect(() => { setPage(0); }, [selectedSeason]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -115,34 +129,59 @@ const Players = () => {
     { header: 'Nationalitäten', render: p => p.nationalityAssignments?.map((a: PlayerNationalityAssignment) => a.nationality.name).join(', ') || '' },
   ];
 
-  const teamFilter = teams.length > 1 ? (
-    <Stack direction="row" alignItems="center" spacing={2}>
-      <FilterListIcon color="action" fontSize="small" />
-      <FormControl size="small" sx={{ minWidth: 250 }}>
-        <InputLabel id="team-filter-label">Team filtern</InputLabel>
+  const filterControls = (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      alignItems={{ xs: 'stretch', sm: 'center' }}
+      spacing={{ xs: 1.5, sm: 2 }}
+    >
+      {/* Season selector */}
+      <FormControl size="small" sx={{ width: { xs: '100%', sm: 200 } }}>
+        <InputLabel id="players-season-label">Saison</InputLabel>
         <Select
-          labelId="team-filter-label"
-          value={selectedTeamId}
-          label="Team filtern"
-          onChange={e => setSelectedTeamId(e.target.value)}
+          labelId="players-season-label"
+          label="Saison"
+          value={selectedSeason}
+          onChange={e => { setSelectedSeason(e.target.value as number); setPage(0); }}
         >
-          <MenuItem value={ALL_TEAMS}>Alle Teams</MenuItem>
-          {teams.map(t => (
-            <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+          {availableSeasons.map(y => (
+            <MenuItem key={y} value={y}>{y}/{String(y + 1).slice(2)}</MenuItem>
           ))}
         </Select>
       </FormControl>
-      {selectedTeamId !== ALL_TEAMS && (
-        <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
+
+      {/* Team selector */}
+      {teams.length > 1 && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }}>
+          <FilterListIcon color="action" fontSize="small" sx={{ display: { xs: 'none', sm: 'block' } }} />
+          <FormControl size="small" sx={{ width: { xs: '100%', sm: 250 } }}>
+            <InputLabel id="team-filter-label">Team filtern</InputLabel>
+            <Select
+              labelId="team-filter-label"
+              value={selectedTeamId}
+              label="Team filtern"
+              onChange={e => setSelectedTeamId(e.target.value)}
+            >
+              <MenuItem value={ALL_TEAMS}>Alle Teams</MenuItem>
+              {teams.map(t => (
+                <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {selectedTeamId !== ALL_TEAMS && (
+            <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
+          )}
+        </Stack>
+      )}
+      {teams.length === 1 && (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <FilterListIcon color="action" fontSize="small" />
+          <Chip label={teams[0].name} size="small" color="primary" />
+          <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
+        </Stack>
       )}
     </Stack>
-  ) : teams.length === 1 ? (
-    <Stack direction="row" alignItems="center" spacing={1}>
-      <FilterListIcon color="action" fontSize="small" />
-      <Chip label={teams[0].name} size="small" color="primary" />
-      <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
-    </Stack>
-  ) : null;
+  );
 
   return (
     <AdminPageLayout
@@ -158,7 +197,7 @@ const Players = () => {
       searchPlaceholder="Spieler suchen..."
       snackbar={snackbar}
       onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
-      filterControls={teamFilter}
+      filterControls={filterControls}
     >
       {players.length === 0 && !loading ? (
         <AdminEmptyState icon={<PersonIcon />} title="Keine Spieler vorhanden" createLabel="Neuer Spieler" onCreate={() => { setPlayerId(null); setPlayerEditModalOpen(true); }} />

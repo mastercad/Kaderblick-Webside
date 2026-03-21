@@ -59,7 +59,7 @@ export interface Preset {
 
 export interface ReportBuilderData {
   teams: Team[];
-  players: Player[];
+  players?: Player[];
   eventTypes: EventType[];
   fieldAliases: Record<string, FieldAlias>;
   availableDates: string[];

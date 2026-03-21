@@ -26,6 +26,8 @@ export interface FormationEditorState {
   showTemplatePicker: boolean;
   draggedPlayerId: number | null;
   pitchRef: React.RefObject<HTMLDivElement | null>;
+  /** Map von Spieler-ID → DOM-Element des Tokens – übergeben an PlayerToken.domRef */
+  tokenRefs: React.RefObject<Map<number, HTMLDivElement>>;
   // setters
   setName: (v: string) => void;
   setNotes: (v: string) => void;
@@ -69,6 +71,8 @@ export function useFormationEditor(
 ): FormationEditorState {
   const { showToast } = useToast();
   const pitchRef = useRef<HTMLDivElement>(null);
+  /** Stable map von Spieler-ID → DOM-Element des Tokens für direktes DOM-Update während Drag. */
+  const tokenRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // ── State + API-Calls ────────────────────────────────────────────────────
   const data = useFormationData(open, formationId);
@@ -80,6 +84,7 @@ export function useFormationEditor(
     benchPlayers:   data.benchPlayers,
     setBenchPlayers: data.setBenchPlayers,
     pitchRef,
+    tokenRefs,
   });
 
   // ── HTML5-Drag vom Squad-Panel aufs Feld ────────────────────────────────
@@ -143,6 +148,7 @@ export function useFormationEditor(
     setShowTemplatePicker: data.setShowTemplatePicker,
     pitchRef,
     // ── Pointer/Touch-Drag (Feld-Tokens) ─────────────────────────────────
+    tokenRefs,
     draggedPlayerId:    fieldDrag.draggedPlayerId,
     startDragFromField: fieldDrag.startDragFromField,
     startDragFromBench: fieldDrag.startDragFromBench,

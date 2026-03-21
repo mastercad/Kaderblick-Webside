@@ -366,6 +366,22 @@ class GamesController extends ApiController
             $filterTeamId = $userDefaultTeamId ?? -1;
         }
 
+        // ---- Season filter ----
+        // German football season N/N+1 runs from ~Aug N to ~Jun N+1.
+        // ?season=2025 means the 2025/26 season. Defaults to current season.
+        $seasonParam = $request->query->get('season');
+        $currentMonth = (int) $now->format('n');
+        $currentYear = (int) $now->format('Y');
+        $defaultSeasonYear = $currentMonth >= 7 ? $currentYear : ($currentYear - 1);
+        $seasonYear = (null !== $seasonParam && ctype_digit($seasonParam)) ? (int) $seasonParam : $defaultSeasonYear;
+        $seasonStart = new DateTimeImmutable("{$seasonYear}-07-01");
+        $seasonEnd = new DateTimeImmutable(($seasonYear + 1) . '-06-30 23:59:59');
+        // Available seasons: 2021/22 – current (capped at current)
+        $availableSeasons = [];
+        for ($y = 2021; $y <= $defaultSeasonYear; ++$y) {
+            $availableSeasons[] = $y;
+        }
+
         $upcomingGamesQb = $gameRepository->createQueryBuilder('g')
             ->addSelect('ce', 'cet', 'ht', 'at', 'l', 'wd')
             ->leftJoin('g.calendarEvent', 'ce')
@@ -377,8 +393,11 @@ class GamesController extends ApiController
             ->where('cet.name = :spiel')
             ->andWhere('ce.startDate > :now')
             ->andWhere('ce.endDate > :now OR ce.endDate IS NULL')
+            ->andWhere('ce.startDate >= :seasonStart AND ce.startDate <= :seasonEnd')
             ->setParameter('spiel', 'Spiel')
             ->setParameter('now', $now)
+            ->setParameter('seasonStart', $seasonStart)
+            ->setParameter('seasonEnd', $seasonEnd)
             ->orderBy('ce.startDate', 'ASC');
 
         if (null !== $filterTeamId) {
@@ -399,8 +418,11 @@ class GamesController extends ApiController
             ->leftJoin('ce.weatherData', 'wd')
             ->where('cet.name = :spiel')
             ->andWhere('ce.startDate <= :now')
+            ->andWhere('ce.startDate >= :seasonStart AND ce.startDate <= :seasonEnd')
             ->setParameter('spiel', 'Spiel')
             ->setParameter('now', $now)
+            ->setParameter('seasonStart', $seasonStart)
+            ->setParameter('seasonEnd', $seasonEnd)
             ->orderBy('ce.startDate', 'DESC');
 
         if (null !== $filterTeamId) {
@@ -575,6 +597,8 @@ class GamesController extends ApiController
             'userDefaultTeamId' => $userDefaultTeamId,
             'noTeamAssignment' => $noTeamAssignment,
             'availableTeams' => $allTeams,
+            'availableSeasons' => $availableSeasons,
+            'selectedSeason' => $seasonYear,
         ]);
     }
 

@@ -19,6 +19,8 @@ import {
   deleteReport,
   fetchReportPresets,
   fetchReportContextData,
+  searchReportPlayers,
+  fetchPlayerById,
 } from '../reports';
 
 const mockApiJson = jest.fn();
@@ -335,5 +337,101 @@ describe('fetchReportContextData', () => {
     mockApiJson.mockRejectedValue(new Error('Server Error'));
 
     await expect(fetchReportContextData()).rejects.toThrow('Server Error');
+  });
+});
+
+// =============================================================================
+//  searchReportPlayers
+// =============================================================================
+
+describe('searchReportPlayers', () => {
+  it('gibt [] zurück ohne apiJson aufzurufen wenn die Anfrage kürzer als 2 Zeichen ist', async () => {
+    const result = await searchReportPlayers('M');
+
+    expect(mockApiJson).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
+  it('gibt [] zurück ohne apiJson aufzurufen bei leerem String', async () => {
+    const result = await searchReportPlayers('');
+
+    expect(mockApiJson).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
+  it('ruft GET /api/report/player-search mit URL-kodiertem Suchbegriff auf', async () => {
+    const mockPlayers = [
+      { id: 1, fullName: 'Max Müller', firstName: 'Max', lastName: 'Müller' },
+    ];
+    mockApiJson.mockResolvedValue(mockPlayers);
+
+    await searchReportPlayers('Müller');
+
+    expect(mockApiJson).toHaveBeenCalledTimes(1);
+    expect(mockApiJson).toHaveBeenCalledWith(
+      expect.stringContaining('/api/report/player-search?q='),
+    );
+    // Verify the query string is URL-encoded
+    const [url] = mockApiJson.mock.calls[0];
+    expect(url).toContain(encodeURIComponent('Müller'));
+  });
+
+  it('gibt das Server-Ergebnis zurück', async () => {
+    const mockPlayers = [
+      { id: 7, fullName: 'Erika Muster', firstName: 'Erika', lastName: 'Muster' },
+    ];
+    mockApiJson.mockResolvedValue(mockPlayers);
+
+    const result = await searchReportPlayers('Erika');
+
+    expect(result).toEqual(mockPlayers);
+  });
+
+  it('trimmt führende und nachfolgende Leerzeichen vor dem Mindestlängen-Check', async () => {
+    // '  M  ' trimmed = 'M' → length 1 → return [] without API call
+    const result = await searchReportPlayers('  M  ');
+
+    expect(mockApiJson).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+});
+
+// =============================================================================
+//  fetchPlayerById
+// =============================================================================
+
+describe('fetchPlayerById', () => {
+  it('ruft GET /api/players/{id} mit der korrekten ID auf', async () => {
+    mockApiJson.mockResolvedValue({ id: 5, fullName: 'Test Spieler' });
+
+    await fetchPlayerById(5);
+
+    expect(mockApiJson).toHaveBeenCalledTimes(1);
+    expect(mockApiJson).toHaveBeenCalledWith('/api/players/5');
+  });
+
+  it('gibt die Spielerdaten zurück wenn der API-Aufruf erfolgreich ist', async () => {
+    const mockPlayer = { id: 5, fullName: 'Test Spieler' };
+    mockApiJson.mockResolvedValue(mockPlayer);
+
+    const result = await fetchPlayerById(5);
+
+    expect(result).toEqual(mockPlayer);
+  });
+
+  it('gibt null zurück wenn der API-Aufruf fehlschlägt (Spieler nicht gefunden)', async () => {
+    mockApiJson.mockRejectedValue(new Error('Not Found'));
+
+    const result = await fetchPlayerById(99999);
+
+    expect(result).toBeNull();
+  });
+
+  it('gibt null zurück bei Netzwerkfehlern', async () => {
+    mockApiJson.mockRejectedValue(new Error('Network Error'));
+
+    const result = await fetchPlayerById(1);
+
+    expect(result).toBeNull();
   });
 });

@@ -9,8 +9,6 @@ import { NotificationProvider } from './context/NotificationContext';
 import { HomeScrollProvider, useHomeScroll } from './context/HomeScrollContext';
 import { useAuth } from './context/AuthContext';
 import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme as useMuiTheme } from '@mui/material/styles';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Calendar from './pages/Calendar';
@@ -79,8 +77,7 @@ function App() {
   const { user, isLoading } = useAuth();
   const { mode } = useTheme();
   const currentTheme = mode === 'dark' ? darkTheme : lightTheme;
-  const muiTheme = useMuiTheme();
-  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
+
   const [showAuth, setShowAuth] = useState(false);
   const [authInitialTab, setAuthInitialTab] = useState<'login' | 'register'>('login');
   const [showProfile, setShowProfile] = useState(false);
@@ -146,6 +143,34 @@ function App() {
     window.location.reload();
   };
 
+  // ====== PWA Auto-Update ======
+  // Wenn der Browser einen neuen Service Worker installiert hat und dieser
+  // sofort via skipWaiting() aktiv wird, löst controllerchange aus.
+  // Wir laden dann die Seite neu, damit der neue SW den neuen Bundle-Hash
+  // aus dem Precache-Manifest lädt – sonst bleibt die alte gecachte Version.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const handleControllerChange = () => {
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+    // Periodisch auf SW-Updates prüfen (alle 60 Sekunden), damit auch
+    // lange laufende Sessions die neue Version bekommen.
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    navigator.serviceWorker.ready.then((registration) => {
+      intervalId = setInterval(() => {
+        registration.update().catch(() => { /* Netzwerkfehler ignorieren */ });
+      }, 60_000);
+    });
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      if (intervalId !== undefined) clearInterval(intervalId);
+    };
+  }, []);
+
   // Signal when app is ready (auth loaded)
   useEffect(() => {
     if (!isLoading) {
@@ -174,7 +199,7 @@ function App() {
           <FabStackRoot>
             <PullToRefresh
               onRefresh={handleRefresh}
-              isEnabled={isMobile}
+              isEnabled={true}
               isPullToRefreshEnabled={true}
             >
               <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>

@@ -11,6 +11,7 @@ use Symfony\Component\Serializer\Attribute\MaxDepth;
 
 #[ORM\Entity(repositoryClass: GameEventRepository::class)]
 #[ORM\Table(name: 'game_events')]
+#[ORM\Index(columns: ['timestamp'], name: 'idx_game_event_timestamp')]
 class GameEvent
 {
     #[ORM\Id]

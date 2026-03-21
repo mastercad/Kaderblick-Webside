@@ -270,11 +270,12 @@ class GameEventFixtures extends Fixture implements FixtureGroupInterface, Depend
             $cornerCount = random_int(1, 5);
             for ($i = 0; $i < $cornerCount; ++$i) {
                 $teamPick = (0 === $i % 2) ? $homeProxy : $awayProxy;
+                $playerPick = (0 === $i % 2) ? $homePlayers : $awayPlayers;
                 $event = $this->makeEvent(
                     $gameProxy,
                     $teamPick,
                     $manager->getReference(GameEventType::class, $eventTypeIds['corner']),
-                    null,
+                    $pickPlayer($playerPick, $manager),
                     $makeTimestamp(random_int(5, 90))
                 );
                 $manager->persist($event);

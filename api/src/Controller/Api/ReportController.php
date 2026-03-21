@@ -30,27 +30,17 @@ class ReportController extends AbstractController
     {
         $fieldAliases = ReportFieldAliasService::fieldAliases($em);
 
-        // Teams, Spieler, Ereignistypen für Filter
-        $teamRepo = $em->getRepository(\App\Entity\Team::class);
-        $playerRepo = $em->getRepository(\App\Entity\Player::class);
-        $eventTypeRepo = $em->getRepository(\App\Entity\GameEventType::class);
-        $gameEventRepo = $em->getRepository(\App\Entity\GameEvent::class);
+        // Only teams that have actual game events (avoids loading all 900+ teams)
+        $teams = $em->createQuery(
+            'SELECT DISTINCT t FROM App\Entity\Team t INNER JOIN t.gameEvents ge ORDER BY t.name ASC'
+        )->getResult();
 
-        $teams = $teamRepo->findAll();
-        $players = $playerRepo->findAll();
-        $eventTypes = $eventTypeRepo->findAll();
+        $eventTypes = $em->getRepository(\App\Entity\GameEventType::class)->findAll();
 
         $teamsData = array_map(fn ($team) => [
             'id' => $team->getId(),
             'name' => $team->getName()
         ], $teams);
-
-        $playersData = array_map(fn ($player) => [
-            'id' => $player->getId(),
-            'fullName' => $player->getFullName(),
-            'firstName' => $player->getFirstName(),
-            'lastName' => $player->getLastName()
-        ], $players);
 
         $eventTypesData = array_map(fn ($eventType) => [
             'id' => $eventType->getId(),
@@ -73,16 +63,10 @@ class ReportController extends AbstractController
             'name' => $gt->getName()
         ], $gameTypes);
 
-        // Available dates from events
-        $dateRows = $gameEventRepo->createQueryBuilder('e')
-            ->select('e.timestamp')
-            ->orderBy('e.timestamp', 'ASC')
-            ->getQuery()->getArrayResult();
-        $availableDates = array_unique(array_map(
-            fn ($row) => $row['timestamp']->format('Y-m-d'),
-            $dateRows
-        ));
-        $availableDates = array_values($availableDates);
+        // Available dates from events: single efficient DISTINCT DATE() query via DBAL
+        $availableDates = $em->getConnection()->fetchFirstColumn(
+            'SELECT DISTINCT DATE(timestamp) AS d FROM game_events ORDER BY d ASC'
+        );
         $minDate = $availableDates[0] ?? null;
         $maxDate = $availableDates[count($availableDates) - 1] ?? null;
 
@@ -138,12 +122,11 @@ class ReportController extends AbstractController
         // Presets: common report templates for non-technical users
         $presets = $this->buildPresets();
 
-        return $this->json([
+        $response = $this->json([
             'fields' => $fields,
             'advancedFields' => [],
             'presets' => $presets,
             'teams' => $teamsData,
-            'players' => $playersData,
             'eventTypes' => $eventTypesData,
             'surfaceTypes' => $surfaceTypesData,
             'gameTypes' => $gameTypesData,
@@ -152,6 +135,39 @@ class ReportController extends AbstractController
             'minDate' => $minDate,
             'maxDate' => $maxDate,
         ]);
+        // Cache for 5 minutes — event types, teams and dates change rarely
+        $response->setMaxAge(300)->setPrivate();
+
+        return $response;
+    }
+
+    /**
+     * Lightweight player autocomplete for the report builder filter.
+     * Returns up to 20 players whose first or last name contains the search term.
+     */
+    #[Route('/player-search', name: 'api_report_player_search', methods: ['GET'])]
+    public function playerSearch(Request $request, EntityManagerInterface $em): JsonResponse
+    {
+        $q = trim((string) $request->query->get('q', ''));
+        if (mb_strlen($q) < 2) {
+            return $this->json([]);
+        }
+
+        $players = $em->createQuery(
+            'SELECT p FROM App\Entity\Player p
+             WHERE LOWER(p.firstName) LIKE :q OR LOWER(p.lastName) LIKE :q
+             ORDER BY p.lastName ASC, p.firstName ASC'
+        )
+            ->setParameter('q', '%' . mb_strtolower($q) . '%')
+            ->setMaxResults(20)
+            ->getResult();
+
+        return $this->json(array_map(fn ($p) => [
+            'id' => $p->getId(),
+            'fullName' => $p->getFullName(),
+            'firstName' => $p->getFirstName(),
+            'lastName' => $p->getLastName(),
+        ], $players));
     }
 
     #[Route('/preview', name: 'api_report_preview', methods: ['POST'])]
@@ -534,9 +550,14 @@ class ReportController extends AbstractController
         $isAdmin = in_array('ROLE_ADMIN', $user->getRoles(), true);
 
         if ($isSuperAdmin || $isAdmin) {
-            // Admins sehen alle Teams und Spieler
-            $allTeams = $em->getRepository(\App\Entity\Team::class)->findAll();
-            $allPlayers = $em->getRepository(\App\Entity\Player::class)->findAll();
+            // Admins: only teams that have actual game events
+            $allTeams = $em->createQuery(
+                'SELECT DISTINCT t FROM App\Entity\Team t INNER JOIN t.gameEvents ge ORDER BY t.name ASC'
+            )->getResult();
+            // Players: only those who actually appear in game events
+            $allPlayers = $em->createQuery(
+                'SELECT DISTINCT p FROM App\Entity\Player p INNER JOIN p.gameEvents ge ORDER BY p.lastName ASC, p.firstName ASC'
+            )->getResult();
 
             return $this->json([
                 'teams' => array_map(fn ($t) => ['id' => $t->getId(), 'name' => $t->getName()], $allTeams),

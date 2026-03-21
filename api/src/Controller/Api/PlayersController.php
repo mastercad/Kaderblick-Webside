@@ -18,6 +18,7 @@ use App\Repository\PlayerTeamAssignmentRepository;
 use App\Security\Voter\PlayerVoter;
 use App\Service\CoachTeamPlayerService;
 use DateTime;
+use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -45,6 +46,22 @@ class PlayersController extends AbstractController
         $search = trim((string) $request->query->get('search', ''));
         $teamId = $request->query->get('teamId');
 
+        // Season filter
+        $seasonParam = $request->query->get('season');
+        $now = new DateTimeImmutable();
+        $currentMonth = (int) $now->format('n');
+        $currentYear = (int) $now->format('Y');
+        $defaultSeasonYear = $currentMonth >= 7 ? $currentYear : ($currentYear - 1);
+        $seasonYear = (null !== $seasonParam && ctype_digit((string) $seasonParam))
+            ? (int) $seasonParam
+            : $defaultSeasonYear;
+        $seasonStart = new DateTimeImmutable("{$seasonYear}-07-01");
+        $seasonEnd = new DateTimeImmutable(($seasonYear + 1) . '-06-30 23:59:59');
+        $availableSeasons = [];
+        for ($y = 2021; $y <= $defaultSeasonYear; ++$y) {
+            $availableSeasons[] = $y;
+        }
+
         $repo = $this->entityManager->getRepository(Player::class);
         $qb = $repo->createQueryBuilder('p');
 
@@ -54,15 +71,20 @@ class PlayersController extends AbstractController
         $coachTeamIds = array_keys($this->coachTeamPlayerService->collectCoachTeams($user));
         $isCoach = count($coachTeamIds) > 0;
 
-        // Filter by team
+        // Always join PTA to filter by season
+        $qb->innerJoin('p.playerTeamAssignments', 'pta')
+           ->andWhere('pta.startDate <= :seasonEnd')
+           ->andWhere('pta.endDate IS NULL OR pta.endDate >= :seasonStart')
+           ->setParameter('seasonStart', $seasonStart)
+           ->setParameter('seasonEnd', $seasonEnd);
+
+        // Additionally filter by team or coach scope
         if ($teamId) {
-            $qb->innerJoin('p.playerTeamAssignments', 'pta')
-               ->andWhere('pta.team = :teamId')
+            $qb->andWhere('pta.team = :teamId')
                ->setParameter('teamId', (int) $teamId);
         } elseif (!$isAdmin && $isCoach) {
             // Coach sieht nur Spieler aus seinen aktiv zugeordneten Teams
-            $qb->innerJoin('p.playerTeamAssignments', 'pta')
-               ->andWhere('pta.team IN (:coachTeamIds)')
+            $qb->andWhere('pta.team IN (:coachTeamIds)')
                ->setParameter('coachTeamIds', $coachTeamIds);
         }
 
@@ -165,6 +187,8 @@ class PlayersController extends AbstractController
             'total' => $total,
             'page' => $page,
             'limit' => $limit,
+            'availableSeasons' => $availableSeasons,
+            'selectedSeason' => $seasonYear,
         ]);
     }
 

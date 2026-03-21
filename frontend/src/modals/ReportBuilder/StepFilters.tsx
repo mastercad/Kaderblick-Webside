@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   FormControl,
@@ -11,9 +11,13 @@ import {
   Checkbox,
   FormControlLabel,
   Tooltip,
+  Autocomplete,
+  TextField,
+  CircularProgress,
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { ReportBuilderState } from './types';
+import { searchReportPlayers, fetchPlayerById } from '../../services/reports';
 
 /** Reusable tooltip info icon */
 const Tip: React.FC<{ text: string }> = ({ text }) => (
@@ -32,6 +36,44 @@ export const StepFilters: React.FC<StepFiltersProps> = ({ state }) => {
     builderData,
     handleFilterChange,
   } = state;
+
+  type PlayerOption = { id: number; fullName: string };
+  const [playerOptions, setPlayerOptions] = useState<PlayerOption[]>([]);
+  const [playerInputValue, setPlayerInputValue] = useState('');
+  const [playerLoading, setPlayerLoading] = useState(false);
+  const [selectedPlayerOption, setSelectedPlayerOption] = useState<PlayerOption | null>(null);
+
+  // Resolve existing player filter to a display label (e.g. when loading a saved report)
+  useEffect(() => {
+    const playerId = currentReport.config.filters?.player;
+    if (!playerId) {
+      setSelectedPlayerOption(null);
+      return;
+    }
+    fetchPlayerById(Number(playerId)).then(data => {
+      if (data) setSelectedPlayerOption({ id: data.id, fullName: data.fullName });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced player search
+  useEffect(() => {
+    if (playerInputValue.length < 2) {
+      setPlayerOptions([]);
+      return;
+    }
+    setPlayerLoading(true);
+    const timer = setTimeout(() => {
+      searchReportPlayers(playerInputValue)
+        .then(results => setPlayerOptions(results))
+        .catch(() => setPlayerOptions([]))
+        .finally(() => setPlayerLoading(false));
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      setPlayerLoading(false);
+    };
+  }, [playerInputValue]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -129,19 +171,40 @@ export const StepFilters: React.FC<StepFiltersProps> = ({ state }) => {
 
           {/* Spieler */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>Spieler</InputLabel>
-              <Select
-                value={currentReport.config.filters?.player || ''}
-                onChange={(e) => handleFilterChange('player', e.target.value)}
-                label="Spieler"
-              >
-                <MenuItem value="">Alle Spieler</MenuItem>
-                {builderData.players.map((player) => (
-                  <MenuItem key={player.id} value={player.id.toString()}>{player.fullName}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              fullWidth
+              options={playerOptions}
+              getOptionLabel={(o) => o.fullName}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              value={selectedPlayerOption}
+              inputValue={playerInputValue}
+              loading={playerLoading}
+              onInputChange={(_, value) => setPlayerInputValue(value)}
+              onChange={(_, option) => {
+                setSelectedPlayerOption(option);
+                handleFilterChange('player', option ? option.id.toString() : '');
+              }}
+              filterOptions={(x) => x}
+              noOptionsText={playerInputValue.length < 2 ? 'Mind. 2 Zeichen eingeben' : 'Kein Spieler gefunden'}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Spieler"
+                  placeholder="Name eintippen…"
+                  slotProps={{
+                    input: {
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {playerLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              )}
+            />
             <Tip text="Filtert auf Ereignisse eines einzelnen Spielers. Kombinierbar mit allen anderen Filtern – z.B. „Tore von Spieler X in Heimspielen“." />
           </Box>
 
