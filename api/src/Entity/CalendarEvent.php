@@ -73,9 +73,35 @@ class CalendarEvent
     #[ORM\Column]
     private bool $notificationSent = false;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $cancelled = false;
+
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $cancelReason = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'cancelled_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $cancelledBy = null;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $createdBy = null;
+
+    /**
+     * Weekdays (0=Sun … 6=Sat) that define the training series this event belongs to.
+     *
+     * @var ?array<int>
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $trainingWeekdays = null;
+
+    /** Series end date (Y-m-d) stored so we can restore it when editing */
+    #[ORM\Column(type: Types::STRING, length: 10, nullable: true)]
+    private ?string $trainingSeriesEndDate = null;
+
+    /** Shared UUID that groups all CalendarEvents belonging to the same training series */
+    #[ORM\Column(type: Types::STRING, length: 36, nullable: true)]
+    private ?string $trainingSeriesId = null;
 
     /**
      * @var Collection<int, CalendarEventPermission>
@@ -259,6 +285,84 @@ class CalendarEvent
     public function setTournament(?Tournament $tournament): self
     {
         $this->tournament = $tournament;
+
+        return $this;
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->cancelled;
+    }
+
+    public function setCancelled(bool $cancelled): self
+    {
+        $this->cancelled = $cancelled;
+
+        return $this;
+    }
+
+    public function getCancelReason(): ?string
+    {
+        return $this->cancelReason;
+    }
+
+    public function setCancelReason(?string $cancelReason): self
+    {
+        $this->cancelReason = $cancelReason;
+
+        return $this;
+    }
+
+    public function getCancelledBy(): ?User
+    {
+        return $this->cancelledBy;
+    }
+
+    public function setCancelledBy(?User $cancelledBy): self
+    {
+        $this->cancelledBy = $cancelledBy;
+
+        return $this;
+    }
+
+    /**
+     * @return ?array<int>
+     */
+    public function getTrainingWeekdays(): ?array
+    {
+        return $this->trainingWeekdays;
+    }
+
+    /**
+     * @param ?array<int> $trainingWeekdays
+     */
+    public function setTrainingWeekdays(?array $trainingWeekdays): self
+    {
+        $this->trainingWeekdays = $trainingWeekdays;
+
+        return $this;
+    }
+
+    public function getTrainingSeriesEndDate(): ?string
+    {
+        return $this->trainingSeriesEndDate;
+    }
+
+    public function setTrainingSeriesEndDate(?string $trainingSeriesEndDate): self
+    {
+        $this->trainingSeriesEndDate = $trainingSeriesEndDate;
+
+        return $this;
+    }
+
+    public function getTrainingSeriesId(): ?string
+    {
+        return $this->trainingSeriesId;
+    }
+
+    public function setTrainingSeriesId(?string $trainingSeriesId): self
+    {
+        $this->trainingSeriesId = $trainingSeriesId;
 
         return $this;
     }

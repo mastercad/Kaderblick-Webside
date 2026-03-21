@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useSearchParams } from 'react-router-dom';
 import { apiJson } from '../utils/api';
 import { useWidgetRefresh } from '../context/WidgetRefreshContext';
 
@@ -19,6 +21,7 @@ type Message = {
 
 export const MessagesWidget: React.FC<{ config?: any; widgetId?: string }> = ({ config, widgetId }) => {
   const { getRefreshTrigger } = useWidgetRefresh();
+  const [, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,20 +50,26 @@ export const MessagesWidget: React.FC<{ config?: any; widgetId?: string }> = ({ 
   if (error) return <Typography color="error">{error}</Typography>;
   if (!messages.length) return <Typography variant="body2" color="text.secondary">Keine Nachrichten vorhanden.</Typography>;
 
+  const handleClick = (id: number) => {
+    setSearchParams({ modal: 'messages', messageId: String(id) });
+  };
+
   return (
     <List dense>
       {messages.map((msg) => (
-        <ListItem key={msg.id} alignItems="flex-start" disableGutters>
-          <ListItemText
-            primary={msg.subject}
-            secondary={
-              <>
-                <Typography variant="caption" color="text.secondary">
-                  {msg.sender?.fullName || 'Unbekannt'} &ndash; {new Date(msg.sentAt).toLocaleString()}
-                </Typography>
-              </>
-            }
-          />
+        <ListItem key={msg.id} alignItems="flex-start" disableGutters disablePadding>
+          <ListItemButton onClick={() => handleClick(msg.id)} sx={{ borderRadius: 1 }}>
+            <ListItemText
+              primary={msg.subject}
+              secondary={
+                <>
+                  <Typography variant="caption" color="text.secondary">
+                    {msg.sender?.fullName || 'Unbekannt'} &ndash; {new Date(msg.sentAt).toLocaleString()}
+                  </Typography>
+                </>
+              }
+            />
+          </ListItemButton>
         </ListItem>
       ))}
     </List>

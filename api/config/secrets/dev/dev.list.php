@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'DATABASE_URL' => null,
     'EMAIL' => null,
     'GITHUB_TOKEN' => null,
     'GOOGLE_CLIENT_ID' => null,

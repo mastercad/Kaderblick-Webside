@@ -53,15 +53,19 @@ class ReportDataService
             // Determine whether the requested yField can be computed in DB
             $yAlias = $fieldAliases[$yField] ?? null;
             $supportedMetric = false;
+            // All named aggregate metrics can be computed via simple event-code counting in DB
+            $dbSupportedMetrics = ['goals', 'assists', 'shots', 'yellowCards', 'redCards', 'fouls',
+                'dribbles', 'saves', 'passes', 'tackles', 'interceptions'];
             if ($yAlias && isset($yAlias['aggregate']) && is_callable($yAlias['aggregate'])) {
-                if (in_array($yField, ['goals', 'shots'], true)) {
+                if (in_array($yField, $dbSupportedMetrics, true)) {
                     $supportedMetric = true;
                 } else {
+                    // Percentage metrics (shotAccuracy, duelsWonPercent) require PHP post-processing
                     $supportedMetric = false;
                     $metaLocal['suggestions'][] = "DB-Aggregate: metric '{$yField}' not supported for DB aggregation (complex PHP aggregate).";
                 }
             } else {
-                // tokens like eventType:ID or surfaceType:ID or generic count are supported
+                // tokens like eventType:ID or generic count are supported
                 $supportedMetric = true;
             }
 
@@ -116,16 +120,44 @@ class ReportDataService
                 }
 
                 if ($canUseDb && !empty($groupByIdExprs)) {
-                    // Metric-specific WHEREs
-                    if ('goals' === $yField) {
-                        $qb->leftJoin('e.gameEventType', 'et')->andWhere('et.code = :goalCode')->setParameter('goalCode', 'goal');
-                    } elseif ('shots' === $yField) {
-                        $qb->leftJoin('e.gameEventType', 'et')->andWhere("et.code IN ('shot','shot_on_target','shot_off_target')");
+                    // Metric-specific WHEREs — map metric key to GameEventType codes
+                    $metricCodeMap = [
+                        'goals' => ['goal', 'penalty_goal', 'freekick_goal', 'header_goal', 'corner_goal', 'cross_goal', 'counter_goal', 'pressing_goal'],
+                        'assists' => ['assist'],
+                        'shots' => [
+                            'shot_on_target',
+                            'shot_off_target',
+                            'shot_blocked',
+                            'header_on_target',
+                            'header_off_target',
+                            'long_shot',
+                            'volley',
+                            'bicycle_kick',
+                            'shot_post',
+                            'shot_bar'
+                        ],
+                        'yellowCards' => ['yellow_card'],
+                        'redCards' => ['red_card', 'yellow_red_card'],
+                        'fouls' => ['foul', 'foul_holding', 'foul_push', 'foul_shove', 'foul_bump', 'foul_trip', 'foul_kick', 'foul_elbow'],
+                        'dribbles' => ['dribble_success'],
+                        'saves' => ['save', 'keeper_hold', 'keeper_punch', 'penalty_save'],
+                        'passes' => ['pass_normal', 'pass_through', 'cross', 'pass_back', 'pass_sideways', 'chip_ball', 'pass_cut', 'long_ball', 'switch_play', 'header_pass'],
+                        'tackles' => ['tackle_success'],
+                        'interceptions' => ['interception', 'intercept_cross', 'ball_win'],
+                    ];
+
+                    if (isset($metricCodeMap[$yField])) {
+                        $codes = $metricCodeMap[$yField];
+                        $qb->leftJoin('e.gameEventType', 'et');
+                        $placeholders = [];
+                        foreach ($codes as $ci => $code) {
+                            $param = 'mc_' . $ci;
+                            $placeholders[] = ':' . $param;
+                            $qb->setParameter($param, $code);
+                        }
+                        $qb->andWhere('et.code IN (' . implode(',', $placeholders) . ')');
                     } elseif (preg_match('/^eventType:(\d+)$/', $yField, $m)) {
                         $qb->andWhere('e.gameEventType = :evtype')->setParameter('evtype', (int) $m[1]);
-                    } elseif (preg_match('/^surfaceType:(\d+)$/', $yField, $m)) {
-                        // join through game -> location -> surfaceType
-                        $qb->leftJoin('e.game', 'g')->leftJoin('g.location', 'loc')->andWhere('loc.surfaceType = :surfaceType')->setParameter('surfaceType', (int) $m[1]);
                     }
 
                     // Apply standard filters (same as non-DB path)
@@ -141,6 +173,9 @@ class ReportDataService
                     if (isset($filters['surfaceType'])) {
                         $qb->leftJoin('e.game', 'g2')->leftJoin('g2.location', 'loc2')
                             ->andWhere('loc2.surfaceType = :surfaceType')->setParameter('surfaceType', (int) $filters['surfaceType']);
+                    }
+                    if (isset($filters['gameType'])) {
+                        $qb->leftJoin('e.game', 'ggt')->andWhere('ggt.gameType = :gameType')->setParameter('gameType', (int) $filters['gameType']);
                     }
                     if (isset($filters['dateFrom'])) {
                         $qb->andWhere('DATE(e.timestamp) >= DATE(:dateFrom)')->setParameter('dateFrom', new DateTimeImmutable($filters['dateFrom']));
@@ -197,6 +232,9 @@ class ReportDataService
         if (isset($filters['surfaceType'])) {
             // join through game -> location -> surfaceType
             $qb->join('e.game', 'g')->join('g.location', 'loc')->andWhere('loc.surfaceType = :surfaceType')->setParameter('surfaceType', (int) $filters['surfaceType']);
+        }
+        if (isset($filters['gameType'])) {
+            $qb->join('e.game', 'ggt2')->andWhere('ggt2.gameType = :gameType')->setParameter('gameType', (int) $filters['gameType']);
         }
         if (isset($filters['dateFrom'])) {
             $qb->andWhere('DATE(e.timestamp) >= DATE(:dateFrom)')->setParameter('dateFrom', new DateTimeImmutable($filters['dateFrom']));
@@ -295,13 +333,24 @@ class ReportDataService
         // Radar chart handling: expects `metrics` array in config and a `groupBy` (e.g. player/team)
         $diagramType = $config['diagramType'] ?? '';
         $metrics = $config['metrics'] ?? [];
-        if ('radar' === $diagramType && is_array($metrics) && !empty($metrics)) {
+        if (in_array($diagramType, ['radar', 'radaroverlay'], true) && is_array($metrics) && !empty($metrics)) {
             $radarResult = $this->generateReportDataForRadar($events, $metrics, $groupBy);
             // attach meta (eventsCount) for the UI
             $radarResult['meta'] = $radarResult['meta'] ?? [];
             $radarResult['meta']['eventsCount'] = $meta['eventsCount'];
 
             return $radarResult;
+        }
+
+        // Faceted chart handling: split events by a facet dimension (e.g. surfaceType) and generate
+        // a separate sub-chart (panel) per facet value. Within each panel, the standard xField/groupBy
+        // logic applies, so you get e.g. players × eventTypes per surface type.
+        if ('faceted' === $diagramType && !empty($config['facetBy'])) {
+            $facetResult = $this->generateReportDataForFaceted($events, $config);
+            $facetResult['meta'] = $facetResult['meta'] ?? [];
+            $facetResult['meta']['eventsCount'] = $meta['eventsCount'];
+
+            return $facetResult;
         }
 
         $result = $this->considerGroup($events, $diagramType, $xField, $yField, $groupBy);
@@ -497,6 +546,171 @@ class ReportDataService
     }
 
     /**
+     * Generiert die Datenstruktur für ein facettiertes Diagramm (Small Multiples).
+     *
+     * Splittet alle Events nach dem `facetBy`-Feld (z.B. surfaceType) in Panels auf.
+     * Innerhalb jedes Panels wird nach xField (z.B. player) gruppiert und die groupBy-Dimension
+     * (z.B. eventType) erzeugt separate Datasets (Balken/Linien pro Panel).
+     *
+     * `facetSubType` steuert den Chart-Typ pro Panel:
+     *   - 'bar' (default): Balkendiagramm — labels = xField, datasets = groupBy layers
+     *   - 'radar': Radar — labels = groupBy layers (Ereignistypen), datasets = xField (Spieler)
+     *   - 'area'/'line': Linien/Flächen — labels = xField, datasets = groupBy layers
+     *
+     * Ergebnis-Struktur:
+     *   { diagramType: 'faceted', facetSubType, panels: [ { title, labels, datasets }, ... ], meta }
+     *
+     * @param array<int, GameEvent> $events
+     * @param array<string, mixed>  $config
+     *
+     * @return array<string, mixed>
+     */
+    private function generateReportDataForFaceted(array $events, array $config): array
+    {
+        $facetBy = $config['facetBy'];
+        $xField = $config['xField'] ?? 'player';
+        $groupBy = $config['groupBy'] ?? [];
+        if (!is_array($groupBy)) {
+            $groupBy = $groupBy ? [$groupBy] : [];
+        }
+        $facetSubType = $config['facetSubType'] ?? 'bar';
+        $facetTranspose = (bool) ($config['facetTranspose'] ?? ('radar' === $facetSubType));
+        $facetLayout = $config['facetLayout'] ?? 'grid';
+
+        // 1) Split events into buckets keyed by facet value
+        $facetBuckets = [];
+        foreach ($events as $event) {
+            $facetVal = $this->stringifyValue($this->retrieveFieldValue($event, $facetBy));
+            $facetBuckets[$facetVal][] = $event;
+        }
+        ksort($facetBuckets);
+
+        // 2) Collect ALL possible x-labels and layer keys across all facets
+        //    so every panel has the same structure (consistent comparison)
+        $allXLabels = [];
+        $allXSortKeys = [];
+        $allLayerKeys = [];
+        foreach ($facetBuckets as $facetEvents) {
+            foreach ($facetEvents as $event) {
+                $x = $this->stringifyValue($this->retrieveFieldValue($event, $xField));
+                $allXLabels[$x] = true;
+                if (!isset($allXSortKeys[$x])) {
+                    $allXSortKeys[$x] = $this->retrieveSortKey($event, $xField);
+                }
+
+                if (!empty($groupBy)) {
+                    $parts = [];
+                    foreach ($groupBy as $gField) {
+                        $parts[] = $this->stringifyValue($this->retrieveFieldValue($event, $gField));
+                    }
+                    $layerKey = implode(' | ', $parts);
+                    $allLayerKeys[$layerKey] = true;
+                }
+            }
+        }
+        $xLabels = array_keys($allXLabels);
+        // Sort by sort key (handles date/month fields correctly; falls back to display value)
+        usort($xLabels, fn ($a, $b) => strcmp($allXSortKeys[$a] ?? $a, $allXSortKeys[$b] ?? $b));
+        $layers = array_keys($allLayerKeys);
+        sort($layers);
+
+        // 3) Build panels
+        $panels = [];
+        foreach ($facetBuckets as $facetLabel => $facetEvents) {
+            if (!empty($groupBy)) {
+                // Build matrix: layer -> x -> count
+                $matrix = [];
+                foreach ($facetEvents as $event) {
+                    $x = $this->stringifyValue($this->retrieveFieldValue($event, $xField));
+                    $parts = [];
+                    foreach ($groupBy as $gField) {
+                        $parts[] = $this->stringifyValue($this->retrieveFieldValue($event, $gField));
+                    }
+                    $layerKey = implode(' | ', $parts);
+                    if (!isset($matrix[$layerKey][$x])) {
+                        $matrix[$layerKey][$x] = 0;
+                    }
+                    ++$matrix[$layerKey][$x];
+                }
+
+                // Transpose: labels = layers (e.g. event types) and datasets = x-values (e.g. players)
+                // Default for radar, configurable via facetTranspose
+                if ($facetTranspose) {
+                    $datasets = [];
+                    foreach ($xLabels as $xVal) {
+                        $data = [];
+                        foreach ($layers as $layerKey) {
+                            $data[] = $matrix[$layerKey][$xVal] ?? 0;
+                        }
+                        $datasets[] = [
+                            'label' => $xVal,
+                            'data' => $data,
+                        ];
+                    }
+                    $panels[] = [
+                        'title' => $facetLabel,
+                        'labels' => $layers,   // event types as radar axes
+                        'datasets' => $datasets, // players as overlay layers
+                    ];
+                } else {
+                    // bar / line / area: labels = x-values, datasets = layers
+                    $datasets = [];
+                    foreach ($layers as $layerKey) {
+                        $data = [];
+                        foreach ($xLabels as $xVal) {
+                            $data[] = $matrix[$layerKey][$xVal] ?? 0;
+                        }
+                        $datasets[] = [
+                            'label' => $layerKey,
+                            'data' => $data,
+                        ];
+                    }
+                    $panels[] = [
+                        'title' => $facetLabel,
+                        'labels' => $xLabels,
+                        'datasets' => $datasets,
+                    ];
+                }
+            } else {
+                // No groupBy: single dataset counting events per x-value
+                $counts = [];
+                foreach ($facetEvents as $event) {
+                    $x = $this->stringifyValue($this->retrieveFieldValue($event, $xField));
+                    $counts[$x] = ($counts[$x] ?? 0) + 1;
+                }
+                $data = [];
+                foreach ($xLabels as $xVal) {
+                    $data[] = $counts[$xVal] ?? 0;
+                }
+                $datasets = [
+                    ['label' => 'Anzahl', 'data' => $data],
+                ];
+                $panels[] = [
+                    'title' => $facetLabel,
+                    'labels' => $xLabels,
+                    'datasets' => $datasets,
+                ];
+            }
+        }
+
+        return [
+            'labels' => [],
+            'datasets' => [],
+            'diagramType' => 'faceted',
+            'facetSubType' => $facetSubType,
+            'facetLayout' => $facetLayout,
+            'panels' => $panels,
+            'meta' => [
+                'facetBy' => $facetBy,
+                'facetSubType' => $facetSubType,
+                'facetTranspose' => $facetTranspose,
+                'facetLayout' => $facetLayout,
+                'panelCount' => count($panels),
+            ],
+        ];
+    }
+
+    /**
      * Berücksichtigt die Gruppierung der Report-Daten.
      *
      * @param array<string, mixed> $events
@@ -509,9 +723,9 @@ class ReportDataService
         if (empty($groupBy)) {
             if ('pie' === $diagramType) {
                 return $this->generateReportDataForPieWithoutGroup($events, $yField);
-            } else {
-                return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField);
             }
+
+            return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField);
         }
 
         return $this->generateReportDataForGroup($events, $xField, $groupBy);
@@ -562,16 +776,20 @@ class ReportDataService
     {
         // Bar/Line: X = xField, Y = Anzahl der Events pro X (mit Fallback)
         $counts = [];
+        $sortKeys = [];
         foreach ($events as $event) {
             $x = $this->retrieveFieldValue($event, $xField);
             if (null === $x || '' === $x) {
                 $x = 'Unbekannt';
             }
             $counts[$x] = ($counts[$x] ?? 0) + 1;
+            if (!isset($sortKeys[$x])) {
+                $sortKeys[$x] = $this->retrieveSortKey($event, $xField);
+            }
         }
         $xLabels = array_keys($counts);
-        sort($xLabels);
-        // TODO das erscheint mir hier wenig sinnvoll. die Daten passen mit und ohne [$x] im frontend
+        // Sort by sort key (handles date/month fields correctly; falls back to display value)
+        usort($xLabels, fn ($a, $b) => strcmp($sortKeys[$a] ?? $a, $sortKeys[$b] ?? $b));
         $data = [];
         foreach ($xLabels as $x) {
             $data[] = $counts[$x];
@@ -604,6 +822,7 @@ class ReportDataService
     {
         // Mit groupBy: X = xField, Layer = groupBy, Y = yField
         $xValues = [];
+        $xSortKeys = [];
         $layerValues = [];
         $matrix = [];
         foreach ($events as $event) {
@@ -618,6 +837,9 @@ class ReportDataService
             }
             $layerKey = $layerKeyParts ? implode(' | ', $layerKeyParts) : '';
             $xValues[$x] = true;
+            if (!isset($xSortKeys[$x])) {
+                $xSortKeys[$x] = $this->retrieveSortKey($event, $xField);
+            }
             $layerValues[$layerKey] = true;
             if (!isset($matrix[$layerKey][$x])) {
                 $matrix[$layerKey][$x] = 0;
@@ -625,7 +847,8 @@ class ReportDataService
             ++$matrix[$layerKey][$x];
         }
         $xLabels = array_keys($xValues);
-        sort($xLabels);
+        // Sort by sort key (handles date/month fields correctly; falls back to display value)
+        usort($xLabels, fn ($a, $b) => strcmp($xSortKeys[$a] ?? $a, $xSortKeys[$b] ?? $b));
         $layers = array_keys($layerValues);
         sort($layers);
 
@@ -645,6 +868,24 @@ class ReportDataService
             'labels' => $xLabels,
             'datasets' => $datasets,
         ];
+    }
+
+    /**
+     * Returns a sort key for an event's field value.
+     * Uses the field alias's 'sortKey' callback if available (e.g. for date/month fields),
+     * otherwise falls back to the display value for standard lexicographic sort.
+     */
+    private function retrieveSortKey(GameEvent $event, string $field): string
+    {
+        $fieldAliases = ReportFieldAliasService::fieldAliases($this->em);
+        if (isset($fieldAliases[$field]['sortKey']) && is_callable($fieldAliases[$field]['sortKey'])) {
+            $key = $fieldAliases[$field]['sortKey']($event);
+
+            return (null !== $key && '' !== $key) ? (string) $key : 'zzzz';
+        }
+
+        // Fallback: use display value (lexicographic sort)
+        return $this->stringifyValue($this->retrieveFieldValue($event, $field));
     }
 
     private function retrieveFieldValue(GameEvent $event, string $field): mixed

@@ -5,12 +5,17 @@ namespace App\Controller;
 use App\Entity\CalendarEvent;
 use App\Entity\Participation;
 use App\Entity\User;
+use App\Event\CalendarEventParticipatedEvent;
+use App\Event\MatchAttendedEvent;
+use App\Event\TrainingAttendedEvent;
 use App\Repository\ParticipationRepository;
 use App\Repository\ParticipationStatusRepository;
 use App\Security\Voter\ParticipationVoter;
 use App\Service\NotificationService;
+use App\Service\TeamMembershipService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
@@ -22,25 +27,38 @@ class ParticipationController extends AbstractController
         private EntityManagerInterface $em,
         private ParticipationRepository $participationRepository,
         private ParticipationStatusRepository $participationStatusRepository,
-        private NotificationService $notificationService
+        private NotificationService $notificationService,
+        private TeamMembershipService $teamMembershipService,
+        private EventDispatcherInterface $dispatcher
     ) {
     }
 
     #[Route('/event/{id}', name: 'status', methods: ['GET'])]
     public function getEventParticipations(CalendarEvent $event): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $this->getUser();
+
+        if ($user instanceof User && !in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            if (!$this->teamMembershipService->canUserParticipateInEvent($user, $event)) {
+                return $this->json(['error' => 'Keine Berechtigung für dieses Event'], 403);
+            }
+        }
+
         $participations = $this->participationRepository->findBy(['event' => $event]);
 
         $participations = array_filter($participations, fn ($p) => $this->isGranted(ParticipationVoter::VIEW, $p));
 
         $participationData = [];
+        $currentUser = $this->getUser();
+        $myParticipation = null;
 
         // Nur Benutzer mit tatsächlichen Teilnahmen anzeigen
         foreach ($participations as $participation) {
-            $user = $participation->getUser();
+            $participationUser = $participation->getUser();
             $participationData[] = [
-                'user_id' => $user->getId(),
-                'user_name' => $user->getFirstName() . ' ' . $user->getLastName(),
+                'user_id' => $participationUser->getId(),
+                'user_name' => $participationUser->getFirstName() . ' ' . $participationUser->getLastName(),
                 'status' => [
                     'id' => $participation->getStatus()->getId(),
                     'name' => $participation->getStatus()->getName(),
@@ -49,8 +67,20 @@ class ParticipationController extends AbstractController
                     'icon' => $participation->getStatus()->getIcon()
                 ],
                 'note' => $participation->getNote(),
-                'is_team_player' => $this->isTeamPlayer($user, $event)
+                'is_team_player' => $this->isTeamPlayer($participationUser, $event)
             ];
+
+            // Eigene Teilnahme für den aktuellen Benutzer merken
+            if ($currentUser instanceof User && $participationUser->getId() === $currentUser->getId()) {
+                $myParticipation = [
+                    'status_id' => $participation->getStatus()->getId(),
+                    'status_name' => $participation->getStatus()->getName(),
+                    'status_code' => $participation->getStatus()->getCode(),
+                    'status_color' => $participation->getStatus()->getColor(),
+                    'status_icon' => $participation->getStatus()->getIcon(),
+                    'note' => $participation->getNote(),
+                ];
+            }
         }
 
         return $this->json([
@@ -61,7 +91,8 @@ class ParticipationController extends AbstractController
                 'is_game' => null !== $event->getGame()
             ],
             'participations' => $participationData,
-            'available_statuses' => $this->getAvailableStatuses($event)
+            'available_statuses' => $this->getAvailableStatuses($event),
+            'my_participation' => $myParticipation,
         ]);
     }
 
@@ -111,6 +142,18 @@ class ParticipationController extends AbstractController
         $this->em->persist($participation);
         $this->em->flush();
 
+        // Dispatch XP event based on participation status and event type
+        if ('confirmed' === $status->getCode()) {
+            $eventTypeName = $event->getCalendarEventType()?->getName() ?? '';
+            if ('Training' === $eventTypeName) {
+                $this->dispatcher->dispatch(new TrainingAttendedEvent($user, $event));
+            } elseif (in_array($eventTypeName, ['Spiel', 'Turnier-Match'], true)) {
+                $this->dispatcher->dispatch(new MatchAttendedEvent($user, $event));
+            } else {
+                $this->dispatcher->dispatch(new CalendarEventParticipatedEvent($user, $event));
+            }
+        }
+
         // Create notifications for other participants when a user changed
         // their participation status (the actor does not need a notification).
         if ($isStatusChange || !$participation->getId()) {
@@ -133,31 +176,121 @@ class ParticipationController extends AbstractController
                     default => $status->getCode()
                 };
 
-                $title = sprintf('%s: %s', $event->getTitle(), $actorName . ' - ' . $statusText);
-                $message = sprintf('%s hat seine Teilnahme auf "%s" gesetzt.', $actorName, $statusText);
+                $eventDate = $event->getStartDate()?->format('d.m.Y H:i') ?? '';
+                $location = $event->getLocation();
+
+                $title = sprintf('%s: %s – %s', $event->getTitle(), $actorName, $statusText);
+                $lines = [];
+                if ('' !== $eventDate) {
+                    $lines[] = '📅 ' . $eventDate;
+                }
+                if ($location) {
+                    $lines[] = '📍 ' . $location->getName();
+                }
+                $lines[] = sprintf('%s hat seine Teilnahme auf „%s" gesetzt.', $actorName, $statusText);
+                $message = implode("\n", $lines);
 
                 $this->notificationService->createNotification(
                     $recipient,
                     'participation',
                     $title,
                     $message,
-                    ['participationId' => $participation->getId(), 'actorId' => $user->getId()]
+                    [
+                        'participationId' => $participation->getId(),
+                        'actorId' => $user->getId(),
+                        'url' => '/calendar?eventId=' . $event->getId(),
+                    ]
                 );
             }
         }
 
         return $this->json([
             'message' => 'Teilnahmestatus erfolgreich aktualisiert',
-            'participation' => [
-                'status' => [
-                    'id' => $status->getId(),
-                    'name' => $status->getName(),
-                    'code' => $status->getCode(),
-                    'color' => $status->getColor(),
-                    'icon' => $status->getIcon()
-                ],
-                'note' => $participation->getNote()
-            ]
+            'my_participation' => [
+                'status_id' => $status->getId(),
+                'status_name' => $status->getName(),
+                'status_code' => $status->getCode(),
+                'status_color' => $status->getColor(),
+                'status_icon' => $status->getIcon(),
+                'note' => $participation->getNote(),
+            ],
+        ]);
+    }
+
+    /**
+     * Returns all event teams with all their members and each member's participation status.
+     * Used for the "who has/hasn't responded" overview in the frontend.
+     */
+    #[Route('/event/{id}/overview', name: 'overview', methods: ['GET'])]
+    public function getEventOverview(CalendarEvent $event): JsonResponse
+    {
+        /** @var User|null $currentUser */
+        $currentUser = $this->getUser();
+
+        if ($currentUser instanceof User && !in_array('ROLE_SUPERADMIN', $currentUser->getRoles())) {
+            if (!$this->teamMembershipService->canUserParticipateInEvent($currentUser, $event)) {
+                return $this->json(['error' => 'Keine Berechtigung für dieses Event'], 403);
+            }
+        }
+
+        // Build a map of userId → participation for fast lookup
+        $participationMap = [];
+        foreach ($this->participationRepository->findBy(['event' => $event]) as $participation) {
+            $participationMap[$participation->getUser()->getId()] = $participation;
+        }
+
+        // Get all teams involved in this event
+        $teams = $this->teamMembershipService->getEventTeams($event);
+
+        // Determine which team(s) the current user belongs to
+        $myTeamId = null;
+        if ($currentUser instanceof User) {
+            foreach ($teams as $team) {
+                if ($this->teamMembershipService->isUserInTeam($currentUser, $team)) {
+                    $myTeamId = $team->getId();
+                    break;
+                }
+            }
+        }
+
+        $teamsData = [];
+        foreach ($teams as $team) {
+            $members = $this->teamMembershipService->resolveTeamMembers($team);
+            $membersData = [];
+            foreach ($members as $member) {
+                $participation = $participationMap[$member->getId()] ?? null;
+                $membersData[] = [
+                    'user_id' => $member->getId(),
+                    'user_name' => $member->getFirstName() . ' ' . $member->getLastName(),
+                    'participation' => $participation ? [
+                        'status_id' => $participation->getStatus()->getId(),
+                        'status_name' => $participation->getStatus()->getName(),
+                        'status_code' => $participation->getStatus()->getCode(),
+                        'status_color' => $participation->getStatus()->getColor(),
+                        'note' => $participation->getNote(),
+                    ] : null,
+                ];
+            }
+            // Sort: responded first (by status name), then unresponded alphabetically
+            usort($membersData, static function (array $a, array $b): int {
+                $aHas = null !== $a['participation'];
+                $bHas = null !== $b['participation'];
+                if ($aHas !== $bHas) {
+                    return $aHas ? -1 : 1;
+                }
+
+                return strcmp($a['user_name'], $b['user_name']);
+            });
+            $teamsData[] = [
+                'id' => $team->getId(),
+                'name' => $team->getName(),
+                'members' => $membersData,
+            ];
+        }
+
+        return $this->json([
+            'teams' => $teamsData,
+            'my_team_id' => $myTeamId,
         ]);
     }
 
@@ -240,10 +373,14 @@ class ParticipationController extends AbstractController
 
     /**
      * Prüft ob ein Benutzer an einem Event teilnehmen kann.
+     * Nur Teammitglieder dürfen zu- oder absagen.
      */
     private function canUserParticipate(User $user, CalendarEvent $event): bool
     {
-        // Grundsätzlich können alle Benutzer an allen Events teilnehmen
-        return true;
+        if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            return true;
+        }
+
+        return $this->teamMembershipService->canUserParticipateInEvent($user, $event);
     }
 }

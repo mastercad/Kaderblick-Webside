@@ -13,6 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class VideoSegmentControllerTest extends ApiWebTestCase
 {
+    private static int $videoCounter = 0;
+
     private function createTestVideo(): Video
     {
         $em = static::getContainer()->get('doctrine')->getManager();
@@ -33,15 +35,23 @@ class VideoSegmentControllerTest extends ApiWebTestCase
             $this->fail('Kein VideoType in der Datenbank gefunden. Bitte Fixtures laden.');
         }
 
+        // Eindeutigen Sort-Wert ermitteln, um UniqueConstraint (game_id, sort) nicht zu verletzen
+        $maxSort = $em->getConnection()->fetchOne(
+            'SELECT COALESCE(MAX(sort), 0) FROM videos WHERE game_id = ?',
+            [$game->getId()]
+        );
+        ++self::$videoCounter;
+        $uniqueSort = ((int) $maxSort) + self::$videoCounter;
+
         $video = new Video();
-        $video->setName('Test Video');
+        $video->setName('Test Video ' . $uniqueSort);
         $video->setGame($game);
         $video->setCreatedFrom($user);
         $video->setCreatedAt(new DateTimeImmutable());
         $video->setUpdatedAt(new DateTimeImmutable());
         $video->setVideoType($videoType);
         $video->setLength(600);
-        $video->setSort(1);
+        $video->setSort($uniqueSort);
 
         $em->persist($video);
         $em->flush();
@@ -421,6 +431,7 @@ class VideoSegmentControllerTest extends ApiWebTestCase
         $em = self::$kernel->getContainer()->get('doctrine')->getManager();
         $connection = $em->getConnection();
         $connection->executeStatement('DELETE FROM video_segments');
+        $connection->executeStatement("DELETE FROM videos WHERE name LIKE 'Test Video %'");
 
         parent::tearDown();
     }

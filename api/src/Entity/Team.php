@@ -52,6 +52,12 @@ class Team
     )]
     private ?League $league = null;
 
+    #[ORM\Column(type: 'smallint', nullable: true, name: 'default_half_duration')]
+    private ?int $defaultHalfDuration = null;
+
+    #[ORM\Column(type: 'smallint', nullable: true, name: 'default_halftime_break_duration')]
+    private ?int $defaultHalftimeBreakDuration = null;
+
     /** @var Collection<int, GameEvent> */
     #[Groups(['team:read'])]
     #[ORM\OneToMany(targetEntity: GameEvent::class, mappedBy: 'team')]
@@ -268,6 +274,30 @@ class Team
     public function setFussballDeUrl(?string $fussballDeUrl): self
     {
         $this->fussballDeUrl = $fussballDeUrl;
+
+        return $this;
+    }
+
+    public function getDefaultHalfDuration(): ?int
+    {
+        return $this->defaultHalfDuration;
+    }
+
+    public function setDefaultHalfDuration(?int $defaultHalfDuration): self
+    {
+        $this->defaultHalfDuration = $defaultHalfDuration;
+
+        return $this;
+    }
+
+    public function getDefaultHalftimeBreakDuration(): ?int
+    {
+        return $this->defaultHalftimeBreakDuration;
+    }
+
+    public function setDefaultHalftimeBreakDuration(?int $defaultHalftimeBreakDuration): self
+    {
+        $this->defaultHalftimeBreakDuration = $defaultHalftimeBreakDuration;
 
         return $this;
     }

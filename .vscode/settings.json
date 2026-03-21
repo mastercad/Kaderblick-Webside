@@ -14,6 +14,10 @@
     "symfony-vscode.phpExecutablePath": "php",
     "php-cs-fixer.executable": "/media/Austausch/Projekte/fussballverein/webapp/api/vendor/bin/php-cs-fixer",
     "chat.tools.terminal.autoApprove": {
-        "npx tsc": true
+        "npx tsc": true,
+        "/^php vendor/bin/phpunit tests/Unit/Security/Voter/CalendarEventVoterTest\\.php --no-configuration --bootstrap vendor/autoload\\.php 2>&1 \\| tail -10$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }

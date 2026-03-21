@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* ─── Reset & Base ─── */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 10pt;
+            color: #333;
+            line-height: 1.5;
+            background: #fff;
+            padding: 0 2mm;
+        }
+
+        @page {
+            margin: 18mm 18mm 22mm 18mm;
+            size: A4 portrait;
+        }
+
+        /* ══════════════════════════
+           ACCENT BAR (top edge)
+           ══════════════════════════ */
+        .accent-bar {
+            position: fixed;
+            top: -18mm;
+            left: -18mm;
+            right: -18mm;
+            background: linear-gradient(90deg, #018606, #02a808);
+            height: 6px;
+        }
+
+        /* ══════════════════════════
+           HEADER CARD
+           ══════════════════════════ */
+        .header-card {
+            background: #fafffe;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 18px auto 14px auto;
+            text-align: center;
+        }
+        .header-card img.logo {
+            width: 44px;
+            height: 44px;
+            margin-bottom: 8px;
+        }
+        .tournament-name {
+            font-size: 20pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            margin: 0 0 4px 0;
+            line-height: 1.2;
+            letter-spacing: -0.3px;
+        }
+        .tournament-type {
+            font-size: 10pt;
+            color: #777;
+            margin: 0 0 8px 0;
+        }
+        .status-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #016405;
+            font-size: 7.5pt;
+            font-weight: bold;
+            padding: 3px 12px;
+            border-radius: 12px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+
+        /* ══════════════════════════
+           INFO BAR
+           ══════════════════════════ */
+        .info-bar {
+            background: #f5f9f5;
+            border: 1px solid #d5e8d5;
+            border-radius: 5px;
+            padding: 10px 16px;
+            margin: 0 0 12px 0;
+        }
+        .info-bar table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info-bar td {
+            vertical-align: middle;
+            padding: 2px 0;
+            font-size: 9pt;
+            color: #555;
+        }
+        .info-left { text-align: left; }
+        .info-right {
+            text-align: right;
+            font-weight: bold;
+            color: #018606;
+            font-size: 9.5pt;
+        }
+        .info-label {
+            font-weight: bold;
+            font-size: 7.5pt;
+            color: #018606;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 3px;
+        }
+        .info-separator {
+            color: #bbb;
+            margin: 0 8px;
+        }
+
+        /* ══════════════════════════
+           SETTINGS LINE
+           ══════════════════════════ */
+        .settings-line {
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 7px 14px;
+            margin-bottom: 16px;
+            font-size: 8.5pt;
+            color: #777;
+            text-align: center;
+        }
+        .settings-label {
+            font-weight: bold;
+            font-size: 7.5pt;
+            color: #018606;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 4px;
+        }
+
+        /* ══════════════════════════
+           SECTION HEADERS
+           ══════════════════════════ */
+        .section-wrapper {
+            margin-top: 18px;
+            margin-bottom: 8px;
+        }
+        .section-header {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            padding-bottom: 4px;
+            border-bottom: 2.5px solid #018606;
+            display: inline-block;
+            margin-bottom: 2px;
+            letter-spacing: -0.2px;
+        }
+        .count-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #016405;
+            font-size: 7.5pt;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        /* ══════════════════════════
+           TEAMS SECTION
+           ══════════════════════════ */
+        .teams-card {
+            background: #fcfcfc;
+            border: 1px solid #e8e8e8;
+            border-radius: 5px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+        }
+        .teams-grid {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .teams-grid td {
+            vertical-align: top;
+            padding: 0 12px 0 0;
+        }
+        .group-header {
+            background: #018606;
+            color: #fff;
+            font-size: 8.5pt;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+        .team-item {
+            font-size: 9pt;
+            padding: 3px 8px;
+            margin: 2px 0;
+            color: #444;
+            border-radius: 3px;
+        }
+        .team-own {
+            background: #e8f5e9;
+            color: #018606;
+            font-weight: bold;
+        }
+
+        /* ══════════════════════════
+           MATCH TABLES
+           ══════════════════════════ */
+        .match-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0 16px 0;
+            font-size: 9pt;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .match-table thead th {
+            background: #018606;
+            color: #fff;
+            font-weight: bold;
+            font-size: 8pt;
+            padding: 6px 8px;
+            text-align: left;
+            letter-spacing: 0.2px;
+        }
+        .match-table thead th:first-child {
+            border-radius: 3px 0 0 0;
+        }
+        .match-table thead th:last-child {
+            border-radius: 0 3px 0 0;
+        }
+        .match-table thead th.center { text-align: center; }
+        .match-table thead th.right { text-align: right; }
+        .match-table tbody tr {
+            background: #fff;
+        }
+        .match-table tbody tr:nth-child(even) {
+            background: #f7fbf7;
+        }
+        .match-table tbody td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: middle;
+        }
+        .col-nr {
+            width: 28px;
+            text-align: center;
+            color: #999;
+            font-size: 8pt;
+            font-weight: bold;
+        }
+        .col-time {
+            width: 52px;
+            font-size: 8.5pt;
+            color: #555;
+        }
+        .col-home {
+            text-align: right;
+            padding-right: 6px;
+        }
+        .col-vs {
+            width: 28px;
+            text-align: center;
+            color: #ccc;
+            font-size: 8pt;
+            font-weight: bold;
+        }
+        .col-away {
+            text-align: left;
+            padding-left: 6px;
+        }
+        .col-score {
+            width: 64px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 9.5pt;
+        }
+        .own-team {
+            color: #018606;
+            font-weight: bold;
+        }
+        .score-pending {
+            color: #bbb;
+            font-weight: normal;
+            font-size: 8.5pt;
+        }
+
+        /* ══════════════════════════
+           FOOTER
+           ══════════════════════════ */
+        .footer {
+            position: fixed;
+            bottom: -22mm;
+            left: -18mm;
+            right: -18mm;
+            font-size: 7pt;
+            color: #aaa;
+            border-top: 1px solid #e0e0e0;
+            padding: 5px 18mm 0 18mm;
+        }
+        .footer table { width: 100%; border-collapse: collapse; }
+        .footer td { padding: 0; }
+        .footer-left { text-align: left; }
+        .footer-right { text-align: right; }
+
+        .page-break { page-break-before: always; }
+    </style>
+</head>
+<body>
+
+    <!-- ─── Green accent bar across full top ─── -->
+    <div class="accent-bar"></div>
+
+    <!-- ─── Centered Header Card ─── -->
+    <div class="header-card">
+        {% if logo_data_uri %}
+            <img class="logo" src="{{ logo_data_uri }}" alt="Logo"><br>
+        {% endif %}
+        <div class="tournament-name">{{ tournament.name }}</div>
+        {% if tournament.type %}
+            <div class="tournament-type">{{ tournament.type }}</div>
+        {% endif %}
+        <span class="status-badge">{{ status_label }}</span>
+    </div>
+
+    <!-- ─── Info Bar ─── -->
+    <div class="info-bar">
+        <table>
+            <tr>
+                <td class="info-left">
+                    {% if date_string %}
+                        <span class="info-label">Datum</span> {{ date_string }}
+                    {% endif %}
+                    {% if location_name %}
+                        <span class="info-separator">|</span>
+                        <span class="info-label">Ort</span> {{ location_name }}
+                    {% endif %}
+                </td>
+                <td class="info-right">
+                    {{ matches|length }} Spiele
+                    <span class="info-separator">|</span>
+                    {{ team_count }} Teams
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- ─── Settings ─── -->
+    {% if settings_parts|length > 0 %}
+        <div class="settings-line">
+            <span class="settings-label">Einstellungen</span>
+            {{ settings_parts|join('  &middot;  ') }}
+        </div>
+    {% endif %}
+
+    <!-- ══════════════════════════════════════
+         TEAMS
+         ══════════════════════════════════════ -->
+    {% if teams|length > 0 %}
+        <div class="section-wrapper">
+            <span class="section-header">
+                Teilnehmende Teams
+                <span class="count-badge">{{ team_count }}</span>
+            </span>
+        </div>
+
+        <div class="teams-card">
+            {% if groups|length > 0 %}
+                <table class="teams-grid">
+                    <tr>
+                        {% for group_key, group_teams in groups %}
+                            <td style="width: {{ (100 / groups|length)|round }}%;">
+                                <div class="group-header">Gruppe {{ group_key }}</div>
+                                {% for team in group_teams %}
+                                    <div class="team-item {{ team.teamId in user_team_ids ? 'team-own' : '' }}">
+                                        {{ loop.index }}. {{ team.name }}
+                                    </div>
+                                {% endfor %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                </table>
+            {% else %}
+                <table class="teams-grid">
+                    <tr>
+                        {% set col_count = teams|length > 8 ? 3 : (teams|length > 4 ? 2 : 1) %}
+                        {% set per_col = ((teams|length / col_count)|round(0, 'ceil'))|number_format(0, '', '') %}
+                        {% for col in 0..col_count - 1 %}
+                            <td style="width: {{ (100 / col_count)|round }}%;">
+                                {% for i in 0..per_col - 1 %}
+                                    {% set idx = col * per_col + i %}
+                                    {% if idx < teams|length %}
+                                        {% set team = teams[idx] %}
+                                        <div class="team-item {{ team.teamId in user_team_ids ? 'team-own' : '' }}">
+                                            {{ idx + 1 }}. {{ team.name }}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                </table>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <!-- ══════════════════════════════════════
+         MATCHES BY STAGE
+         ══════════════════════════════════════ -->
+    {% for stage, stage_matches in matches_by_stage %}
+        <div class="section-wrapper">
+            <span class="section-header">
+                {{ stage }}
+                <span class="count-badge">{{ stage_matches|length }}</span>
+            </span>
+        </div>
+
+        <table class="match-table">
+            <thead>
+                <tr>
+                    <th class="center" style="width: 28px;">#</th>
+                    <th style="width: 52px;">Uhrzeit</th>
+                    <th class="right" style="width: 35%;">Heim</th>
+                    <th class="center" style="width: 28px;"></th>
+                    <th style="width: 35%;">Gast</th>
+                    <th class="center" style="width: 64px;">Ergebnis</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for match in stage_matches %}
+                    <tr>
+                        <td class="col-nr">{{ loop.index }}</td>
+                        <td class="col-time">{{ match.time ?? '-' }}</td>
+                        <td class="col-home {{ match.homeTeamId in user_team_ids ? 'own-team' : '' }}">
+                            {{ match.homeTeamName ?? 'TBD' }}
+                        </td>
+                        <td class="col-vs">vs</td>
+                        <td class="col-away {{ match.awayTeamId in user_team_ids ? 'own-team' : '' }}">
+                            {{ match.awayTeamName ?? 'TBD' }}
+                        </td>
+                        <td class="col-score {{ match.hasScore ? '' : 'score-pending' }}">
+                            {{ match.scoreDisplay }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endfor %}
+
+    <!-- ─── Footer ─── -->
+    <div class="footer">
+        <table>
+            <tr>
+                <td class="footer-left">Erstellt am {{ generated_at }}</td>
+                <td class="footer-right">Kaderblick &middot; Turnierplan</td>
+            </tr>
+        </table>
+    </div>
+
+</body>
+</html>

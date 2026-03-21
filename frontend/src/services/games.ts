@@ -7,13 +7,21 @@ export interface GamesOverviewData {
   finished_games: GameWithScore[];
   tournaments: TournamentOverview[];
   userTeamIds: number[];
+  userDefaultTeamId?: number;
+  noTeamAssignment?: boolean;
+  availableTeams: { id: number; name: string }[];
+  availableSeasons: number[];
+  selectedSeason: number;
 }
 
 // Spiele-Übersicht laden
-export async function fetchGamesOverview(): Promise<GamesOverviewData> {
-  // Da das Backend noch Twig verwendet, verwenden wir eine temporäre API-Route
-  // oder simulieren die Daten bis eine echte API verfügbar ist
-  return apiJson<GamesOverviewData>('/api/games/overview');
+export async function fetchGamesOverview(teamId?: number | 'all', season?: number): Promise<GamesOverviewData> {
+  const params = new URLSearchParams();
+  if (teamId !== undefined) params.set('teamId', String(teamId));
+  if (season !== undefined) params.set('season', String(season));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+
+  return apiJson<GamesOverviewData>(`/api/games/overview${qs}`);
 }
 
 // Einzelnes Spiel mit Details laden
@@ -45,6 +53,26 @@ export async function fetchPlayersForTeams(teamIds: number[]): Promise<Player[]>
 // Substitution Reasons laden
 export async function fetchSubstitutionReasons(): Promise<SubstitutionReason[]> {
   return apiJson<SubstitutionReason[]>('/api/substitution-reasons');
+}
+
+// Squad (bestätigter Kader) für ein Spiel laden
+export interface SquadPlayer {
+  id: number;
+  fullName: string;
+  shirtNumber: number | null;
+  teamId: number;
+}
+
+export interface GameSquadData {
+  squad: SquadPlayer[];
+  /** Alle aktiven Spieler der beteiligten Teams (unabhängig von Zusagen) */
+  allPlayers: SquadPlayer[];
+  /** true wenn überhaupt Teilnahme-Daten für den CalendarEvent existieren */
+  hasParticipationData: boolean;
+}
+
+export async function fetchGameSquad(gameId: number): Promise<GameSquadData> {
+  return apiJson<GameSquadData>(`/api/games/${gameId}/squad`);
 }
 
 // Turnier-Details laden
@@ -93,5 +121,44 @@ export async function deleteGameEvent(gameId: number, eventId: number): Promise<
 export async function syncFussballDe(gameId: number): Promise<{ success: boolean }> {
   return apiJson(`/api/game/${gameId}/sync-fussballde`, {
     method: 'POST'
+  });
+}
+
+// Spiel als beendet markieren (löst ggf. Turnier-Weiterleitung aus)
+export async function finishGame(gameId: number): Promise<{
+  success: boolean;
+  isFinished: boolean;
+  advanced: {
+    nextMatchId: number;
+    round: number;
+    slot: number;
+    homeTeam: string | null;
+    awayTeam: string | null;
+    gameCreated: boolean;
+  } | null;
+}> {
+  return apiJson(`/api/games/${gameId}/finish`, {
+    method: 'POST'
+  });
+}
+
+// Zeitangaben für ein Spiel aktualisieren
+export interface GameTimingData {
+  halfDuration?: number;
+  halftimeBreakDuration?: number;
+  firstHalfExtraTime?: number | null;
+  secondHalfExtraTime?: number | null;
+}
+
+export async function updateGameTiming(gameId: number, data: GameTimingData): Promise<{
+  success: boolean;
+  halfDuration: number;
+  halftimeBreakDuration: number;
+  firstHalfExtraTime: number | null;
+  secondHalfExtraTime: number | null;
+}> {
+  return apiJson(`/api/games/${gameId}/timing`, {
+    method: 'PATCH',
+    body: data,
   });
 }

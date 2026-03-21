@@ -11,7 +11,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ORM\Entity(repositoryClass: GameEventTypeRepository::class)]
 #[ORM\Table(name: 'game_event_types')]
 #[ORM\UniqueConstraint(name: 'uniq_game_event_types_name', columns: ['name'])]
-#[ORM\UniqueConstraint(name: 'uniq_game_event_types_identifier', columns: ['identifier'])]
 class GameEventType
 {
     #[ORM\Id]

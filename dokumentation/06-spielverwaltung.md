@@ -1,259 +1,242 @@
-# Spiele
+# Spielverwaltung
 
-Die Spielverwaltung ist das Herzstück von Kaderblick. Hier werden alle Spiele eures Teams dokumentiert – von der Ansetzung über das Live-Protokoll bis zur Nachbereitung mit Videos.
-
----
-
-## Die Spielübersicht
-
-Unter **„Spiele"** im Menü findet ihr alle Spiele eures Teams – übersichtlich aufgeteilt in drei Kategorien:
-
-| Bereich | Was steht dort? |
-|---|---|
-| **Laufende Spiele** | Spiele, die gerade stattfinden (Startzeit war, Endzeit liegt noch in der Zukunft) |
-| **Bevorstehende Spiele** | Geplante Spiele, die noch nicht begonnen haben – sortiert nach Datum |
-| **Vergangene Spiele** | Abgelaufene Spiele mit dem Endergebnis |
+In der Spielverwaltung dreht sich alles um eure Fußball-Spiele — von der Planung über das Live-Ergebnis bis zur detaillierten Nachbereitung mit Spielereignissen und Videos.
 
 ---
 
-## Ein Spiel anlegen
+## Spiel-Übersicht
 
-Nur Administratoren und berechtigte Trainer können neue Spiele anlegen.
+Auf der **Spiele-Seite** werden alle Spiele in **drei Bereichen** angezeigt:
 
-1. Im Menü auf **„Spiele"** klicken
-2. Auf **„Neues Spiel"** klicken
-3. Folgende Angaben machen:
+### 🔴 Aktuell laufend
 
-| Feld | Beschreibung | Pflicht? |
-|---|---|---|
-| **Heimteam** | Welches Team spielt zuhause? | Empfohlen |
-| **Auswärtsteam** | Welches Team ist zu Gast? (darf nicht dasselbe sein) | Empfohlen |
-| **Spieltyp** | Ligaspiel, Freundschaftsspiel, Pokalspiel, … | ✅ Ja |
-| **Spielort** | Wo findet das Spiel statt? | Empfohlen |
-| **Liga** | Optionale Zuordnung zu einer Liga | Nein |
+Spiele, die gerade stattfinden. Diese werden ganz oben angezeigt mit einem **„Live"-Badge** in Rot. Hier könnt ihr in Echtzeit Ereignisse nachtragen.
 
-4. Speichern
+### 📅 Anstehend
 
-> 💡 **Wichtig:** Datum und Uhrzeit werden über den **Kalender** gesteuert. Das Spiel bekommt automatisch einen Terminslot, den ihr im Kalender sehen und zu dem Spieler ihre Zu-/Absage geben können.
+Zukünftige Spiele, sortiert nach Datum. Für jedes Spiel seht ihr:
+- **Heim- und Gastteam**
+- **Datum und Uhrzeit**
+- **Spielort** (Location)
+- **Spieltyp** (z. B. Ligaspiel, Freundschaftsspiel, Pokal)
+- **Liga** (z. B. Kreisliga, Bezirksliga)
 
----
+### ✅ Absolviert
 
-## Das Spiel live dokumentieren
-
-Die Detailseite eines Spiels ist der zentrale Ort für die Spieldokumentation. Öffnet das Spiel, indem ihr in der Liste darauf klickt.
-
-### Spielereignisse erfassen
-
-Während des Spiels (oder im Nachhinein) können alle wichtigen Ereignisse eingetragen werden:
-
-| Ereignis | Wann eintragen |
-|---|---|
-| ⚽ **Tor** | Ein reguläres Tor wurde erzielt |
-| 🙈 **Eigentor** | Ein Tor gegen das eigene Team |
-| 🟨 **Gelbe Karte** | Ein Spieler wurde verwarnt |
-| 🟥 **Rote Karte** | Ein Spieler wurde des Feldes verwiesen |
-| 🟨🟥 **Gelb-Rote Karte** | Zweite Gelbe Karte = Feldverweis |
-| 🔄 **Wechsel** | Ein Spieler wird ausgewechselt |
-| 👟 **Assist/Vorlage** | Vorlagengeber zu einem Tor |
-
-So wird ein Ereignis eingetragen:
-1. Auf **„Ereignis hinzufügen"** klicken
-2. Ereignistyp wählen (z. B. Tor)
-3. Spieler auswählen (wer hat das Tor geschossen?)
-4. Spielminute eintragen
-5. Bei Tor: Optional den Vorbereiter (Assist-Geber) angeben
-6. Speichern
-
-### Der Spielstand
-
-Der aktuelle Spielstand wird **automatisch** aus den eingetragenen Toren und Eigentoren berechnet – ihr müsst das Ergebnis nicht separat eingeben. Das System zählt die Tore für jedes Team und zeigt das aktuelle Ergebnis an.
+Abgeschlossene Spiele mit **Endergebnis**. Sortiert nach Datum (neuestes zuerst).
 
 ---
 
-## Wechsel erfassen
+## Spiel-Detail
 
-Spielerwechsel werden separat dokumentiert:
+Klickt auf ein Spiel, um die **Detail-Seite** zu öffnen. Diese ist in mehrere Bereiche aufgeteilt:
 
-1. Auf **„Wechsel hinzufügen"** klicken
-2. Den **eingewechselten** Spieler wählen
-3. Den **ausgewechselten** Spieler wählen
-4. Spielminute eintragen
-5. Optional: Wechselgrund angeben
-6. Speichern
+### Kopfbereich
 
----
+| Element | Beschreibung |
+|---------|-------------|
+| **Heim-Team** | Links — mit Teamname und optional Vereinslogo |
+| **Ergebnis** | In der Mitte — z. B. „3 : 1" (bei abgeschlossenen Spielen) |
+| **Gast-Team** | Rechts — mit Teamname und optional Vereinslogo |
+| **Live-Badge** | Rot leuchtend, wenn das Spiel gerade läuft |
+| **Spieltyp** | Badge mit dem Spieltyp (Ligaspiel, Freundschaftsspiel, ...) |
+| **Liga** | Name der Liga (falls zugeordnet) |
+| **Datum & Uhrzeit** | Wann und wo das Spiel stattfindet |
+| **Spielort** | Name und ggf. Adresse des Spielorts |
 
-## Spiel abschließen
+### Wetter
 
-Wenn das Spiel vorbei ist, könnt ihr es als **„Abgeschlossen"** markieren. Damit wird es in die Kategorie der vergangenen Spiele verschoben und das Ergebnis ist final festgehalten.
+Wenn ein **Spielort** hinterlegt ist und Wetterdaten verfügbar sind, erscheint eine **Wetteranzeige**:
 
----
+- **Aktuelles Wetter** als Symbol (Sonne, Wolken, Regen, ...)
+- **Temperatur**
+- Klickt auf die Wetteranzeige → es öffnet sich ein **Wetter-Dialog** mit:
+  - **Stündliche Vorhersage** für den Spieltag
+  - **Tagesübersicht** (Höchst-/Tiefsttemperatur, Niederschlagswahrscheinlichkeit)
 
-## Spieldetailseite – was seht ihr dort?
+> 💡 Das Wetter wird automatisch abgerufen, wenn der Spielort Koordinaten (Breitengrad/Längengrad) hinterlegt hat.
 
-Die Detailseite eines Spiels zeigt alles auf einen Blick:
+### fussball.de-Verknüpfung
 
-- **Heimteam vs. Auswärtsteam** mit aktuellem Spielstand
-- **Chronologische Ereignisliste** – alle Tore, Karten und Wechsel in zeitlicher Reihenfolge
-- **Verknüpfte Videos** – falls Spielvideos hochgeladen wurden, könnt ihr Spielszenen direkt anspringen
-- **Wetterdaten** – das Wetter zum Spielzeitpunkt
-- **Teilnahmestatus** – wer hat zugesagt, wer fehlt?
+Falls das Spiel mit fussball.de verknüpft ist:
 
----
-
-## Spielorte verwalten
-
-Spielorte (Sportanlagen, Plätze) werden einmalig angelegt und können dann bei jedem Spiel ausgewählt werden. Das spart Zeit bei wiederkehrenden Heimspielen.
-
-Neue Spielorte anlegen: Im Menü auf **„Spielorte"** klicken.
-
----
-
-## Automatische Synchronisation mit fussball.de
-
-Wenn euer Team mit dem Portal **fussball.de** verknüpft ist, werden Spielergebnisse nach dem Spieltag automatisch übernommen. Ihr müsst nichts manuell eintragen – das System erledigt das von alleine!
+- **fussball.de-ID** und **fussball.de-URL** sind hinterlegt
+- Ein **Link-Symbol** führt direkt zur Spielseite auf fussball.de
+- Ergebnisse können so abgeglichen werden
 
 ---
 
-## Berechtigungen: Wer sieht was?
+## Spielereignisse
 
-- **Spieler und Eltern** sehen nur die Spiele des Teams, dem sie zugeordnet sind
-- **Trainer** sehen alle Spiele ihrer Teams und können Spielereignisse nachtragen
-- **Administratoren** haben vollen Zugriff
+Das Herzstück der Spiel-Dokumentation — hier werden **alle wichtigen Szenen** erfasst:
+
+### Ereignistypen
+
+Jedes Ereignis hat einen **Typ** mit eigenem Symbol, Farbe und Code:
+
+| Ereignis | Beispiel-Code | Typisches Symbol | Beschreibung |
+|----------|--------------|-----------------|-------------|
+| **Tor** | goal | ⚽ | Tor erzielt |
+| **Eigentor** | own_goal | 🔴⚽ | Eigentor |
+| **Gelbe Karte** | yellow_card | 🟨 | Verwarnung |
+| **Gelb-Rote Karte** | yellow_red_card | 🟨🟥 | Zweite Gelbe → Platzverweis |
+| **Rote Karte** | red_card | 🟥 | Direkter Platzverweis |
+| **Auswechslung** | substitution | 🔄 | Spieler wird ein-/ausgewechselt |
+| **Elfmeter** | penalty | ⚽🎯 | Strafstoß |
+| **Elfmeter verschossen** | penalty_missed | ❌🎯 | Strafstoß nicht verwandelt |
+| **Anpfiff** | kick_off | 🏁 | Spielbeginn |
+| **Halbzeit** | half_time | ⏸️ | Halbzeitpause |
+| **Abpfiff** | full_time | 🔚 | Spielende |
+| **Verlängerung** | extra_time | ⏱️ | Verlängerung |
+| **Elfmeterschießen** | penalty_shootout | 🎯 | Elfmeterschießen |
+
+> 💡 Darüber hinaus gibt es **System-Ereignisse** (z. B. Anpfiff, Halbzeit, Abpfiff) und **benutzerdefinierte Ereignistypen**, die in der Verwaltung angelegt werden können.
+
+### Ereignis erfassen
+
+Für jedes Spielereignis wird erfasst:
+
+| Feld | Beschreibung |
+|------|-------------|
+| **Ereignistyp** | Was ist passiert? (Tor, Karte, Auswechslung, ...) |
+| **Spieler** | Wer war beteiligt? |
+| **Team** | Welches Team? (Heim oder Gast) |
+| **Zeitstempel** | Minute und Sekunde (MM:SS) — die genaue Spielminute |
+| **Beschreibung** | Optionaler Freitext (z. B. „Kopfball nach Ecke") |
+| **Beteiligter Spieler** | Bei Toren: Wer hat die Vorlage gegeben? Bei Auswechslungen: Wer wurde eingewechselt? |
+| **Auswechslungsgrund** | Bei Auswechslungen: Warum wurde gewechselt? |
+
+### Auswechslungsgründe
+
+Bei einer Auswechslung könnt ihr den **Grund** angeben:
+
+| Code | Bedeutung |
+|------|-----------|
+| **tactical** | Taktische Umstellung |
+| **injury** | Verletzung |
+| **performance** | Leistungsbedingt |
+| **resting** | Schonung / Erholung |
+| **card_risk** | Kartenrisiko (z. B. bereits Gelb) |
+| **debut** | Debüt — erster Einsatz eines Spielers |
+| **comeback** | Comeback nach Verletzung/Pause |
+| **time_wasting** | Zeitspiel |
+| **farewell** | Abschied — letztes Spiel eines Spielers |
+
+### Zeitanzeige
+
+Die **Spielminute** wird als **Chip** dargestellt: z. B. `23:45` (Minute 23, Sekunde 45). Auf der Zeitleiste im Video-Bereich (siehe [10-video-analyse.md](10-video-analyse.md)) entspricht diese Minute der Position auf der Zeitleiste.
+
+### Ereignisse in der Übersicht
+
+Alle Ereignisse werden chronologisch aufgelistet:
+
+- **Heim-Ereignisse** links, **Gast-Ereignisse** rechts (wie eine Spielberichts-Darstellung)
+- Jedes Ereignis zeigt: **Zeitstempel** + **Symbol** + **Spielername** + **Beschreibung**
+- Bei Auswechslungen: „Spieler A ↔ Spieler B" mit dem Grund
+- Bei Toren: Aktualisierung des Spielstands
 
 ---
 
-## Häufige Fragen
+## Videos
 
-**Warum sehe ich ein Spiel nicht in der Liste?**
-→ Ihr seht nur Spiele eures eigenen Teams. Prüft, ob eure Teamzuordnung korrekt eingestellt ist (sprecht ggf. den Trainer an).
+Im Bereich **„Videos"** eines Spiels findet ihr alle verknüpften Aufnahmen:
 
-**Das Ergebnis stimmt nicht – wie korrigiere ich das?**
-→ Öffnet das Spiel und korrigiert oder löscht das falsch eingetragene Spielereignis (Tor oder Eigentor).
+- **YouTube-Thumbnails** für YouTube-Videos
+- **Video-Name**, **Typ** und **Kamera**
+- Klickt auf ein Video → ihr gelangt zur **Video-Analyse** (siehe [10-video-analyse.md](10-video-analyse.md))
 
-**Kann ich Tore auch noch nach dem Spiel nachtragen?**
-→ Ja! Die Spielereignisse können jederzeit nachträglich erfasst oder korrigiert werden, solange das Spiel nicht gesperrt ist.
-
-**Was ist, wenn Heim- und Auswärtsteam nicht aus unserem Verein kommen?**
-→ Das Heimteam oder Auswärtsteam darf auch freigelassen werden – z. B. wenn ein externes Team noch nicht in Kaderblick erfasst ist. Das Ergebnis kann trotzdem protokolliert werden.
-
----
-
-## Spielübersicht
-
-Die Hauptseite der Spielverwaltung (`/games`) gliedert Spiele in drei Bereiche:
-
-| Bereich | Beschreibung |
-|---|---|
-| **Laufende Spiele** | Spiele, deren Start in der Vergangenheit und deren Ende in der Zukunft liegt |
-| **Bevorstehende Spiele** | Spiele mit Startzeit in der Zukunft, aufsteigend sortiert |
-| **Vergangene Spiele** | Abgeschlossene Spiele, absteigend nach Datum, mit Endergebnis |
+Hier können Trainer und berechtigte Nutzer neue Videos hinzufügen und bestehende bearbeiten.
 
 ---
 
 ## Spiel anlegen
 
-Ein Spiel verbindet zwei Teams miteinander und enthält alle spielrelevanten Informationen.
+> ℹ️ Das Anlegen von Spielen ist in der Regel Trainern und Administratoren vorbehalten.
 
-### Felder eines Spiels
+1. Klickt auf **„Spiel hinzufügen"**
+2. Füllt die Grunddaten aus:
+   - **Heim-Team** und **Gast-Team** auswählen
+   - **Spieltyp** wählen (Ligaspiel, Freundschaftsspiel, Pokal, ...)
+   - **Datum und Uhrzeit**
+   - **Spielort** (Location) — aus der Standort-Verwaltung auswählen
+   - **Liga** (optional)
+3. Speichern
 
-| Feld | Beschreibung | Pflicht |
-|---|---|---|
-| Heimteam | Eines der registrierten Teams | Nein* |
-| Auswärtsteam | Darf nicht dasselbe sein wie das Heimteam | Nein* |
-| Spieltyp | z. B. Ligaspiel, Freundschaftsspiel, Turnierspiel | Ja |
-| Ort / Location | Sportanlage, auf der gespielt wird | Nein |
-| Liga | Optionale Zuordnung zu einer Liga | Nein |
-| Heim-Tore | Endergebnis Heimteam | Nein |
-| Auswärts-Tore | Endergebnis Auswärtsteam | Nein |
-| Abgeschlossen | Markiert ein Spiel als beendet | Nein |
-| Kalender-Ereignis | Verknüpfter Termin (steuert Datum/Uhrzeit und Teilnahme) | Nein |
-| fussball.de-ID | Kennung für automatische Synchronisation | Nein |
+### Spiel mit Kalender verknüpfen
 
-> *Heimteam und Auswärtsteam können bewusst leer gelassen werden, z. B. bei externen Spielen gegen unbekannte Gegner.
+Wenn ein Spiel mit einem **Kalender-Termin** verknüpft wird (das passiert oft automatisch):
 
-Ein Spiel ist **immer** mit einem Kalender-Ereignis verknüpft – das Datum und die Uhrzeit werden dort verwaltet (siehe [Kalender & Teilnahme](07-kalender-teilnahme.md)).
+- Der Termin erscheint im **Kalender** aller berechtigten Nutzer
+- Die **Teilnahme** (Zu-/Absage) kann über den Kalender erfolgen
+- **Wetterdaten** werden automatisch abgerufen (falls Standort vorhanden)
 
 ---
 
-## Spieltypen
+## Ergebnis eintragen
 
-Spieltypen kategorisieren Spiele und können verwaltet werden. Typische Werte: Ligaspiel, Pokalspiel, Freundschaftsspiel, Turnierspiel. Die Spieltypen sind über die Datenbank konfigurierbar.
+1. Spiel öffnen
+2. **Heim-Ergebnis** und **Gast-Ergebnis** eintragen (z. B. 3 : 1)
+3. „**Spiel beendet**" markieren (Checkbox „Beendet")
+4. Speichern
 
----
-
-## Spielorte (Locations)
-
-Spielorte sind eigenständige Entitäten, die Name und optional weitere Infos speichern. Sie können mehreren Spielen zugeordnet werden. Verwaltung über Route `/locations`.
-
----
-
-## Spielereignisse (GameEvents)
-
-Spielereignisse protokollieren alles, was während eines Spiels passiert. Jedes Ereignis ist dem Spiel, einem Team und optional einem Spieler sowie einer Spielminute zugeordnet.
-
-### Bekannte Ereignistypen (GameEventTypes)
-
-| Code | Bedeutung |
-|---|---|
-| `goal` | Reguläres Tor |
-| `own_goal` | Eigentor |
-| `yellow_card` | Gelbe Karte |
-| `yellow_red_card` | Gelb-Rote Karte |
-| `red_card` | Rote Karte |
-| `substitution` | Spielerwechsel |
-| `assist` | Vorlage (Assist) |
-
-Spielereignistypen sind über `/gameEventTypes` konfigurierbar und erweiterbar.
-
-### Score-Berechnung
-
-Der aktuelle Spielstand wird nicht als fester Wert gespeichert, sondern wird **live aus den Spielereignissen berechnet**: Alle Ereignisse vom Typ `goal` werden gezählt, Eigentore (`own_goal`) werden dem gegnerischen Team gutgeschrieben.
+Das Spiel wandert dann in den Bereich „Absolviert" und zeigt das Ergebnis an.
 
 ---
 
-## Tore (Goals)
+## Spieltypen und Ligen
 
-Tore sind eigenständige Entitäten und werden zusätzlich zu den Spielereignissen gespeichert. Sie enthalten:
+### Spieltypen
 
-| Feld | Beschreibung |
-|---|---|
-| Schütze | Spieler, der das Tor schoss |
-| Vorbereiter (Assist) | Spieler, der das Tor vorbereitete |
-| Spiel | Zugehöriges Spiel |
-| Spielminute | Minute des Tors |
+In der Verwaltung können verschiedene Spieltypen angelegt werden:
 
----
+- Ligaspiel
+- Freundschaftsspiel
+- Pokalspiel
+- Hallenturnier
+- Sonstige
 
-## Wechsel (Substitutions)
+Jeder Spieltyp hat einen **Namen** und eine **Beschreibung**.
 
-Spielerwechsel werden als eigenständige Entität gespeichert:
+### Ligen
 
-| Feld | Beschreibung |
-|---|---|
-| Einwechselspieler | Spieler, der eingewechselt wird |
-| Auswechselspieler | Spieler, der ausgewechselt wird |
-| Spiel | Zugehöriges Spiel |
-| Spielminute | Minute des Wechsels |
-| Grund | Optionaler Wechselgrund (aus `SubstitutionReason`) |
+Ligen können ebenfalls in der Verwaltung gepflegt werden und einem Spiel zugeordnet werden (z. B. „Kreisliga A", „Bezirksliga Gruppe 3").
 
 ---
 
-## Spieldetailansicht
+## Tipps zur Spielverwaltung
 
-Die Detailseite eines Spiels (`/games/:id`) zeigt:
+### Live-Dokumentation
+- **Während des Spiels**: Tragt Ereignisse direkt nach dem Geschehen ein — Tor, Karte, Auswechslung
+- **Zeitstempel notieren**: Merkt euch die Minute, um sie später korrekt einzutragen
+- **Beschreibung nutzen**: „Freistoß aus 20m" oder „Kopfball nach Ecke" — das hilft bei der späteren Analyse
 
-- Heimteam vs. Auswärtsteam mit aktuellem Spielstand
-- Chronologische Liste aller Spielereignisse (Tore, Karten, Wechsel)
-- Verknüpfte Videos mit Zeitleisten-Funktion (YouTube-Timestamps)
-- Kamera-Zuordnungen für Videoanalyse
-- Wetterdaten des Spieltermins
+### Nach dem Spiel
+- **Ergebnis eintragen** und „Beendet" markieren
+- **Fehlende Ereignisse nachtragen**: Geht die Ereignisliste durch und ergänzt, was ihr vergessen habt
+- **Video hochladen**: Ladet das Spielvideo hoch und verknüpft es mit dem Spiel
 
-Benutzer sehen ein Spiel nur, wenn sie dem zugehörigen Verein/Team zugeordnet sind (Voter-Prüfung).
+### Für Trainer
+- **Auswechslungsgründe immer eintragen**: Hilft bei der späteren Analyse und bei Berichten
+- **Beteiligten Spieler angeben**: Bei Toren die Vorlage, bei Auswechslungen den eingewechselten Spieler
 
 ---
 
-## fussball.de-Synchronisation
+## Häufige Fragen
 
-Spiele und Teams können mit [fussball.de](https://www.fussball.de) verknüpft werden. Sobald die Verknüpfung eingerichtet ist, werden Spielergebnisse automatisch synchronisiert – ohne manuelle Dateneingabe.
+### Was ist der Unterschied zwischen „Laufend" und „Anstehend"?
+Ein laufendes Spiel hat begonnen (Anpfiff-Ereignis oder Startzeit erreicht), ist aber noch nicht als „Beendet" markiert. Anstehende Spiele liegen in der Zukunft.
 
+### Kann ich Spielereignisse nachträglich ändern?
+Ja — klickt auf ein Ereignis und bearbeitet Typ, Zeitstempel, Spieler oder Beschreibung. Das Ergebnis wird automatisch aktualisiert.
+
+### Was passiert mit den Statistiken, wenn ich ein Spiel lösche?
+Spielereignisse werden mit dem Spiel gelöscht. Tore, Karten und andere Statistiken des Spiels werden dann nicht mehr gezählt. Berichte, die dieses Spiel einschließen, zeigen es nicht mehr.
+
+### Kann ich ein Spiel ohne Teams anlegen?
+Nein — jedes Spiel benötigt mindestens ein Heim- und ein Gast-Team. Legt die Teams vorher in der Team-Verwaltung an.
+
+### Woher kommen die Wetterdaten?
+Die Wetterdaten werden automatisch abgerufen, wenn der Spielort **GPS-Koordinaten** (Breitengrad/Längengrad) hinterlegt hat. Die Daten umfassen stündliche Vorhersagen und eine Tagesübersicht.
+
+### Kann ich ein Spiel mit fussball.de synchronisieren?
+Ihr könnt die **fussball.de-ID** und **fussball.de-URL** beim Spiel eintragen. Das ermöglicht den direkten Link zur offiziellen Spielberichtsseite. Eine automatische Ergebnis-Synchronisation gibt es aktuell nicht — Ergebnisse werden manuell eingetragen.

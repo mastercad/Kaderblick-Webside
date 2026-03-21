@@ -4,6 +4,7 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\User;
 use App\Entity\UserLevel;
+use App\Repository\XpRuleRepository;
 use App\Service\XPService;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -20,8 +21,9 @@ class XPServiceTest extends TestCase
         $user->expects($this->once())->method('setUserLevel');
         $em->expects($this->atLeastOnce())->method('persist');
         $em->expects($this->once())->method('flush');
+        $xpRuleRepository = $this->createMock(XpRuleRepository::class);
 
-        $service = new XPService($em);
+        $service = new XPService($em, $xpRuleRepository);
         $service->addXPToUser($user, 100);
     }
 
@@ -39,8 +41,9 @@ class XPServiceTest extends TestCase
         $userLevel->expects($this->atLeastOnce())->method('setUpdatedAt');
         $em->expects($this->atLeastOnce())->method('persist');
         $em->expects($this->once())->method('flush');
+        $xpRuleRepository = $this->createMock(XpRuleRepository::class);
 
-        $service = new XPService($em);
+        $service = new XPService($em, $xpRuleRepository);
         $service->addXPToUser($user, 100);
     }
 }

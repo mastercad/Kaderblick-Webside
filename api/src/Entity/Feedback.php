@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use App\Repository\FeedbackRepository;
 use DateTime;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: FeedbackRepository::class)]
@@ -53,9 +55,21 @@ class Feedback
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $screenshotPath = null;
 
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $githubIssueNumber = null;
+
+    #[ORM\Column(type: 'string', length: 512, nullable: true)]
+    private ?string $githubIssueUrl = null;
+
+    /** @var Collection<int, FeedbackComment> */
+    #[ORM\OneToMany(targetEntity: FeedbackComment::class, mappedBy: 'feedback', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['createdAt' => 'ASC'])]
+    private Collection $comments;
+
     public function __construct()
     {
         $this->createdAt = new DateTime();
+        $this->comments = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -174,5 +188,57 @@ class Feedback
         $this->screenshotPath = $screenshotPath;
 
         return $this;
+    }
+
+    public function getGithubIssueNumber(): ?int
+    {
+        return $this->githubIssueNumber;
+    }
+
+    public function setGithubIssueNumber(?int $githubIssueNumber): self
+    {
+        $this->githubIssueNumber = $githubIssueNumber;
+
+        return $this;
+    }
+
+    public function getGithubIssueUrl(): ?string
+    {
+        return $this->githubIssueUrl;
+    }
+
+    public function setGithubIssueUrl(?string $githubIssueUrl): self
+    {
+        $this->githubIssueUrl = $githubIssueUrl;
+
+        return $this;
+    }
+
+    /** @return Collection<int, FeedbackComment> */
+    public function getComments(): Collection
+    {
+        return $this->comments;
+    }
+
+    public function addComment(FeedbackComment $comment): self
+    {
+        if (!$this->comments->contains($comment)) {
+            $this->comments->add($comment);
+            $comment->setFeedback($this);
+        }
+
+        return $this;
+    }
+
+    /** Whether any user-written comment hasn't been read by the admin yet */
+    public function hasUnreadUserReplies(): bool
+    {
+        foreach ($this->comments as $comment) {
+            if (!$comment->isAdminMessage() && !$comment->isReadByRecipient()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

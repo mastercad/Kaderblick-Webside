@@ -16,7 +16,9 @@ use App\Repository\PlayerClubAssignmentRepository;
 use App\Repository\PlayerNationalityAssignmentRepository;
 use App\Repository\PlayerTeamAssignmentRepository;
 use App\Security\Voter\PlayerVoter;
+use App\Service\CoachTeamPlayerService;
 use DateTime;
+use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,21 +26,89 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/players', name: 'api_players_')]
+#[IsGranted('IS_AUTHENTICATED')]
 class PlayersController extends AbstractController
 {
-    public function __construct(private EntityManagerInterface $entityManager)
-    {
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private CoachTeamPlayerService $coachTeamPlayerService
+    ) {
     }
 
     #[Route('', methods: ['GET'], name: 'index')]
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $players = $this->entityManager->getRepository(Player::class)->findAll();
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 25)));
+        $search = trim((string) $request->query->get('search', ''));
+        $teamId = $request->query->get('teamId');
 
-        // Filtere Spieler basierend auf VIEW-Berechtigung
-        $players = array_filter($players, fn ($player) => $this->isGranted(PlayerVoter::VIEW, $player));
+        // Season filter
+        $seasonParam = $request->query->get('season');
+        $now = new DateTimeImmutable();
+        $currentMonth = (int) $now->format('n');
+        $currentYear = (int) $now->format('Y');
+        $defaultSeasonYear = $currentMonth >= 7 ? $currentYear : ($currentYear - 1);
+        $seasonYear = (null !== $seasonParam && ctype_digit((string) $seasonParam))
+            ? (int) $seasonParam
+            : $defaultSeasonYear;
+        $seasonStart = new DateTimeImmutable("{$seasonYear}-07-01");
+        $seasonEnd = new DateTimeImmutable(($seasonYear + 1) . '-06-30 23:59:59');
+        $availableSeasons = [];
+        for ($y = 2021; $y <= $defaultSeasonYear; ++$y) {
+            $availableSeasons[] = $y;
+        }
+
+        $repo = $this->entityManager->getRepository(Player::class);
+        $qb = $repo->createQueryBuilder('p');
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $isAdmin = $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_SUPERADMIN');
+        $coachTeamIds = array_keys($this->coachTeamPlayerService->collectCoachTeams($user));
+        $isCoach = count($coachTeamIds) > 0;
+
+        // Always join PTA to filter by season
+        $qb->innerJoin('p.playerTeamAssignments', 'pta')
+           ->andWhere('pta.startDate <= :seasonEnd')
+           ->andWhere('pta.endDate IS NULL OR pta.endDate >= :seasonStart')
+           ->setParameter('seasonStart', $seasonStart)
+           ->setParameter('seasonEnd', $seasonEnd);
+
+        // Additionally filter by team or coach scope
+        if ($teamId) {
+            $qb->andWhere('pta.team = :teamId')
+               ->setParameter('teamId', (int) $teamId);
+        } elseif (!$isAdmin && $isCoach) {
+            // Coach sieht nur Spieler aus seinen aktiv zugeordneten Teams
+            $qb->andWhere('pta.team IN (:coachTeamIds)')
+               ->setParameter('coachTeamIds', $coachTeamIds);
+        }
+
+        // Filter by search (firstName / lastName)
+        if ('' !== $search) {
+            $qb->andWhere('LOWER(p.firstName) LIKE :search OR LOWER(p.lastName) LIKE :search')
+               ->setParameter('search', '%' . strtolower($search) . '%');
+        }
+
+        // Count total matching results
+        $countQb = clone $qb;
+        $countQb->select('COUNT(DISTINCT p.id)');
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+
+        // Fetch paginated results
+        $offset = ($page - 1) * $limit;
+        $qb->select('p')
+           ->groupBy('p.id')
+           ->orderBy('p.lastName', 'ASC')
+           ->addOrderBy('p.firstName', 'ASC')
+           ->setFirstResult($offset)
+           ->setMaxResults($limit);
+
+        $players = $qb->getQuery()->getResult();
 
         return $this->json([
             'players' => array_map(fn ($player) => [
@@ -46,7 +116,7 @@ class PlayersController extends AbstractController
                 'firstName' => $player->getFirstName(),
                 'lastName' => $player->getLastName(),
                 'fullName' => $player->getFullName(),
-                'birthdate' => $player->getBirthdate(),
+                'birthdate' => $player->getBirthdate()?->format('Y-m-d'),
                 'height' => $player->getHeight(),
                 'weight' => $player->getWeight(),
                 'strongFeet' => [
@@ -63,8 +133,8 @@ class PlayersController extends AbstractController
                 ], $player->getAlternativePositions()->toArray()),
                 'clubAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'club' => [
                         'id' => $assignment->getClub()->getId(),
                         'name' => $assignment->getClub()->getName()
@@ -72,8 +142,8 @@ class PlayersController extends AbstractController
                 ], $player->getPlayerClubAssignments()->toArray()),
                 'nationalityAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'nationality' => [
                         'id' => $assignment->getNationality()->getId(),
                         'name' => $assignment->getNationality()->getName()
@@ -81,8 +151,8 @@ class PlayersController extends AbstractController
                 ], $player->getPlayerNationalityAssignments()->toArray()),
                 'teamAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'shirtNumber' => $assignment->getShirtNumber(),
                     'team' => [
                         'id' => $assignment->getTeam()->getId(),
@@ -99,13 +169,26 @@ class PlayersController extends AbstractController
                 ], $player->getPlayerTeamAssignments()->toArray()),
                 'fussballDeUrl' => $player->getFussballDeUrl(),
                 'fussballDeId' => $player->getFussballDeId(),
-                'permissions' => [
-                    'canView' => $this->isGranted(PlayerVoter::VIEW, $player),
-                    'canEdit' => $this->isGranted(PlayerVoter::EDIT, $player),
-                    'canCreate' => $this->isGranted(PlayerVoter::CREATE, $player),
-                    'canDelete' => $this->isGranted(PlayerVoter::DELETE, $player)
-                ]
-            ], $players)
+                'permissions' => (static function () use ($player, $isAdmin, $isCoach, $coachTeamIds): array {
+                    $playerTeamIds = array_map(
+                        fn ($pta) => $pta->getTeam()->getId(),
+                        $player->getPlayerTeamAssignments()->toArray()
+                    );
+                    $coachCanManage = $isCoach && count(array_intersect($playerTeamIds, $coachTeamIds)) > 0;
+
+                    return [
+                        'canView' => true,
+                        'canEdit' => $isAdmin || $coachCanManage,
+                        'canCreate' => $isAdmin || $isCoach,
+                        'canDelete' => $isAdmin || $coachCanManage,
+                    ];
+                })()
+            ], $players),
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'availableSeasons' => $availableSeasons,
+            'selectedSeason' => $seasonYear,
         ]);
     }
 
@@ -122,7 +205,7 @@ class PlayersController extends AbstractController
                 'firstName' => $player->getFirstName(),
                 'lastName' => $player->getLastName(),
                 'fullName' => $player->getFullName(),
-                'birthdate' => $player->getBirthdate(),
+                'birthdate' => $player->getBirthdate()?->format('Y-m-d'),
                 'height' => $player->getHeight(),
                 'weight' => $player->getWeight(),
                 'strongFeet' => [
@@ -139,8 +222,8 @@ class PlayersController extends AbstractController
                 ], $player->getAlternativePositions()->toArray()),
                 'clubAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'club' => [
                         'id' => $assignment->getClub()->getId(),
                         'name' => $assignment->getClub()->getName()
@@ -148,8 +231,8 @@ class PlayersController extends AbstractController
                 ], $player->getPlayerClubAssignments()->toArray()),
                 'nationalityAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'nationality' => [
                         'id' => $assignment->getNationality()->getId(),
                         'name' => $assignment->getNationality()->getName()
@@ -157,8 +240,8 @@ class PlayersController extends AbstractController
                 ], $player->getPlayerNationalityAssignments()->toArray()),
                 'teamAssignments' => array_map(fn ($assignment) => [
                     'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate(),
-                    'endDate' => $assignment->getEndDate(),
+                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
                     'shirtNumber' => $assignment->getShirtNumber(),
                     'team' => [
                         'id' => $assignment->getTeam()->getId(),

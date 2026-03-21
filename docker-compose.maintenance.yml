@@ -1,0 +1,22 @@
+# Persistenter Maintenance-Container – läuft dauerhaft, wird durch Deployments nie gestoppt.
+# Zweck: Plesk-Nginx leitet bei 502/503/504 auf diesen Container um,
+#         sodass Nutzer während des Deployments eine freundliche Wartungsseite sehen.
+#
+# Port: 8082 (Production). Plesk-Nginx: error_page 502 503 504 → @maintenance → localhost:8082
+#
+# Starten (einmalig / bei Bedarf):
+#   IMAGE_TAG=latest docker compose -f docker-compose.maintenance.yml -p maintenance up -d --no-build
+
+services:
+  maintenance:
+    image: ghcr.io/mastercad/kaderblick/maintenance:${IMAGE_TAG:-latest}
+    container_name: kaderblick-maintenance
+    restart: unless-stopped
+    ports:
+      - "${MAINTENANCE_PORT:-8083}:80"
+    networks:
+      - kaderblick-net
+
+networks:
+  kaderblick-net:
+    external: true

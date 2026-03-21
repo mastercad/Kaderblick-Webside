@@ -35,24 +35,53 @@ class TaskDeletionTest extends WebTestCase
         try {
             $connection->executeStatement('SET FOREIGN_KEY_CHECKS=0');
 
-            $connection->executeStatement('DELETE FROM task_assignment WHERE 1=1');
+            // Task-bezogene Daten (nur Test-Tasks)
+            $connection->executeStatement("DELETE FROM task_assignment WHERE task_id IN (SELECT id FROM task WHERE title LIKE 'Test Task%')");
             $connection->executeStatement("DELETE FROM calendar_events WHERE title LIKE 'Test Task%'");
-            $connection->executeStatement('DELETE FROM task_rotation_users WHERE 1=1');
+            $connection->executeStatement("DELETE FROM task_rotation_users WHERE task_id IN (SELECT id FROM task WHERE title LIKE 'Test Task%')");
             $connection->executeStatement("DELETE FROM task WHERE title LIKE 'Test Task%'");
-            $connection->executeStatement('DELETE FROM games WHERE 1=1');
+
+            // Spiele nur für Test-Teams
+            $connection->executeStatement("DELETE FROM games WHERE home_team_id IN (SELECT id FROM teams WHERE name LIKE 'Test Team Delete%')");
             $connection->executeStatement("DELETE FROM calendar_events WHERE title LIKE 'Test Game%'");
-            $connection->executeStatement('DELETE FROM user_relation WHERE 1=1');
-            $connection->executeStatement('DELETE FROM coach_team_assignments WHERE 1=1');
-            $connection->executeStatement('DELETE FROM player_team_assignments WHERE 1=1');
-            $connection->executeStatement('DELETE FROM coaches WHERE 1=1');
-            $connection->executeStatement('DELETE FROM players WHERE 1=1');
-            $connection->executeStatement("DELETE FROM users WHERE email LIKE 'test-deletion-%'");
+
+            // Relationen/Spieler nur für Test-User
+            $connection->executeStatement(
+                "DELETE FROM user_relation WHERE user_id IN 
+                    (SELECT id FROM users WHERE email LIKE 'test-deletion-%' OR email LIKE 'test-task-delete-%')
+                "
+            );
+            $connection->executeStatement(
+                "DELETE FROM player_team_assignments WHERE player_id IN 
+                    (SELECT id FROM players WHERE email LIKE 'test-deletion-%' OR email LIKE 'test-task-delete-%')
+                "
+            );
+            $connection->executeStatement("DELETE FROM players WHERE email LIKE 'test-deletion-%' OR email LIKE 'test-task-delete-%'");
+            $connection->executeStatement("DELETE FROM users WHERE email LIKE 'test-deletion-%' OR email LIKE 'test-task-delete-%'");
             $connection->executeStatement("DELETE FROM teams WHERE name LIKE 'Test Team Delete%'");
 
             $connection->executeStatement('SET FOREIGN_KEY_CHECKS=1');
         } catch (Exception $e) {
             // Ignore cleanup errors
         }
+    }
+
+    private function getOrCreateAgeGroup(EntityManagerInterface $entityManager): AgeGroup
+    {
+        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        if (!$ageGroup) {
+            $ageGroup = new AgeGroup();
+            $ageGroup->setCode('A_JUNIOREN_TEST');
+            $ageGroup->setName('A-Junioren (Test)');
+            $ageGroup->setEnglishName('U19');
+            $ageGroup->setMinAge(17);
+            $ageGroup->setMaxAge(18);
+            $ageGroup->setReferenceDate('01-01');
+            $entityManager->persist($ageGroup);
+            $entityManager->flush();
+        }
+
+        return $ageGroup;
     }
 
     private function createAdminUser(EntityManagerInterface $entityManager): User
@@ -173,7 +202,7 @@ class TaskDeletionTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
         $team = new Team();
         $team->setName('Test Team Delete Single');
         $team->setAgeGroup($ageGroup);
@@ -254,7 +283,7 @@ class TaskDeletionTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
         $team = new Team();
         $team->setName('Test Team Delete Series');
         $team->setAgeGroup($ageGroup);
@@ -325,7 +354,7 @@ class TaskDeletionTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
         $team = new Team();
         $team->setName('Test Team Delete Series Via Assignment');
         $team->setAgeGroup($ageGroup);
@@ -407,13 +436,19 @@ class TaskDeletionTest extends WebTestCase
         $user->setIsEnabled(true);
         $entityManager->persist($user);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
         $team = new Team();
         $team->setName('Test Team Delete Calendar Event');
         $team->setAgeGroup($ageGroup);
         $entityManager->persist($team);
 
         $position = $entityManager->getRepository(Position::class)->findOneBy([]);
+        if (!$position) {
+            $position = new Position();
+            $position->setName('Torwart');
+            $entityManager->persist($position);
+            $entityManager->flush();
+        }
         $player = new Player();
         $player->setFirstName($user->getFirstName());
         $player->setLastName($user->getLastName());
@@ -428,6 +463,14 @@ class TaskDeletionTest extends WebTestCase
 
         $relationType = $entityManager->getRepository(\App\Entity\RelationType::class)
             ->findOneBy(['identifier' => 'self_player']);
+
+        if (!$relationType) {
+            $relationType = new \App\Entity\RelationType();
+            $relationType->setIdentifier('self_player');
+            $relationType->setCategory('player');
+            $relationType->setName('Eigener Spieler');
+            $entityManager->persist($relationType);
+        }
 
         $relation = new UserRelation();
         $relation->setUser($user);

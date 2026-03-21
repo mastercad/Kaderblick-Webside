@@ -25,33 +25,45 @@ export interface FieldAlias {
 }
 
 export interface ReportConfig {
-  diagramType: 'bar' | 'line' | 'pie';
+  diagramType: string;
   xField: string;
   yField: string;
-  groupBy: string[];
-  filters: {
+  groupBy?: string;
+  facetBy?: string;
+  metrics?: string[];
+  filters?: {
     dateFrom?: string;
     dateTo?: string;
     team?: string;
     player?: string;
     eventType?: string;
+    [key: string]: string | undefined;
   };
+  showLegend?: boolean;
+  showLabels?: boolean;
 }
 
 export interface Report {
   id?: number;
   name: string;
-  description?: string;
+  description: string;
   isTemplate?: boolean;
   config: ReportConfig;
 }
 
+export interface Preset {
+  key: string;
+  label: string;
+  config: Partial<ReportConfig>;
+}
+
 export interface ReportBuilderData {
   teams: Team[];
-  players: Player[];
+  players?: Player[];
   eventTypes: EventType[];
   fieldAliases: Record<string, FieldAlias>;
   availableDates: string[];
   minDate: string;
   maxDate: string;
+  presets?: Preset[];
 }

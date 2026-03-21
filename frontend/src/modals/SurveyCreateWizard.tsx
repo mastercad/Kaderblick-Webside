@@ -9,8 +9,15 @@ import {
   TextField,
   Stack,
   Alert,
-  MenuItem
+  MenuItem,
+  IconButton,
+  Chip,
+  Divider,
+  InputAdornment,
+  Checkbox
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { apiJson } from '../utils/api';
 import BaseModal from './BaseModal';
 
@@ -19,13 +26,16 @@ import BaseModal from './BaseModal';
   interface SurveyOption {
     id: number;
     optionText: string;
+    isSystem?: boolean;
+    isOwn?: boolean;
   }
 
   interface SurveyQuestion {
     id: string;
     questionText: string;
     type: QuestionType;
-    options: number[];
+    /** Kann sowohl IDs (number) als auch neue Optionstexte (string) enthalten */
+    options: (number | string)[];
   }
 
   interface SurveyFormData {
@@ -140,11 +150,13 @@ import BaseModal from './BaseModal';
   // Zeigt Validierungsfehler erst nach Interaktion (Weiter-Klick) an
   const [touched, setTouched] = useState<{ [step: number]: boolean }>({});
   const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
-  const [questionDraft, setQuestionDraft] = useState<{ questionText: string; type: QuestionType; options: number[] }>({ questionText: '', type: 'single_choice', options: [] });
+  const [questionDraft, setQuestionDraft] = useState<{ questionText: string; type: QuestionType; options: (number | string)[] }>({ questionText: '', type: 'single_choice', options: [] });
   const [availableOptions, setAvailableOptions] = useState<SurveyOption[]>([]);
   const [optionsLoadError, setOptionsLoadError] = useState<string | null>(null);
+  const [newOptionText, setNewOptionText] = useState('');
+  const [isCreatingOption, setIsCreatingOption] = useState(false);
 
-    useEffect(() => {
+    const loadOptions = () => {
       apiJson<SurveyOption[]>('/api/survey-options')
         .then(setAvailableOptions)
         .catch((e) => {
@@ -153,7 +165,51 @@ import BaseModal from './BaseModal';
           // eslint-disable-next-line no-console
           console.error('SurveyOptions Load Error:', e);
         });
+    };
+
+    useEffect(() => {
+      loadOptions();
     }, []);
+
+    const handleCreateOption = async () => {
+      const text = newOptionText.trim();
+      if (!text) return;
+      setIsCreatingOption(true);
+      try {
+        const created = await apiJson<SurveyOption>('/api/survey-options', {
+          method: 'POST',
+          body: { optionText: text },
+        });
+        // Neue Option sofort in die lokale Liste aufnehmen
+        setAvailableOptions(prev => [...prev, created]);
+        // Automatisch zur aktuellen Frage hinzufügen
+        setQuestionDraft(d => ({ ...d, options: [...d.options, created.id] }));
+        setNewOptionText('');
+      } catch (e: any) {
+        setOptionsLoadError('Fehler beim Erstellen der Option: ' + (e?.message || 'Unknown error'));
+      } finally {
+        setIsCreatingOption(false);
+      }
+    };
+
+    const handleDeleteOption = async (optionId: number) => {
+      try {
+        await apiJson(`/api/survey-options/${optionId}`, { method: 'DELETE' });
+        setAvailableOptions(prev => prev.filter(o => o.id !== optionId));
+        // Aus dem aktuellen Draft entfernen
+        setQuestionDraft(d => ({ ...d, options: d.options.filter(o => o !== optionId) }));
+        // Auch aus allen bestehenden Fragen entfernen
+        setForm(f => ({
+          ...f,
+          questions: f.questions.map(q => ({
+            ...q,
+            options: q.options.filter(o => o !== optionId),
+          })),
+        }));
+      } catch (e: any) {
+        setOptionsLoadError('Fehler beim Löschen der Option: ' + (e?.message || 'Unknown error'));
+      }
+    };
 
 
     // Validierung pro Schritt
@@ -386,24 +442,116 @@ import BaseModal from './BaseModal';
             ))}
           </TextField>
           {(questionDraft.type === 'single_choice' || questionDraft.type === 'multiple_choice') && (
-            <TextField
-              select
-              label="Antwortoptionen (Mehrfachauswahl möglich)"
-              value={questionDraft.options}
-              onChange={e => {
-                const value = typeof e.target.value === 'string'
-                  ? e.target.value.split(',').map(Number)
-                  : (e.target.value as number[]);
-                setQuestionDraft(d => ({ ...d, options: value }));
-              }}
-              fullWidth
-              SelectProps={{ multiple: true }}
-              helperText="Wähle die erlaubten Antwortoptionen für diese Frage"
-            >
-              {availableOptions.map(opt => (
-                <MenuItem key={opt.id} value={opt.id}>{opt.optionText}</MenuItem>
-              ))}
-            </TextField>
+            <>
+              <TextField
+                select
+                label="Antwortoptionen"
+                value={questionDraft.options.filter((o): o is number => typeof o === 'number')}
+                onChange={e => {
+                  const value = typeof e.target.value === 'string'
+                    ? e.target.value.split(',').map(Number)
+                    : (e.target.value as number[]);
+                  setQuestionDraft(d => ({ ...d, options: value }));
+                }}
+                fullWidth
+                SelectProps={{
+                  multiple: true,
+                  renderValue: (selected: unknown) => {
+                    const ids = selected as number[];
+                    return (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {ids.map(id => {
+                          const opt = availableOptions.find(o => o.id === id);
+                          return opt ? (
+                            <Chip
+                              key={id}
+                              label={opt.optionText}
+                              size="small"
+                              onDelete={(e) => {
+                                e.stopPropagation();
+                                setQuestionDraft(d => ({
+                                  ...d,
+                                  options: d.options.filter(o => o !== id),
+                                }));
+                              }}
+                              onMouseDown={e => e.stopPropagation()}
+                            />
+                          ) : null;
+                        })}
+                      </Box>
+                    );
+                  },
+                }}
+                helperText="Wähle die erlaubten Antwortoptionen für diese Frage"
+              >
+                {availableOptions.map(opt => {
+                  const selectedIds = questionDraft.options.filter((o): o is number => typeof o === 'number');
+                  return (
+                    <MenuItem key={opt.id} value={opt.id} dense>
+                      <Checkbox size="small" checked={selectedIds.includes(opt.id)} sx={{ p: 0.5, mr: 1 }} />
+                      <Box display="flex" alignItems="center" justifyContent="space-between" width="100%" minWidth={0}>
+                        <Typography noWrap sx={{ flex: 1, minWidth: 0 }}>{opt.optionText}</Typography>
+                        <Box display="flex" alignItems="center" gap={0.5} ml={0.5} flexShrink={0}>
+                          {opt.isSystem && <Chip label="System" size="small" variant="outlined" color="default" sx={{ fontSize: 11, height: 20 }} />}
+                          {opt.isOwn && (
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteOption(opt.id);
+                              }}
+                              title="Eigene Option löschen"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+                <Divider />
+                <MenuItem
+                  value=""
+                  onKeyDown={e => e.stopPropagation()}
+                  onClick={e => e.stopPropagation()}
+                  sx={{ '&.Mui-focusVisible': { backgroundColor: 'transparent' }, cursor: 'default', '&:hover': { backgroundColor: 'transparent' }, py: 1 }}
+                >
+                  <TextField
+                    size="small"
+                    placeholder="Neue Option erstellen…"
+                    value={newOptionText}
+                    onChange={e => { e.stopPropagation(); setNewOptionText(e.target.value); }}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCreateOption();
+                      }
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    disabled={isCreatingOption}
+                    fullWidth
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={(e) => { e.stopPropagation(); handleCreateOption(); }}
+                            disabled={!newOptionText.trim() || isCreatingOption}
+                            title="Option erstellen"
+                          >
+                            <AddIcon fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </MenuItem>
+              </TextField>
+            </>
           )}
           {(questionDraft.type === 'scale_1_5' || questionDraft.type === 'scale_1_10') && (
             <Box>
@@ -430,7 +578,7 @@ import BaseModal from './BaseModal';
               <Typography sx={{ flex: 1 }}>{idx + 1}. {q.questionText} <span style={{ color: '#888', fontSize: 13 }}>({getTypeName(q.type)})</span></Typography>
               {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options.length > 0 && (
                 <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-                  Optionen: {q.options.map(id => availableOptions.find(o => o.id === id)?.optionText).filter(Boolean).join(', ')}
+                  Optionen: {q.options.map(id => typeof id === 'number' ? availableOptions.find(o => o.id === id)?.optionText : id).filter(Boolean).join(', ')}
                 </Typography>
               )}
               <Button size="small" onClick={() => handleEditQuestion(q.id)}>Bearbeiten</Button>
@@ -528,7 +676,7 @@ import BaseModal from './BaseModal';
               <Typography><b>{idx + 1}. {q.questionText}</b> <span style={{ color: '#888', fontSize: 13 }}>({getTypeName(q.type)})</span></Typography>
               {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options.length > 0 && (
                 <Typography variant="caption" color="text.secondary">
-                  Optionen: {q.options.map(id => availableOptions.find(o => o.id === id)?.optionText).filter(Boolean).join(', ')}
+                  Optionen: {q.options.map(id => typeof id === 'number' ? availableOptions.find(o => o.id === id)?.optionText : id).filter(Boolean).join(', ')}
                 </Typography>
               )}
             </Box>

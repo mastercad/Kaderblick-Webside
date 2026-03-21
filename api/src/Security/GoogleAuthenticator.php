@@ -4,10 +4,14 @@ namespace App\Security;
 
 use App\Entity\User;
 use App\Service\RefreshTokenService;
+use App\Service\RegistrationNotificationService;
 use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use KnpU\OAuth2ClientBundle\Client\ClientRegistry;
+use KnpU\OAuth2ClientBundle\Client\OAuth2Client;
+use KnpU\OAuth2ClientBundle\Exception\InvalidStateException;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\Cookie;
@@ -17,10 +21,12 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
+use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
 use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Throwable;
 use Twig\Environment;
 
 class GoogleAuthenticator extends AbstractAuthenticator
@@ -33,6 +39,8 @@ class GoogleAuthenticator extends AbstractAuthenticator
         private Environment $twig,
         private MailerInterface $mailer,
         private ParameterBagInterface $params,
+        private RegistrationNotificationService $registrationNotificationService,
+        private LoggerInterface $logger,
         private int $jwtTtl = 3600
     ) {
     }
@@ -45,7 +53,26 @@ class GoogleAuthenticator extends AbstractAuthenticator
     public function authenticate(Request $request): Passport
     {
         $client = $this->clientRegistry->getClient('google');
-        $accessToken = $client->getAccessToken();
+
+        try {
+            $accessToken = $client->getAccessToken();
+        } catch (InvalidStateException $e) {
+            // Diagnose: Session-State vs. URL-State loggen
+            $session = $request->hasSession() ? $request->getSession() : null;
+            $sessionState = $session?->get(OAuth2Client::OAUTH2_SESSION_STATE_KEY, '(nicht gesetzt)');
+            $urlState = $request->query->get('state', '(fehlt)');
+
+            $this->logger->warning('Google OAuth: Invalid state – Session und URL-State stimmen nicht überein.', [
+                'session_state' => $sessionState,
+                'url_state' => $urlState,
+                'session_id' => $session?->getId() ?? 'keine Session',
+                'user_agent' => $request->headers->get('User-Agent'),
+                'ip' => $request->getClientIp(),
+            ]);
+
+            // Als AuthenticationException weiterwerfen, damit onAuthenticationFailure() greift
+            throw new CustomUserMessageAuthenticationException('invalid_state');
+        }
         $googleUser = $client->fetchUserFromToken($accessToken);
         $googleUserData = $googleUser->toArray();
         $googleId = $googleUser->getId();
@@ -54,13 +81,15 @@ class GoogleAuthenticator extends AbstractAuthenticator
         $params = $this->params;
 
         return new SelfValidatingPassport(
-            new UserBadge($googleId, function () use ($googleId, $email, $googleUserData, $mailer, $params) {
+            new UserBadge($googleId, function () use ($googleId, $email, $googleUserData, $mailer, $params, $request) {
                 $user = $this->em->getRepository(User::class)->findOneBy(['googleId' => $googleId]);
                 if (!$user) {
+                    $isCompletelyNew = false;
                     $user = $this->em->getRepository(User::class)->findOneBy(['email' => $email]);
                     if ($user) {
                         $user->setGoogleId($googleId);
                     } else {
+                        $isCompletelyNew = true;
                         $user = new User();
                         $user->setEmail($email);
                         $user->setGoogleId($googleId);
@@ -75,6 +104,15 @@ class GoogleAuthenticator extends AbstractAuthenticator
                     $this->em->persist($user);
                     $this->em->flush();
 
+                    if ($isCompletelyNew) {
+                        $request->attributes->set('_is_new_google_user', true);
+                        try {
+                            $this->registrationNotificationService->notifyAdminsAboutNewUser($user);
+                        } catch (Throwable) {
+                            // Non-critical – don't fail the login
+                        }
+                    }
+
                     $email = (new TemplatedEmail())
                         ->from('no-reply@kaderblick.de')
                         ->to($user->getEmail())
@@ -88,6 +126,12 @@ class GoogleAuthenticator extends AbstractAuthenticator
                         ]);
 
                     $mailer->send($email);
+                }
+
+                // Always keep the stored Google avatar URL up to date (runs for every login)
+                if (!empty($googleUserData['picture'])) {
+                    $user->setGoogleAvatarUrl($googleUserData['picture']);
+                    $this->em->flush();
                 }
 
                 return $user;
@@ -109,10 +153,12 @@ class GoogleAuthenticator extends AbstractAuthenticator
         $expireTimestamp = $expireDate->getTimestamp();
 
         // Auth-Daten für das Template vorbereiten
+        $isNewUser = $request->attributes->get('_is_new_google_user', false);
         $authData = [
             'success' => true,
             'token' => $accessToken,
             'refreshToken' => $refreshToken,
+            'isNewUser' => $isNewUser,
             'user' => [
                 'id' => $user->getId(),
                 'email' => $user->getEmail(),
@@ -161,6 +207,26 @@ class GoogleAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?RedirectResponse
     {
+        // Bei Invalid-State: unterscheiden ob echter Nutzer (Session-State vorhanden, aber abgelaufen)
+        // oder Bot (kein Session-State – direkte Probe der Callback-URL).
+        if ('invalid_state' === $exception->getMessageKey()) {
+            $session = $request->hasSession() ? $request->getSession() : null;
+            $sessionState = $session?->get(OAuth2Client::OAUTH2_SESSION_STATE_KEY);
+
+            if (null !== $sessionState) {
+                // Echter Nutzer: Session-State war gesetzt, aber stimmt nicht mehr überein
+                // (z. B. abgelaufene Session, mehrere Tabs). Neuen Auth-Flow starten.
+                $this->logger->info('Google OAuth: Automatischer Retry nach Invalid-State (Session-State vorhanden).');
+
+                return new RedirectResponse('/connect/google');
+            }
+
+            // Bot oder direkter Aufruf ohne vorherigen OAuth-Flow: kein neuen Flow starten.
+            $this->logger->debug('Google OAuth: Invalid-State ohne Session-State – wahrscheinlich Bot, kein Retry.');
+
+            return new RedirectResponse('/login');
+        }
+
         return new RedirectResponse('/login?error=google');
     }
 

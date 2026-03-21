@@ -23,6 +23,8 @@ export interface EventTypeFlags {
   isTournamentEventType: boolean;
   /** Task event — CalendarEventType is "Aufgabe" */
   isTask: boolean;
+  /** Training event — CalendarEventType is "Training" */
+  isTraining: boolean;
   /** Generic event — none of the above, shows permissions */
   isGenericEvent: boolean;
 }
@@ -49,6 +51,7 @@ export function getEventTypeFlags(
   const isTurnierEvent = labelContains(eventLabel, 'turnier');
   const isTurnierGameType = labelContains(gameLabel, 'turnier');
   const isTask = labelContains(eventLabel, 'aufgabe');
+  const isTraining = labelContains(eventLabel, 'training');
 
   // Both "Spiel" and "Turnier" event types are match events
   const isMatchEvent = isSpielEvent || isTurnierEvent;
@@ -57,9 +60,9 @@ export function getEventTypeFlags(
   // or a "Spiel" event has a tournament game type selected
   const isTournament = isTurnierEvent || (isSpielEvent && isTurnierGameType);
 
-  const isGenericEvent = !isMatchEvent && !isTask;
+  const isGenericEvent = !isMatchEvent && !isTask && !isTraining;
 
-  return { isMatchEvent, isTournament, isTournamentEventType: isTurnierEvent, isTask, isGenericEvent };
+  return { isMatchEvent, isTournament, isTournamentEventType: isTurnierEvent, isTask, isTraining, isGenericEvent };
 }
 
 /**

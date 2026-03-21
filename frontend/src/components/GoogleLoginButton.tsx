@@ -32,8 +32,11 @@ export default function GoogleLoginButton() {
 
         // Message Listener für die Auth-Response
         const handleMessage = (event: MessageEvent) => {
-            // Sicherheitscheck: Nur Messages von unserem Backend akzeptieren
-            if (event.origin !== window.location.origin) {
+            // Sicherheitscheck: Nur Messages vom Backend akzeptieren.
+            // Das Backend (BACKEND_URL) hat eine andere Origin als das Frontend,
+            // daher kann nicht window.location.origin verwendet werden.
+            const backendOrigin = new URL(BACKEND_URL).origin;
+            if (event.origin !== backendOrigin) {
                 return;
             }
 
@@ -50,7 +53,7 @@ export default function GoogleLoginButton() {
                     }
                 } catch (e) {
                 }
-                
+
                 // Reload page um Auth-State zu aktualisieren
                 // Verwende setTimeout für bessere PWA-Kompatibilität
                 setTimeout(() => {

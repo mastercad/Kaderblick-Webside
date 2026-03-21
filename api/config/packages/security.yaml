@@ -13,6 +13,12 @@ security:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
+        # iCal-Feeds sind öffentlich – Authentifizierung erfolgt via token im URL
+        ical:
+            pattern: ^/ical/
+            stateless: true
+            security: false
+
 #        login:
 #            pattern: ^/api/login
 #            stateless: true
@@ -28,8 +34,10 @@ security:
         api:
             pattern: ^/api
             stateless: true
-#            entry_point: App\Security\JwtEntryPoint
+            entry_point: App\Security\Json401EntryPoint
             jwt: ~
+            custom_authenticators:
+                - App\Security\ApiTokenAuthenticator
 
         # kein jwt, kein authenticator
         verify_email:
@@ -44,9 +52,11 @@ security:
             jwt: ~
             custom_authenticators:
                 - App\Security\GoogleAuthenticator
+                - App\Security\ApiTokenAuthenticator
 #            logout:
 #                path: /api/logout
 #                invalidate_session: true
+            entry_point: App\Security\Json401EntryPoint
 
     role_hierarchy:
         ROLE_GUEST:       []
@@ -69,6 +79,8 @@ security:
     - { path: ^/api/players,  roles: ROLE_USER }
     - { path: ^/api/notifications, roles: ROLE_USER }
     - { path: ^/api/push,     roles: ROLE_USER }
+    - { path: ^/api/about-me,  roles: PUBLIC_ACCESS }
+    - { path: ^/api/health,   roles: PUBLIC_ACCESS }
     - { path: ^/api/register, roles: PUBLIC_ACCESS }
     - { path: ^/api/login,    roles: PUBLIC_ACCESS }
     - { path: ^/api/verify,   roles: PUBLIC_ACCESS }

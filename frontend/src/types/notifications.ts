@@ -1,6 +1,6 @@
 export interface AppNotification {
   id: string;
-  type: 'news' | 'message' | 'participation' | 'system';
+  type: 'news' | 'message' | 'participation' | 'system' | 'team_ride' | 'team_ride_booking' | 'team_ride_cancel' | 'team_ride_deleted' | 'event_cancelled' | 'feedback';
   title: string;
   message: string;
   timestamp: Date;
@@ -29,4 +29,10 @@ export const NOTIFICATION_TYPES = {
   MESSAGE: 'message' as const,
   PARTICIPATION: 'participation' as const,
   SYSTEM: 'system' as const,
+  TEAM_RIDE: 'team_ride' as const,
+  TEAM_RIDE_BOOKING: 'team_ride_booking' as const,
+  TEAM_RIDE_CANCEL: 'team_ride_cancel' as const,
+  TEAM_RIDE_DELETED: 'team_ride_deleted' as const,
+  EVENT_CANCELLED: 'event_cancelled' as const,
+  FEEDBACK: 'feedback' as const,
 } as const;

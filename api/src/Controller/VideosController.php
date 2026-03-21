@@ -12,7 +12,7 @@ use App\Repository\GameEventRepository;
 use App\Repository\GameRepository;
 use App\Repository\VideoRepository;
 use App\Repository\VideoTypeRepository;
-use App\Security\Voter\GameVoter;
+use App\Security\Voter\VideoVoter;
 use App\Service\VideoTimelineService;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -43,8 +43,8 @@ class VideosController extends AbstractController
             return new JsonResponse(['error' => 'Spiel nicht gefunden'], 404);
         }
 
-        if (!$this->isGranted(GameVoter::VIEW, $game)) {
-            return new JsonResponse(['error' => 'Zugriff verweigert'], 403);
+        if (!$this->isGranted(VideoVoter::VIEW, $game)) {
+            return new JsonResponse(['error' => 'Zugriff verweigert – nur Teammitglieder können Videos einsehen.'], 403);
         }
 
         $rawVideos = $game->getVideos();
@@ -108,12 +108,15 @@ class VideosController extends AbstractController
         CameraRepository $cameraRepository,
         EntityManagerInterface $em
     ): JsonResponse {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         /** @var ?Game $game */
         $game = $gameRepository->find($gameId);
         if (null === $game) {
             return new JsonResponse(['error' => 'Spiel nicht gefunden'], 404);
+        }
+
+        // Nur Teammitglieder mit ROLE_ADMIN/ROLE_SUPPORTER oder Trainer dürfen Videos anlegen/bearbeiten
+        if (!$this->isGranted(VideoVoter::CREATE, $game)) {
+            return new JsonResponse(['error' => 'Zugriff verweigert – nur Teammitglieder können Videos verwalten.'], 403);
         }
 
         /** @var User $user */
@@ -210,12 +213,16 @@ class VideosController extends AbstractController
         EntityManagerInterface $em,
         CsrfTokenManagerInterface $csrfTokenManager
     ): JsonResponse {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $video = $videoRepository->find($id);
         if (!$video) {
             return new JsonResponse(['error' => 'Video nicht gefunden'], 404);
         }
+
+        // Nur Teammitglieder mit ROLE_ADMIN/ROLE_SUPPORTER oder Trainer dürfen Videos löschen
+        if (!$this->isGranted(VideoVoter::DELETE, $video)) {
+            return new JsonResponse(['error' => 'Zugriff verweigert – nur Teammitglieder können Videos löschen.'], 403);
+        }
+
         $em->remove($video);
         $em->flush();
 

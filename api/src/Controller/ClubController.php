@@ -13,20 +13,45 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+#[IsGranted('IS_AUTHENTICATED')]
 class ClubController extends AbstractController
 {
     #[Route('/clubs', name: 'club_list', methods: ['GET'])]
-    public function list(ClubRepository $clubRepository): JsonResponse
+    public function list(ClubRepository $clubRepository, Request $request): JsonResponse
     {
-        $clubs = $clubRepository->findAll();
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 25)));
+        $search = trim((string) $request->query->get('search', ''));
 
-        // Filtere basierend auf VIEW-Berechtigung
-        $clubs = array_filter($clubs, fn ($club) => $this->isGranted(ClubVoter::VIEW, $club));
+        $qb = $clubRepository->createQueryBuilder('c');
 
-        return $this->json(array_map(
-            fn (Club $club) => [
-                'club' => [
+        // Search filter
+        if ('' !== $search) {
+            $qb->andWhere('LOWER(c.name) LIKE :search OR LOWER(c.stadiumName) LIKE :search OR LOWER(c.shortName) LIKE :search')
+               ->setParameter('search', '%' . strtolower($search) . '%');
+        }
+
+        // Count total matching results
+        $countQb = clone $qb;
+        $countQb->select('COUNT(c.id)');
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+
+        // Fetch paginated results
+        $offset = ($page - 1) * $limit;
+        $qb->orderBy('c.name', 'ASC')
+           ->setFirstResult($offset)
+           ->setMaxResults($limit);
+
+        $clubs = $qb->getQuery()->getResult();
+
+        // Permissions: VIEW always true, CREATE/EDIT/DELETE require ROLE_ADMIN
+        $isAdmin = $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_SUPERADMIN');
+
+        return $this->json([
+            'clubs' => array_map(
+                fn (Club $club) => [
                     'id' => $club->getId(),
                     'name' => $club->getName(),
                     'shortName' => $club->getShortName(),
@@ -53,15 +78,18 @@ class ClubController extends AbstractController
                         ] : null,
                     ],
                     'permissions' => [
-                        'canCreate' => $this->isGranted(ClubVoter::CREATE, $club),
-                        'canEdit' => $this->isGranted(ClubVoter::EDIT, $club),
-                        'canView' => $this->isGranted(ClubVoter::VIEW, $club),
-                        'canDelete' => $this->isGranted(ClubVoter::DELETE, $club),
+                        'canCreate' => $isAdmin,
+                        'canEdit' => $isAdmin,
+                        'canView' => true,
+                        'canDelete' => $isAdmin,
                     ]
-                ]
-            ],
-            $clubs
-        ));
+                ],
+                $clubs
+            ),
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+        ]);
     }
 
     #[Route('/clubs/{id}/details', name: 'club_detail_modal', methods: ['GET'])]

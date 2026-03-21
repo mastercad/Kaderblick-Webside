@@ -2,6 +2,18 @@ import React from 'react';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
+import Divider from '@mui/material/Divider';
 import { EventData, SelectOption, User } from '../../types/event';
 import { EventBaseForm } from './EventBaseForm';
 import { GameEventFields } from './GameEventFields';
@@ -35,6 +47,7 @@ interface WizardStep1Props {
   teams: SelectOption[];
   gameTypes: SelectOption[];
   leagues: SelectOption[];
+  cups: SelectOption[];
   tournaments: SelectOption[];
   users: User[];
   isMatchEvent: boolean;
@@ -55,6 +68,7 @@ export const WizardStep1: React.FC<WizardStep1Props> = ({
   teams,
   gameTypes,
   leagues,
+  cups,
   tournaments,
   users,
   isMatchEvent,
@@ -68,6 +82,9 @@ export const WizardStep1: React.FC<WizardStep1Props> = ({
   onGeneratorOpen = () => {},
   onClearMatches = () => {},
 }) => {
+  const selectedGameTypeLabel = gameTypes.find(gt => gt.value === formData.gameType)?.label?.toLowerCase() ?? '';
+  const isLiga  = selectedGameTypeLabel.includes('liga');
+  const isPokal = selectedGameTypeLabel.includes('pokal');
   return (
     <>
       {/* Match events: Location, Game fields, Tournament config */}
@@ -101,8 +118,11 @@ export const WizardStep1: React.FC<WizardStep1Props> = ({
             teams={teams}
             gameTypes={gameTypes}
             leagues={leagues}
+            cups={cups}
             isTournament={isTournament}
             isTournamentEventType={isTournamentEventType}
+            isLiga={isLiga}
+            isPokal={isPokal}
             handleChange={onChange}
           />
 
@@ -184,53 +204,106 @@ export const WizardStep2Tournament: React.FC<WizardStep2TournamentProps> = ({
   onDeleteMatch,
   setEditingMatchDraft,
 }) => {
+  const matches = tournamentMatches || [];
+
   return (
-    <>
-      <h4>Begegnungen</h4>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 8 }}>
-          <Button size="small" variant="outlined" onClick={onAddMatch}>
-            Neue Begegnung
-          </Button>
-        </div>
-        <div>
-          {(tournamentMatches || []).map((m: any) => (
-            <div
-              key={m.id}
-              style={{
-                padding: 8,
-                border: '1px solid #eee',
-                borderRadius: 6,
-                marginBottom: 8,
-                display: editingMatchId === m.id ? 'block' : 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+    <Box>
+      {/* Header row */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 2,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SportsSoccerIcon color="primary" fontSize="small" />
+          <Typography variant="subtitle1" fontWeight={600}>
+            Begegnungen
+          </Typography>
+          {matches.length > 0 && (
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{
+                ml: 0.5,
+                px: 1,
+                py: 0.25,
+                borderRadius: 10,
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+                fontWeight: 600,
               }}
             >
-              {editingMatchId === m.id ? (
-                <MatchEditForm
-                  draft={editingMatchDraft}
-                  teams={teams}
-                  onChange={setEditingMatchDraft}
-                  onSave={onSaveMatch}
-                  onCancel={onCancelEdit}
-                />
-              ) : (
-                <MatchDisplay
-                  match={m}
-                  onEdit={() => onEditMatch(m)}
-                  onDelete={() => onDeleteMatch(m.id)}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
+              {matches.length}
+            </Typography>
+          )}
+        </Box>
+        <Button
+          size="small"
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={onAddMatch}
+        >
+          Neue Begegnung
+        </Button>
+      </Box>
+
+      {matches.length === 0 && (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 3,
+            textAlign: 'center',
+            borderStyle: 'dashed',
+            borderColor: 'divider',
+            bgcolor: 'transparent',
+          }}
+        >
+          <SportsSoccerIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+          <Typography color="text.secondary" variant="body2">
+            Noch keine Begegnungen. Klicke auf "Neue Begegnung" oder generiere sie automatisch im vorherigen Schritt.
+          </Typography>
+        </Paper>
+      )}
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {matches.map((m: any, index: number) => (
+          <Paper
+            key={m.id}
+            variant="outlined"
+            sx={{
+              borderRadius: 2,
+              overflow: 'hidden',
+              borderColor: editingMatchId === m.id ? 'primary.main' : 'divider',
+              transition: 'border-color 0.2s',
+            }}
+          >
+            {editingMatchId === m.id ? (
+              <MatchEditForm
+                draft={editingMatchDraft}
+                teams={teams}
+                onChange={setEditingMatchDraft}
+                onSave={onSaveMatch}
+                onCancel={onCancelEdit}
+              />
+            ) : (
+              <MatchDisplay
+                match={m}
+                index={index}
+                onEdit={() => onEditMatch(m)}
+                onDelete={() => onDeleteMatch(m.id)}
+              />
+            )}
+          </Paper>
+        ))}
+      </Box>
+    </Box>
   );
 };
 
-/** Inline match edit form (extracted for readability) */
+/** Inline match edit form */
 const MatchEditForm: React.FC<{
   draft: any;
   teams: SelectOption[];
@@ -238,8 +311,9 @@ const MatchEditForm: React.FC<{
   onSave: () => void;
   onCancel: () => void;
 }> = ({ draft, teams, onChange, onSave, onCancel }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+  <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    {/* Teams row */}
+    <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
       <Autocomplete
         options={teams}
         getOptionLabel={(opt: any) => opt.label}
@@ -248,7 +322,7 @@ const MatchEditForm: React.FC<{
           onChange((d: any) => ({ ...d, homeTeamId: nv?.value || '', homeTeamName: nv?.label || '' }))
         }
         renderInput={(params) => <TextField {...params} label="Heim-Team" size="small" />}
-        sx={{ minWidth: 220 }}
+        sx={{ flex: 1, minWidth: 180 }}
       />
       <Autocomplete
         options={teams}
@@ -258,52 +332,122 @@ const MatchEditForm: React.FC<{
           onChange((d: any) => ({ ...d, awayTeamId: nv?.value || '', awayTeamName: nv?.label || '' }))
         }
         renderInput={(params) => <TextField {...params} label="Auswärts-Team" size="small" />}
-        sx={{ minWidth: 220 }}
+        sx={{ flex: 1, minWidth: 180 }}
       />
-    </div>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    </Box>
+
+    {/* Scheduling row */}
+    <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
       <TextField
-        label="Runde" size="small"
+        label="Runde"
+        size="small"
         value={draft?.round || ''}
         onChange={e => onChange((d: any) => ({ ...d, round: e.target.value }))}
-        sx={{ minWidth: 120 }}
+        sx={{ width: 110 }}
       />
       <TextField
-        label="Slot" size="small"
+        label="Slot"
+        size="small"
         value={draft?.slot || ''}
         onChange={e => onChange((d: any) => ({ ...d, slot: e.target.value }))}
-        sx={{ minWidth: 120 }}
+        sx={{ width: 110 }}
       />
       <TextField
-        label="Datum/Zeit ISO" size="small"
-        value={draft?.scheduledAt || ''}
-        onChange={e => onChange((d: any) => ({ ...d, scheduledAt: e.target.value }))}
-        sx={{ minWidth: 200 }}
+        label="Anpfiff (Datum & Uhrzeit)"
+        type="datetime-local"
+        size="small"
+        value={draft?.scheduledAt ? draft.scheduledAt.slice(0, 16) : ''}
+        onChange={e => onChange((d: any) => ({ ...d, scheduledAt: e.target.value ? `${e.target.value}:00` : '' }))}
+        InputLabelProps={{ shrink: true }}
+        sx={{ flex: 1, minWidth: 200 }}
       />
-    </div>
-    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-      <Button size="small" variant="contained" color="primary" onClick={onSave}>Speichern</Button>
-      <Button size="small" variant="outlined" onClick={onCancel}>Abbrechen</Button>
-    </div>
-  </div>
+    </Box>
+
+    <Divider />
+
+    {/* Action buttons */}
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+      <Button size="small" variant="outlined" startIcon={<CloseIcon />} onClick={onCancel}>
+        Abbrechen
+      </Button>
+      <Button size="small" variant="contained" color="primary" startIcon={<SaveIcon />} onClick={onSave}>
+        Speichern
+      </Button>
+    </Box>
+  </Box>
 );
 
-/** Match display row (extracted for readability) */
+/** Match display row */
 const MatchDisplay: React.FC<{
   match: any;
+  index: number;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ match, onEdit, onDelete }) => (
-  <>
-    <div style={{ flex: 1 }}>
-      {`Runde ${match.round || '?'} - ${match.homeTeamName || 'TBD'} vs ${match.awayTeamName || 'TBD'}`}
-    </div>
-    <div style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
-      <Button size="small" variant="outlined" onClick={onEdit}>Bearbeiten</Button>
-      <Button size="small" variant="outlined" color="error" onClick={onDelete}>Löschen</Button>
-    </div>
-  </>
-);
+}> = ({ match, index, onEdit, onDelete }) => {
+  const label = match.stage
+    ? `${match.stage}${match.group && !match.stage.includes('Gr.') ? ` (Gr. ${match.group})` : ''}`
+    : `Runde ${match.round || '?'}${match.group ? ` (Gr. ${match.group})` : ''}`;
+
+  const time = match.scheduledAt
+    ? new Date(match.scheduledAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        px: 2,
+        py: 1.25,
+        gap: 1,
+      }}
+    >
+      {/* Index badge */}
+      <Typography
+        variant="caption"
+        sx={{
+          minWidth: 24,
+          height: 24,
+          borderRadius: '50%',
+          bgcolor: 'action.selected',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {index + 1}
+      </Typography>
+
+      {/* Match info */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" noWrap fontWeight={500}>
+          {match.homeTeamName || 'TBD'}
+          <Box component="span" sx={{ mx: 0.75, color: 'text.secondary', fontWeight: 400 }}>vs</Box>
+          {match.awayTeamName || 'TBD'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {label}{time ? ` · ${time} Uhr` : ''}
+        </Typography>
+      </Box>
+
+      {/* Actions */}
+      <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Tooltip title="Bearbeiten">
+          <IconButton size="small" onClick={onEdit}>
+            <EditIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Löschen">
+          <IconButton size="small" color="error" onClick={onDelete}>
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Box>
+  );
+};
 
 // ========================
 // Step 2b: Permissions (generic events only)

@@ -36,6 +36,7 @@ export default function VerifyEmail() {
         } else if (response && 'message' in response) {
           setStatus('success');
           setMessage(response.message);
+          // Registration context dialog is triggered server-side via needsRegistrationContext flag on /api/about-me
         } else {
           setStatus('error');
           setMessage('Ein unerwarteter Fehler ist aufgetreten.');
@@ -81,8 +82,11 @@ export default function VerifyEmail() {
               <Typography variant="h5" gutterBottom color="success.main">
                 Erfolgreich verifiziert!
               </Typography>
-              <Alert severity="success" sx={{ mt: 2, mb: 3, textAlign: 'left' }}>
+              <Alert severity="success" sx={{ mt: 2, mb: 2, textAlign: 'left' }}>
                 {message}
+              </Alert>
+              <Alert severity="info" sx={{ mb: 3, textAlign: 'left' }}>
+                <strong>Tipp:</strong> Nach dem Login kannst du direkt angeben, ob du Spieler oder Trainer im Verein bist.
               </Alert>
               <Button 
                 variant="contained" 

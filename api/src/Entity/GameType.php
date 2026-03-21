@@ -28,6 +28,14 @@ class GameType
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $description = null;
 
+    /**
+     * Dauer einer Halbzeit in Minuten (z.B. 20, 30, 45).
+     * Null = nicht konfiguriert, Frontend fällt auf 45 zurück.
+     */
+    #[Groups(['game_type:read', 'game_type:write', 'game:read', 'calendar_event:read'])]
+    #[ORM\Column(type: 'integer', nullable: true, options: ['unsigned' => true])]
+    private ?int $halfDuration = null;
+
     /** @var Collection<int, Game> */
     #[Groups(['game_type:read', 'game_type:write'])]
     #[ORM\OneToMany(mappedBy: 'gameType', targetEntity: Game::class)]
@@ -65,6 +73,18 @@ class GameType
     public function getDescription(): ?string
     {
         return $this->description;
+    }
+
+    public function getHalfDuration(): ?int
+    {
+        return $this->halfDuration;
+    }
+
+    public function setHalfDuration(?int $halfDuration): self
+    {
+        $this->halfDuration = $halfDuration;
+
+        return $this;
     }
 
     /** @return Collection<int, Game> */

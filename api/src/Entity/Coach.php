@@ -63,7 +63,7 @@ class Coach
 
     /** @var Collection<int, UserRelation> */
     #[Groups(['player:read'])]
-    #[ORM\OneToMany(targetEntity: UserRelation::class, mappedBy: 'player')]
+    #[ORM\OneToMany(targetEntity: UserRelation::class, mappedBy: 'coach')]
     private Collection $userRelations;
 
     public function __construct()

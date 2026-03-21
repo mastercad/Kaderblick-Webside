@@ -1,0 +1,48 @@
+name: CI/CD Pipeline
+
+# Orchestrator: build → qa → deploy
+# Jeder Schritt wartet auf den vorherigen.
+# Das Deploy verwendet exakt dasselbe Image das in QA getestet wurde (github.sha).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  build:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+
+  quality-assurance:
+    needs: build
+    uses: ./.github/workflows/qa.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      pull-requests: write
+      packages: read
+    with:
+      image_tag: ${{ github.sha }}
+      is_main_push: true
+
+  deploy:
+    needs: [build, quality-assurance]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_tag: ${{ github.sha }}

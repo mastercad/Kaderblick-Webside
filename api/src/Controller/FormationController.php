@@ -4,7 +4,9 @@ namespace App\Controller;
 
 use App\Entity\Formation;
 use App\Entity\FormationType;
+use App\Entity\Team;
 use App\Entity\User;
+use App\Security\Voter\CoachTeamVoter;
 use App\Security\Voter\FormationVoter;
 use App\Service\CoachTeamPlayerService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -12,7 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 
 class FormationController extends AbstractController
 {
@@ -45,6 +47,8 @@ class FormationController extends AbstractController
             'formationType' => [
                 'id' => $formation->getFormationType()->getId(),
                 'name' => $formation->getFormationType()->getName(),
+                'backgroundPath' => $formation->getFormationType()->getBackgroundPath(),
+                'cssClass' => $formation->getFormationType()->getCssClass(),
             ]
         ], $formations)]);
     }
@@ -66,7 +70,17 @@ class FormationController extends AbstractController
             $em->persist($formation);
             $em->flush();
 
-            return $this->json(['success' => true]);
+            return $this->json(['success' => true, 'formation' => [
+                'id' => $formation->getId(),
+                'name' => $formation->getName(),
+                'formationData' => $formation->getFormationData(),
+                'formationType' => [
+                    'id' => $formation->getFormationType()->getId(),
+                    'name' => $formation->getFormationType()->getName(),
+                    'backgroundPath' => $formation->getFormationType()->getBackgroundPath(),
+                    'cssClass' => $formation->getFormationType()->getCssClass(),
+                ],
+            ]]);
         }
 
         return $this->json(['success' => true]);
@@ -91,7 +105,17 @@ class FormationController extends AbstractController
             $formation->setFormationData($data['formationData']);
             $em->flush();
 
-            return $this->json(['success' => true]);
+            return $this->json(['success' => true, 'formation' => [
+                'id' => $formation->getId(),
+                'name' => $formation->getName(),
+                'formationData' => $formation->getFormationData(),
+                'formationType' => [
+                    'id' => $formation->getFormationType()->getId(),
+                    'name' => $formation->getFormationType()->getName(),
+                    'backgroundPath' => $formation->getFormationType()->getBackgroundPath(),
+                    'cssClass' => $formation->getFormationType()->getCssClass(),
+                ],
+            ]]);
         }
 
         /** @var User $user */
@@ -106,6 +130,8 @@ class FormationController extends AbstractController
                 'formationType' => [
                     'id' => $formation->getFormationType()->getId(),
                     'name' => $formation->getFormationType()->getName(),
+                    'backgroundPath' => $formation->getFormationType()->getBackgroundPath(),
+                    'cssClass' => $formation->getFormationType()->getCssClass(),
                 ]
             ],
             'availablePlayers' => $availablePlayers
@@ -115,21 +141,14 @@ class FormationController extends AbstractController
     #[Route('/formation/team/{teamId}/players', name: 'formation_team_players', methods: ['GET'])]
     public function getTeamPlayers(int $teamId, EntityManagerInterface $em): Response
     {
-        /** @var User $user */
-        $user = $this->getUser();
-        // Prüfen ob der User berechtigt ist, auf dieses Team zuzugreifen
-        $teams = $this->coachTeamPlayerService->collectCoachTeams($user);
-        $team = null;
-
-        foreach ($teams as $t) {
-            if ($t->getId() === $teamId) {
-                $team = $t;
-                break;
-            }
-        }
+        $team = $em->getRepository(Team::class)->find($teamId);
 
         if (!$team) {
-            return $this->json(['error' => 'Team nicht gefunden oder keine Berechtigung'], 404);
+            return $this->json(['error' => 'Team nicht gefunden'], 404);
+        }
+
+        if (!$this->isGranted(CoachTeamVoter::ACCESS, $team)) {
+            return $this->json(['error' => 'Keine aktive Trainerzuordnung für dieses Team'], 403);
         }
 
         $players = $this->coachTeamPlayerService->collectTeamPlayers($team);
@@ -137,10 +156,13 @@ class FormationController extends AbstractController
         $playersData = array_map(function ($playerData) {
             $player = $playerData['player'];
 
+            /* @var array{player: array{id: int|null, name: string}, shirtNumber: int|null, position?: string|null, alternativePositions?: string[]} $playerData */
             return [
                 'id' => $player['id'],
                 'name' => $player['name'],
                 'shirtNumber' => $playerData['shirtNumber'],
+                'position' => $playerData['position'] ?? null,
+                'alternativePositions' => $playerData['alternativePositions'] ?? [],
             ];
         }, $players);
 
@@ -148,6 +170,51 @@ class FormationController extends AbstractController
             'players' => $playersData,
             'teamName' => $team->getName()
         ]);
+    }
+
+    #[Route('/formation/coach-teams', name: 'formation_coach_teams', methods: ['GET'])]
+    public function coachTeams(): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+        $teams = $this->coachTeamPlayerService->collectCoachTeams($user);
+
+        return $this->json([
+            'teams' => array_values(array_map(fn ($team) => [
+                'id' => $team->getId(),
+                'name' => $team->getName(),
+            ], $teams)),
+        ]);
+    }
+
+    #[Route('/formation/{id}/duplicate', name: 'formation_duplicate', methods: ['POST'])]
+    public function duplicate(Formation $formation, EntityManagerInterface $em): JsonResponse
+    {
+        if (!$this->isGranted(FormationVoter::VIEW, $formation)) {
+            return $this->json(['error' => 'Zugriff verweigert'], 403);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $copy = new Formation();
+        $copy->setUser($user);
+        $copy->setFormationType($formation->getFormationType());
+        $copy->setName($formation->getName());
+        $copy->setFormationData($formation->getFormationData());
+        $em->persist($copy);
+        $em->flush();
+
+        return $this->json(['formation' => [
+            'id' => $copy->getId(),
+            'name' => $copy->getName(),
+            'formationData' => $copy->getFormationData(),
+            'formationType' => [
+                'id' => $copy->getFormationType()->getId(),
+                'name' => $copy->getFormationType()->getName(),
+                'backgroundPath' => $copy->getFormationType()->getBackgroundPath(),
+                'cssClass' => $copy->getFormationType()->getCssClass(),
+            ],
+        ]]);
     }
 
     #[Route('/formation/{id}/delete', name: 'formation_delete', methods: ['DELETE'])]

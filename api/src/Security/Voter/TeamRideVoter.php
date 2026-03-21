@@ -4,6 +4,7 @@ namespace App\Security\Voter;
 
 use App\Entity\TeamRide;
 use App\Entity\User;
+use App\Service\TeamMembershipService;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
@@ -16,6 +17,11 @@ final class TeamRideVoter extends Voter
     public const EDIT = 'TEAM_RIDE_EDIT';
     public const VIEW = 'TEAM_RIDE_VIEW';
     public const DELETE = 'TEAM_RIDE_DELETE';
+
+    public function __construct(
+        private readonly TeamMembershipService $teamMembershipService
+    ) {
+    }
 
     protected function supports(string $attribute, mixed $subject): bool
     {
@@ -35,20 +41,45 @@ final class TeamRideVoter extends Voter
         /** @var TeamRide $teamRide */
         $teamRide = $subject;
 
+        if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            return true;
+        }
+
         switch ($attribute) {
             case self::VIEW:
-                // Alle Team-Mitglieder können Fahrgemeinschaften sehen
-                return true;
+            case self::CREATE:
+                // Only team members of the associated event may view/create rides
+                return $this->isUserTeamMemberForRide($user, $teamRide);
+
             case self::EDIT:
             case self::DELETE:
-                // Nur Ersteller oder Admins
-                return $teamRide->getDriver() === $user
-                    || in_array('ROLE_ADMIN', $user->getRoles())
-                    || in_array('ROLE_SUPERADMIN', $user->getRoles());
-            case self::CREATE:
-                return true; // Alle authentifizierten User können Fahrgemeinschaften erstellen
+                // Driver may always manage their own ride
+                if ($teamRide->getDriver()->getId() === $user->getId()) {
+                    return true;
+                }
+
+                // ROLE_ADMIN must also be in the same team
+                if (in_array('ROLE_ADMIN', $user->getRoles())) {
+                    return $this->isUserTeamMemberForRide($user, $teamRide);
+                }
+
+                return false;
         }
 
         return false;
+    }
+
+    /**
+     * Returns true when $user belongs to any team that is associated with the
+     * TeamRide's CalendarEvent (via TEAM-type permissions or via game teams).
+     */
+    private function isUserTeamMemberForRide(User $user, TeamRide $teamRide): bool
+    {
+        $event = $teamRide->getEvent();
+        if (!$event instanceof \App\Entity\CalendarEvent) {
+            return false;
+        }
+
+        return $this->teamMembershipService->isUserTeamMemberForEvent($user, $event);
     }
 }

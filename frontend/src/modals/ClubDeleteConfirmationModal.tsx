@@ -18,7 +18,7 @@ export const ClubDeleteConfirmationModal: React.FC<ClubDeleteConfirmationModalPr
     open={open}
     onClose={onClose}
     onConfirm={onConfirm}
-    title="Club löschen?"
+    title="Verein löschen?"
     message={`Soll der Verein${clubName ? ` "${clubName}"` : ''} wirklich entfernt werden?`}
     confirmText="Löschen"
     confirmColor="error"

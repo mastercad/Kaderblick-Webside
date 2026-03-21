@@ -4,6 +4,7 @@ namespace App\Security\Voter;
 
 use App\Entity\Team;
 use App\Entity\User;
+use App\Service\CoachTeamPlayerService;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
@@ -16,6 +17,10 @@ final class TeamVoter extends Voter
     public const EDIT = 'TEAM_EDIT';
     public const VIEW = 'TEAM_VIEW';
     public const DELETE = 'TEAM_DELETE';
+
+    public function __construct(private readonly CoachTeamPlayerService $coachTeamPlayerService)
+    {
+    }
 
     protected function supports(string $attribute, mixed $subject): bool
     {
@@ -32,69 +37,29 @@ final class TeamVoter extends Voter
             return false;
         }
 
+        // SUPERADMIN darf immer alles
+        if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            return true;
+        }
+
         switch ($attribute) {
             case self::CREATE:
-                if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
-                    return true;
-                }
+                // Neue Teams anlegen: nur ADMIN
+                return in_array('ROLE_ADMIN', $user->getRoles());
 
-                if (
-                    !in_array('ROLE_ADMIN', $user->getRoles())
-                    && !in_array('ROLE_SUPPORTER', $user->getRoles())
-                ) {
-                    return false;
-                }
-
-                foreach ($user->getUserRelations() as $userRelation) {
-                    if ($userRelation->getPlayer()) {
-                        foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
-                                return true;
-                            }
-                        }
-                    }
-
-                    if ($userRelation->getCoach()) {
-                        foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-
-                break;
-            case self::DELETE:
             case self::EDIT:
-                if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            case self::DELETE:
+                // ADMIN darf immer bearbeiten/löschen
+                if (in_array('ROLE_ADMIN', $user->getRoles())) {
                     return true;
                 }
 
-                if (
-                    !in_array('ROLE_ADMIN', $user->getRoles())
-                    && !in_array('ROLE_SUPPORTER', $user->getRoles())
-                ) {
-                    return false;
-                }
+                // Coach darf nur Teams bearbeiten/löschen, denen er aktuell aktiv zugeordnet ist
+                /** @var Team $subject */
+                $coachTeams = $this->coachTeamPlayerService->collectCoachTeams($user);
 
-                foreach ($user->getUserRelations() as $userRelation) {
-                    if ($userRelation->getPlayer()) {
-                        foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
-                                return true;
-                            }
-                        }
-                    }
+                return isset($coachTeams[$subject->getId()]);
 
-                    if ($userRelation->getCoach()) {
-                        foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                break;
             case self::VIEW:
                 return true;
         }

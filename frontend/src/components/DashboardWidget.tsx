@@ -6,6 +6,7 @@ import IconButton from '@mui/material/IconButton';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
+import EditIcon from '@mui/icons-material/Edit';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
@@ -19,9 +20,9 @@ export type DashboardWidgetProps = {
   onRefresh?: () => void;
   onDelete?: () => void;
   onSettings?: () => void;
+  onEditReport?: () => void;
   dragHandle?: React.ReactNode;
   children?: React.ReactNode;
-  style?: React.CSSProperties;
 };
 
 const DashboardWidgetInner = (
@@ -33,9 +34,9 @@ const DashboardWidgetInner = (
     onRefresh,
     onDelete,
     onSettings,
+    onEditReport,
     dragHandle,
     children,
-    style,
     ...rest
   }: DashboardWidgetProps,
   ref: React.Ref<any>
@@ -94,6 +95,19 @@ const DashboardWidgetInner = (
             >
               <RefreshIcon fontSize={isMobile ? "small" : "medium"} />
             </IconButton>
+            {onEditReport && (
+              <IconButton
+                size={isMobile ? "small" : "medium"}
+                onClick={onEditReport}
+                title="Report bearbeiten"
+                sx={{
+                  minWidth: { xs: 32, sm: 40 },
+                  height: { xs: 32, sm: 40 }
+                }}
+              >
+                <EditIcon fontSize={isMobile ? "small" : "medium"} />
+              </IconButton>
+            )}
             <IconButton 
               size={isMobile ? "small" : "medium"} 
               onClick={onSettings} 

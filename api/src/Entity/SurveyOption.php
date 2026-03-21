@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\SurveyOptionRepository;
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -22,6 +23,19 @@ class SurveyOption
 
     #[ORM\Column(type: 'string', length: 255)]
     private string $optionText;
+
+    /**
+     * NULL = System-/Fixture-Option (global für alle sichtbar),
+     * gesetzt = vom Benutzer erstellt (nur für Ersteller beim Anlegen sichtbar).
+     */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?User $createdBy = null;
+
+    public function __construct()
+    {
+        $this->questions = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -74,5 +88,25 @@ class SurveyOption
         }
 
         return $this;
+    }
+
+    public function getCreatedBy(): ?User
+    {
+        return $this->createdBy;
+    }
+
+    public function setCreatedBy(?User $createdBy): self
+    {
+        $this->createdBy = $createdBy;
+
+        return $this;
+    }
+
+    /**
+     * Ist diese Option eine System-Option (Fixture)?
+     */
+    public function isSystemOption(): bool
+    {
+        return null === $this->createdBy;
     }
 }

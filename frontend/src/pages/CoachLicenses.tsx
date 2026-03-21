@@ -1,21 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useMemo } from 'react';
+import CardMembershipIcon from '@mui/icons-material/CardMembership';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import CoachLicenseDeleteConfirmationModal from '../modals/CoachLicenseDeleteConfirmationModal';
 import CoachLicenseEditModal from '../modals/CoachLicenseEditModal';
 import { CoachLicense } from '../types/coachLicense';
@@ -24,136 +10,82 @@ const CoachLicenses = () => {
   const [coachLicenses, setCoachLicenses] = useState<CoachLicense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [coachLicenseId, setCoachLicenseId] = useState<number | null>(null);
   const [coachLicenseEditModalOpen, setCoachLicenseEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteCoachLicense, setDeleteCoachLicense] = useState<CoachLicense | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
 
   const loadCoachLicenses = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiJson<{ coachLicenses: CoachLicense[] }>('/api/coach-licenses');
-      if (res && Array.isArray(res.coachLicenses)) {
-        setCoachLicenses(res.coachLicenses);
-      } else {
-        setCoachLicenses([]);
-      }
-    } catch (e) {
+      setCoachLicenses(res && Array.isArray(res.coachLicenses) ? res.coachLicenses : []);
+    } catch {
       setError('Fehler beim Laden der Trainerlizenzen.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadCoachLicenses();
-  }, []);
+  useEffect(() => { loadCoachLicenses(); }, []);
 
-  const handleDelete = async (coachLicenseId: number) => {
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/coach-licenses/${coachLicenseId}`, { method: 'DELETE' });
-      setCoachLicenses(coachLicenses => coachLicenses.filter(c => c.id !== coachLicenseId));
+      await apiJson(`/api/coach-licenses/${id}`, { method: 'DELETE' });
+      setCoachLicenses(prev => prev.filter(c => c.id !== id));
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen der Trainerlizenzen.');
+      setSnackbar({ open: true, message: 'Trainerlizenz gelöscht', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen.', severity: 'error' });
     }
   };
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return coachLicenses;
+    const q = search.toLowerCase();
+    return coachLicenses.filter(c => (c.name || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q) || (c.countryCode || '').toLowerCase().includes(q));
+  }, [coachLicenses, search]);
+
+  const columns: AdminTableColumn<CoachLicense>[] = [
+    { header: 'Name', render: c => c.name || '' },
+    { header: 'Beschreibung', render: c => c.description || '' },
+    { header: 'Länder Code', render: c => c.countryCode || '', width: 120 },
+  ];
+
   return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Trainerlizenzen
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCoachLicenseId(null); setCoachLicenseEditModalOpen(true) }}>
-          Neue Trainerlizenz erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
+    <AdminPageLayout
+      icon={<CardMembershipIcon />}
+      title="Trainerlizenzen"
+      itemCount={coachLicenses.length}
+      loading={loading}
+      error={error}
+      createLabel="Neue Trainerlizenz"
+      onCreate={() => { setCoachLicenseId(null); setCoachLicenseEditModalOpen(true); }}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Lizenz suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+    >
+      {filtered.length === 0 ? (
+        <AdminEmptyState icon={<CardMembershipIcon />} title="Keine Trainerlizenzen vorhanden" createLabel="Neue Trainerlizenz" onCreate={() => { setCoachLicenseId(null); setCoachLicenseEditModalOpen(true); }} />
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Beschreibung</TableCell>
-                <TableCell>Länder Code</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {coachLicenses.map((coachLicense, idx) => (
-                <TableRow key={coachLicense.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell>
-                    {coachLicense.name || ''}
-                  </TableCell>
-                  <TableCell>
-                    {coachLicense.description || ''}
-                  </TableCell>
-                  <TableCell>
-                    {coachLicense.countryCode || ''}
-                  </TableCell>
-                  <TableCell>
-                    { coachLicense.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setCoachLicenseId(coachLicense.id);
-                          setCoachLicenseEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Oberflächenart bearbeiten"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { coachLicense.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeleteCoachLicense(coachLicense);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Trainerlizenz löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        )}
-        <CoachLicenseEditModal
-            openCoachLicenseEditModal={coachLicenseEditModalOpen}
-            coachLicenseId={coachLicenseId}
-            onCoachLicenseEditModalClose={() => setCoachLicenseEditModalOpen(false)}
-            onCoachLicenseSaved={(savedCoachLicense) => {
-                setCoachLicenseEditModalOpen(false);
-                loadCoachLicenses();
-            }}
+        <AdminTable columns={columns} data={filtered} getKey={c => c.id}
+          renderActions={c => (
+            <AdminActions
+              onEdit={c.permissions?.canEdit ? () => { setCoachLicenseId(c.id); setCoachLicenseEditModalOpen(true); } : undefined}
+              onDelete={c.permissions?.canDelete ? () => { setDeleteCoachLicense(c); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
         />
-        <CoachLicenseDeleteConfirmationModal
-            open={deleteModalOpen}
-            coachLicenseName={deleteCoachLicense?.name}
-            onClose={() => setDeleteModalOpen(false)}
-            onConfirm={async () => handleDelete(deleteCoachLicense!.id) }
-        />
-    </Box>
+      )}
+
+      <CoachLicenseEditModal openCoachLicenseEditModal={coachLicenseEditModalOpen} coachLicenseId={coachLicenseId} onCoachLicenseEditModalClose={() => setCoachLicenseEditModalOpen(false)} onCoachLicenseSaved={() => { setCoachLicenseEditModalOpen(false); loadCoachLicenses(); }} />
+      <CoachLicenseDeleteConfirmationModal open={deleteModalOpen} coachLicenseName={deleteCoachLicense?.name} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deleteCoachLicense!.id)} />
+    </AdminPageLayout>
   );
 };
 

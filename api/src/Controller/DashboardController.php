@@ -9,6 +9,7 @@ use App\Repository\CalendarEventRepository;
 use App\Repository\DashboardWidgetRepository;
 use App\Repository\MessageRepository;
 use App\Repository\NewsRepository;
+use App\Service\DefaultDashboardService;
 use App\Service\PushNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,12 +22,16 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route('/', name: 'app_dashboard_')]
 class DashboardController extends AbstractController
 {
-    public function __construct(private CalendarEventRepository $calendarRepo, private MessageRepository $messagesRepo, private NewsRepository $newsRepo)
-    {
+    public function __construct(
+        private CalendarEventRepository $calendarRepo,
+        private MessageRepository $messagesRepo,
+        private NewsRepository $newsRepo,
+        private DefaultDashboardService $defaultDashboardService,
+    ) {
     }
 
     #[Route('/', name: 'index')]
-    public function index(DashboardWidgetRepository $widgetRepo): JsonResponse
+    public function index(DashboardWidgetRepository $widgetRepo, EntityManagerInterface $em): JsonResponse
     {
         $user = $this->getUser();
 
@@ -41,30 +46,43 @@ class DashboardController extends AbstractController
 
         $hasDefaultDashboardWidget = $this->checkDashboardIsDefault($widgets);
 
+        // First-time user, or widgets were never created (e.g. silent error during
+        // e-mail verification) → create them on-the-fly so the dashboard is never empty.
         if (empty($widgets) && $user instanceof User) {
+            $this->defaultDashboardService->createDefaultDashboard($user);
+
             $widgets = $widgetRepo->findBy(
-                [
-                    'isEnabled' => true,
-                    'isDefault' => true
-                ],
-                [
-                    'position' => 'ASC'
-                ]
+                ['user' => $user, 'isEnabled' => true],
+                ['position' => 'ASC']
             );
         }
 
+        // Verwaiste Report-Widgets entfernen (ReportDefinition gelöscht → SET NULL)
+        $widgets = array_values(array_filter($widgets, function ($widget) use ($em) {
+            if ('report' === $widget->getType() && null === $widget->getReportDefinition()) {
+                $em->remove($widget);
+
+                return false;
+            }
+
+            return true;
+        }));
+        $em->flush();
+
         $result = array_map(function ($widget) use ($hasDefaultDashboardWidget) {
+            $report = $widget->getReportDefinition();
+
             return [
                 'id' => $widget->getId(),
                 'type' => $widget->getType(),
-                'name' => 'report' === $widget->getType() ? $widget->getReportDefinition()->getName() : null,
-                'description' => 'report' === $widget->getType() ? $widget->getReportDefinition()->getDescription() : null,
+                'name' => 'report' === $widget->getType() && $report ? $report->getName() : null,
+                'description' => 'report' === $widget->getType() && $report ? $report->getDescription() : null,
                 'width' => $widget->getWidth(),
                 'position' => $widget->getPosition(),
                 'config' => $widget->getConfig(),
                 'isDefault' => $widget->isDefault(),
                 'isEnabled' => $widget->isEnabled(),
-                'reportId' => $widget->getReportDefinition() ? $widget->getReportDefinition()->getId() : null,
+                'reportId' => $report?->getId(),
                 'hasDefaultDashboardWidget' => $hasDefaultDashboardWidget
             ];
         }, $widgets);
@@ -174,6 +192,13 @@ class DashboardController extends AbstractController
             $widget->setEnabled($data['enabled'] ?? true);
             if (isset($data['config'])) {
                 $widget->setConfig($data['config']);
+            }
+            // Allow updating the linked report definition (e.g. after copying a template)
+            if (isset($data['reportId'])) {
+                $newReport = $em->getRepository(ReportDefinition::class)->find((int) $data['reportId']);
+                if ($newReport && ($newReport->getUser() === $user || $newReport->isTemplate())) {
+                    $widget->setReportDefinition($newReport);
+                }
             }
         } elseif ($widget && $widget->getUser() !== $user && $widget->isDefault()) {
             $newWidget = new DashboardWidget();
@@ -336,7 +361,13 @@ class DashboardController extends AbstractController
                         'title' => $event->getTitle(),
                         'startDate' => $event->getStartDate()?->format('c'),
                         'endDate' => $event->getEndDate()?->format('c'),
-                        'location' => $event->getLocation()?->getName(),
+                        'location' => $event->getLocation() ? [
+                            'id' => $event->getLocation()->getId(),
+                            'name' => $event->getLocation()->getName(),
+                            'latitude' => $event->getLocation()->getLatitude(),
+                            'longitude' => $event->getLocation()->getLongitude(),
+                            'address' => $event->getLocation()->getAddress(),
+                        ] : null,
                         'calendarEventType' => [
                             'name' => $event->getCalendarEventType()?->getName(),
                             'color' => $event->getCalendarEventType()?->getColor(),

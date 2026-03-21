@@ -11,6 +11,10 @@ interface TaskDeletionModalProps {
   onDeleteSingle: () => void;
   onDeleteSeries: () => void;
   loading?: boolean;
+  title?: string;
+  message?: string;
+  singleLabel?: string;
+  seriesLabel?: string;
 }
 
 export const TaskDeletionModal: React.FC<TaskDeletionModalProps> = ({
@@ -19,11 +23,15 @@ export const TaskDeletionModal: React.FC<TaskDeletionModalProps> = ({
   onDeleteSingle,
   onDeleteSeries,
   loading = false,
+  title = 'Task löschen',
+  message = 'Möchten Sie nur dieses Event oder die gesamte Task-Serie löschen?',
+  singleLabel = 'Nur dieses Event',
+  seriesLabel = 'Gesamte Serie',
 }) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle>Task löschen</DialogTitle>
+    <DialogTitle>{title}</DialogTitle>
     <DialogContent sx={{ pt: 2 }}>
-      <p>Möchten Sie nur dieses Event oder die gesamte Task-Serie löschen?</p>
+      <p>{message}</p>
     </DialogContent>
     <DialogActions sx={{ gap: 1 }}>
       <Button onClick={onClose} disabled={loading}>
@@ -35,7 +43,7 @@ export const TaskDeletionModal: React.FC<TaskDeletionModalProps> = ({
         variant="contained" 
         disabled={loading}
       >
-        Nur dieses Event
+        {singleLabel}
       </Button>
       <Button 
         onClick={onDeleteSeries} 
@@ -43,7 +51,7 @@ export const TaskDeletionModal: React.FC<TaskDeletionModalProps> = ({
         variant="contained" 
         disabled={loading}
       >
-        Gesamte Serie
+        {seriesLabel}
       </Button>
     </DialogActions>
   </Dialog>

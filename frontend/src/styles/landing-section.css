@@ -1,6 +1,7 @@
 .landing-section {
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
@@ -109,7 +110,11 @@
 .landing-section-text {
   font-size: 16px;
   line-height: 1.7;
-  text-align: left;
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
   color: #fff;
 }
 
@@ -125,11 +130,12 @@
 }
 
 .landing-section-branding {
-  width: 100%;
-  display: flex;
-  justify-content: flex-start;
+  position: absolute;
+  bottom: 0;
+  left: 0;
   padding-left: 5%;
   padding-bottom: 2rem;
+  pointer-events: none;
 }
 
 .landing-section-branding-content {
@@ -208,9 +214,26 @@
 
   .landing-section {
     padding: 5rem 4% 2rem 4%;
-    height: auto;
+    height: 100vh;
+    height: 100dvh;
     min-height: 100vh;
-    justify-content: space-between;
+    min-height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+    justify-content: flex-start;
+  }
+
+  /* Content muss in 100dvh passen – flex-shrink erlaubt Komprimierung */
+  .landing-section > .landing-section-content {
+    flex-shrink: 1;
+    min-height: 0;
+  }
+
+  /* Branding bleibt absolut unten links */
+  .landing-section-branding {
+    padding-left: 4%;
+    padding-bottom: 1.5rem;
   }
   
   .landing-section-title {
@@ -238,11 +261,6 @@
     height: 60px;
   }
   
-  /* Branding bleibt unten links */
-  .landing-section-branding {
-    padding-left: 4%;
-    padding-bottom: 1.5rem;
-  }
 }
 
 @media (max-width: 600px) {
@@ -261,6 +279,9 @@
   .landing-section-text {
     font-size: 14px;
     line-height: 1.6;
+    text-align: justify;
+    hyphens: auto;
+    -webkit-hyphens: auto;
   }
 
   .landing-section-thumbnail {
@@ -274,7 +295,6 @@
     margin-top: 1rem;
   }
   
-  /* Branding bleibt unten links */
   .landing-section-branding {
     padding-left: 3%;
     padding-bottom: 1rem;

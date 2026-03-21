@@ -121,11 +121,15 @@ class NewsController extends AbstractController
             ['label' => 'Team', 'value' => 'team'],
         ];
 
+        // Prüfe ob der Benutzer News erstellen darf
+        $canCreate = $this->isGranted(NewsVoter::CREATE, new News());
+
         return new JsonResponse([
             'news' => $newsArr,
             'clubs' => $clubs,
             'teams' => $teams,
             'visibilityOptions' => $visibilityOptions,
+            'canCreate' => $canCreate,
         ]);
     }
 

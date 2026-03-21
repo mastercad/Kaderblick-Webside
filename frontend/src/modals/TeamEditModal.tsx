@@ -82,7 +82,7 @@ const TeamEditModal: React.FC<TeamEditModalProps> = ({ openTeamEditModal, teamId
         const { name, value, type, checked } = e.target;
         setTeam((prev: any) => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === 'checkbox' ? checked : type === 'number' ? (value === '' ? null : Number(value)) : value
         }));
     };
 
@@ -286,6 +286,45 @@ const TeamEditModal: React.FC<TeamEditModalProps> = ({ openTeamEditModal, teamId
                                         fussball.de-Daten laden
                                     </Button>
                                     {/* TODO: Loading spinner for fussball.de */}
+                                </Box>
+                            </Box>
+
+                            <Box mb={4} pb={2}>
+                                <Typography variant="h6" color="primary" mb={1} display="flex" alignItems="center">
+                                    Spielzeiten-Vorgaben
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" mb={2}>
+                                    Diese Werte werden beim Erstellen neuer Spiele vorausgefüllt. Leer lassen für Standard (45 / 15 Min.).
+                                </Typography>
+                                <Box display="flex" flexWrap="wrap" gap={2}>
+                                    <Box flex={1} minWidth={200}>
+                                        <TextField
+                                            label="Halbzeit-Dauer (Min.)"
+                                            name="defaultHalfDuration"
+                                            type="number"
+                                            value={team?.defaultHalfDuration ?? ''}
+                                            onChange={handleTeamEditChange}
+                                            inputProps={{ min: 1, max: 90, step: 1 }}
+                                            fullWidth
+                                            margin="normal"
+                                            placeholder="45"
+                                            helperText="Standard: 45 Min."
+                                        />
+                                    </Box>
+                                    <Box flex={1} minWidth={200}>
+                                        <TextField
+                                            label="Halbzeit-Pause (Min.)"
+                                            name="defaultHalftimeBreakDuration"
+                                            type="number"
+                                            value={team?.defaultHalftimeBreakDuration ?? ''}
+                                            onChange={handleTeamEditChange}
+                                            inputProps={{ min: 0, max: 60, step: 1 }}
+                                            fullWidth
+                                            margin="normal"
+                                            placeholder="15"
+                                            helperText="Standard: 15 Min."
+                                        />
+                                    </Box>
                                 </Box>
                             </Box>
                         </Box>

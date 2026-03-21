@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
+import { EventDetailsModal } from '../modals/EventDetailsModal';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
 import Box from '@mui/material/Box';
+import Location from '../components/Location';
 import CircularProgress from '@mui/material/CircularProgress';
 import { apiJson } from '../utils/api';
 import { useWidgetRefresh } from '../context/WidgetRefreshContext';
@@ -16,7 +17,13 @@ interface EventType {
   title: string;
   startDate: string;
   endDate?: string;
-  location?: string;
+  location?: {
+    id: number;
+    name: string;
+    latitude?: number;
+    longitude?: number;
+    address?: string;
+  } | string | null;
   calendarEventType?: {
     name?: string;
     color?: string;
@@ -28,6 +35,7 @@ export const UpcomingEventsWidget: React.FC<{ widgetId: string; config?: any }> 
   const [events, setEvents] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
 
   const refreshTrigger = getRefreshTrigger(widgetId);
 
@@ -58,9 +66,15 @@ export const UpcomingEventsWidget: React.FC<{ widgetId: string; config?: any }> 
   }
 
   return (
+    <>
     <List dense disablePadding>
       {events.map(event => (
-        <ListItem key={event.id} alignItems="flex-start" sx={{ borderLeft: `4px solid ${event.calendarEventType?.color || '#1976d2'}`, mb: 1, pl: 1 }}>
+        <ListItem
+          key={event.id}
+          alignItems="flex-start"
+          onClick={() => setSelectedEvent(event)}
+          sx={{ borderLeft: `4px solid ${event.calendarEventType?.color || '#1976d2'}`, mb: 1, pl: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+        >
           <ListItemIcon sx={{ minWidth: 32, color: event.calendarEventType?.color || 'primary.main' }}>
             <CalendarTodayIcon fontSize="small" />
           </ListItemIcon>
@@ -77,16 +91,48 @@ export const UpcomingEventsWidget: React.FC<{ widgetId: string; config?: any }> 
               <Typography variant="caption" color="text.secondary" component="span">
                 {new Date(event.startDate).toLocaleDateString()} {event.endDate ? `${new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(event.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Typography>
-              {event.location && (
-                <Box component="span" sx={{ ml: 2, display: 'inline-flex', alignItems: 'center', fontSize: 12, color: 'text.secondary' }}>
-                  <LocationOnIcon fontSize="inherit" sx={{ mr: 0.5 }} />
-                  {event.location}
-                </Box>
-              )}
+              {event.location && (() => {
+                const loc = typeof event.location === 'string'
+                  ? { id: 0, name: event.location }
+                  : event.location!;
+                return (
+                  <Box component="span" sx={{ ml: 2, display: 'inline-flex', alignItems: 'center', fontSize: 12 }}>
+                    <Location
+                      id={loc.id}
+                      name={loc.name}
+                      latitude={loc.latitude}
+                      longitude={loc.longitude}
+                      address={loc.address}
+                    />
+                  </Box>
+                );
+              })()}
             </>}
           />
         </ListItem>
       ))}
     </List>
+    <EventDetailsModal
+      open={!!selectedEvent}
+      onClose={() => setSelectedEvent(null)}
+      event={selectedEvent ? {
+        id: selectedEvent.id,
+        title: selectedEvent.title,
+        start: selectedEvent.startDate,
+        end: selectedEvent.endDate || selectedEvent.startDate,
+        type: selectedEvent.calendarEventType,
+        location: selectedEvent.location
+          ? typeof selectedEvent.location === 'string'
+            ? { name: selectedEvent.location }
+            : {
+                name: selectedEvent.location.name,
+                latitude: selectedEvent.location.latitude,
+                longitude: selectedEvent.location.longitude,
+                address: selectedEvent.location.address,
+              }
+          : undefined,
+      } : null as any}
+    />
+    </>
   );
 };

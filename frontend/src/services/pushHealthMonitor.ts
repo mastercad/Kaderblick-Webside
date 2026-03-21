@@ -295,8 +295,12 @@ class PushHealthMonitor {
       const hasSW = 'serviceWorker' in navigator;
 
       diag.push(`Browser: ${navigator.userAgent.substring(0, 120)}`);
+      diag.push(`URL: ${location.origin}`);
       diag.push(`HTTPS: ${isSecure}, Notification: ${hasNotification}, PushManager: ${hasPushManager}, SW: ${hasSW}`);
 
+      if (!isSecure) {
+        return { success: false, error: `Push-Benachrichtigungen erfordern HTTPS (oder localhost). Aktuelle URL: ${location.origin}\n\nDiagnose:\n${diag.join('\n')}` };
+      }
       if (!hasNotification) {
         return { success: false, error: `Notification API fehlt.\n\nDiagnose:\n${diag.join('\n')}` };
       }
@@ -318,41 +322,126 @@ class PushHealthMonitor {
         return { success: false, error: `Berechtigung nicht erteilt (${permission}).\n\nDiagnose:\n${diag.join('\n')}` };
       }
 
-      const registration = await navigator.serviceWorker.ready;
-      diag.push(`SW aktiv: ${!!registration.active}, Scope: ${registration.scope}`);
+      // Service Worker Registration holen — mit Timeout
+      diag.push('Warte auf Service Worker ready...');
+      let registration: ServiceWorkerRegistration;
+      try {
+        registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Service Worker ready timeout (10s)')), 10_000)),
+        ]);
+      } catch (swErr: any) {
+        diag.push(`SW ready Fehler: ${swErr?.message || swErr}`);
+        return { success: false, error: `Service Worker nicht bereit: ${swErr?.message || swErr}\n\nDiagnose:\n${diag.join('\n')}` };
+      }
+
+      const swState = registration.active?.state ?? 'kein active worker';
+      const swUrl = registration.active?.scriptURL ?? 'unbekannt';
+      diag.push(`SW aktiv: ${!!registration.active}, State: ${swState}, Scope: ${registration.scope}`);
+      diag.push(`SW URL: ${swUrl}`);
 
       if (!registration.pushManager) {
         return { success: false, error: `PushManager im Service Worker nicht verfügbar.\n\nDiagnose:\n${diag.join('\n')}` };
       }
 
+      // Bestehende Subscription prüfen und ggf. entfernen
       const existingSub = await registration.pushManager.getSubscription();
-      diag.push(`Bestehende Subscription: ${existingSub ? 'ja' : 'nein'}`);
+      diag.push(`Bestehende Subscription: ${existingSub ? 'ja (' + existingSub.endpoint.substring(0, 40) + '...)' : 'nein'}`);
 
-      const vapidResponse = await apiJson('/api/push/vapid-key');
-      const vapidKey = vapidResponse.key;
-      if (!vapidKey) {
-        return { success: false, error: `VAPID Key vom Server ist leer.\n\nDiagnose:\n${diag.join('\n')}` };
+      if (existingSub) {
+        try {
+          await existingSub.unsubscribe();
+          diag.push('Alte Subscription entfernt');
+        } catch (unsubErr: any) {
+          diag.push(`Alte Subscription entfernen fehlgeschlagen: ${unsubErr?.message || unsubErr}`);
+        }
       }
-      diag.push(`VAPID Key: ${vapidKey.substring(0, 10)}...`);
 
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(vapidKey),
-      });
+      // VAPID Key vom Server holen
+      let vapidKey: string;
+      try {
+        const vapidResponse = await apiJson('/api/push/vapid-key');
+        vapidKey = vapidResponse.key;
+        if (!vapidKey) {
+          return { success: false, error: `VAPID Key vom Server ist leer. Server-Antwort: ${JSON.stringify(vapidResponse)}\n\nDiagnose:\n${diag.join('\n')}` };
+        }
+        diag.push(`VAPID Key: ${vapidKey.substring(0, 15)}... (Länge: ${vapidKey.length})`);
+      } catch (vapidErr: any) {
+        diag.push(`VAPID Key Abruf fehlgeschlagen: ${vapidErr?.message || vapidErr}`);
+        return { success: false, error: `VAPID Key konnte nicht vom Server geladen werden: ${vapidErr?.message || vapidErr}\n\nDiagnose:\n${diag.join('\n')}` };
+      }
+
+      // applicationServerKey konvertieren
+      let applicationServerKey: Uint8Array<ArrayBuffer>;
+      try {
+        applicationServerKey = this.urlBase64ToUint8Array(vapidKey);
+        diag.push(`applicationServerKey: ${applicationServerKey.length} Bytes`);
+      } catch (convErr: any) {
+        diag.push(`VAPID Key Konvertierung fehlgeschlagen: ${convErr?.message || convErr}`);
+        return { success: false, error: `VAPID Key Konvertierung fehlgeschlagen: ${convErr?.message || convErr}\n\nDiagnose:\n${diag.join('\n')}` };
+      }
+
+      // Push Subscription erstellen — mit Retry-Logic
+      let subscription: PushSubscription | null = null;
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        diag.push(`Subscribe Versuch ${attempt}/${maxRetries}...`);
+        try {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
+
+          if (subscription) {
+            diag.push(`Subscribe Versuch ${attempt} erfolgreich`);
+            break;
+          } else {
+            diag.push(`Subscribe Versuch ${attempt}: gab null zurück`);
+          }
+        } catch (subErr: any) {
+          diag.push(`Subscribe Versuch ${attempt} Fehler: ${subErr?.message || subErr}`);
+
+          if (attempt === maxRetries) {
+            return { success: false, error: `Push-Subscribe fehlgeschlagen nach ${maxRetries} Versuchen.\nLetzter Fehler: ${subErr?.message || subErr}\n\nDiagnose:\n${diag.join('\n')}` };
+          }
+
+          // Warte vor nächstem Versuch
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+
+      if (!subscription) {
+        return { success: false, error: `Push-Subscribe gab nach ${maxRetries} Versuchen null zurück — der Browser konnte keine Subscription erstellen.\n\nDiagnose:\n${diag.join('\n')}` };
+      }
       diag.push(`Endpoint: ${subscription.endpoint.substring(0, 60)}...`);
 
-      await apiJson('/api/push/subscribe', {
-        method: 'POST',
-        body: { subscription: subscription.toJSON() },
-      });
-      diag.push('Backend: Subscription gespeichert');
+      // Subscription ans Backend senden
+      try {
+        await apiJson('/api/push/subscribe', {
+          method: 'POST',
+          body: { subscription: subscription.toJSON() },
+        });
+        diag.push('Backend: Subscription gespeichert');
+      } catch (backendErr: any) {
+        // "Already subscribed" ist kein echter Fehler
+        if (backendErr?.message?.includes('Already subscribed')) {
+          diag.push('Backend: Subscription existiert bereits (OK)');
+        } else {
+          diag.push(`Backend Fehler: ${backendErr?.message || backendErr}`);
+          return { success: false, error: `Subscription konnte nicht am Server registriert werden: ${backendErr?.message || backendErr}\n\nDiagnose:\n${diag.join('\n')}` };
+        }
+      }
 
       await this.check();
       return { success: true };
     } catch (err: any) {
       console.error('Failed to enable push:', err);
       const msg = err?.message || String(err);
-      diag.push(`Fehler: ${msg}`);
+      diag.push(`Unerwarteter Fehler: ${msg}`);
+      if (err?.stack) {
+        diag.push(`Stack: ${err.stack.substring(0, 300)}`);
+      }
       return { success: false, error: `${msg}\n\nDiagnose:\n${diag.join('\n')}` };
     }
   }

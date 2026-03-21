@@ -87,3 +87,37 @@ export async function apiJson<T = any>(endpoint: string, options: ApiRequestOpti
   }
   return data as T;
 }
+
+/**
+ * Gives a user-friendly German error message for an API error.
+ * Maps HTTP status codes to clean messages; falls back to the server message.
+ */
+export function getApiErrorMessage(error: unknown, fallback = 'Ein unbekannter Fehler ist aufgetreten.'): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) return 'Sie haben keine Berechtigung für diese Aktion.';
+    if (error.status === 404) return 'Der Eintrag wurde nicht gefunden.';
+    if (error.status !== undefined && error.status >= 500) return 'Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
+    return error.message || fallback;
+  }
+  if (error instanceof Error) return error.message || fallback;
+  return fallback;
+}
+
+/**
+ * API-Funktion die eine Blob-Antwort (z.B. PDF) zurückgibt.
+ * Wirft ApiError bei HTTP-Fehlern.
+ */
+export async function apiBlob(endpoint: string, options: ApiRequestOptions = {}): Promise<Blob> {
+  const response = await apiRequest(endpoint, options);
+  if (!response.ok) {
+    let msg = `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      msg = data?.error || data?.message || msg;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(msg, response.status);
+  }
+  return response.blob();
+}

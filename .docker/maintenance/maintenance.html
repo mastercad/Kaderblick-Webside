@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Kaderblick – Wird aktualisiert</title>
+    <style>
+      @font-face {
+        font-family: 'ImpactWeb';
+        src: url('/fonts/ImpactLTStd.woff2') format('woff2');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .page {
+        position: fixed;
+        inset: 0;
+        background-image: url('/background.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-end;
+        padding-right: 7%;
+      }
+
+      /* Leichtes Overlay damit Text besser lesbar bleibt */
+      .page::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.25);
+      }
+
+      .content {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        text-align: right;
+        font-family: 'ImpactWeb', 'Anton', Impact, 'Arial Black', sans-serif;
+      }
+
+      .title {
+        font-size: clamp(4rem, 12vw, 12rem);
+        color: #fff;
+        white-space: nowrap;
+        line-height: 0.9;
+      }
+
+      .title-highlight { color: #018606; }
+
+      .subtitle {
+        font-size: clamp(2rem, 6.08vw, 6.08rem);
+        color: #fff;
+        white-space: nowrap;
+        line-height: 0.9;
+        margin-top: 0;
+      }
+
+      .message {
+        margin-top: 2.5rem;
+        color: rgba(255, 255, 255, 0.85);
+        font-family: 'Inter', 'Roboto', sans-serif;
+        font-size: clamp(0.85rem, 1.8vw, 1.1rem);
+        font-weight: 400;
+        letter-spacing: 0.5px;
+        text-align: right;
+        max-width: 420px;
+        line-height: 1.6;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+      }
+
+      .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #018606;
+        margin-right: 8px;
+        vertical-align: middle;
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%       { opacity: 0.4; transform: scale(0.7); }
+      }
+
+      /* Tablet */
+      @media (max-width: 1200px) {
+        .title   { font-size: clamp(3rem, 9vw, 9rem); }
+        .subtitle { font-size: clamp(1.5rem, 4.5vw, 5.5rem); }
+      }
+
+      /* Mobile */
+      @media (max-width: 600px) {
+        .page {
+          justify-content: center;
+          align-items: center;
+          padding: 0;
+        }
+        .content {
+          align-items: center;
+          text-align: center;
+          width: 80%;
+        }
+        .title {
+          font-size: clamp(3rem, 16vw, 6rem);
+          white-space: normal;
+          word-wrap: break-word;
+        }
+        .subtitle {
+          font-size: clamp(1.5rem, 8vw, 3rem);
+          white-space: normal;
+          word-wrap: break-word;
+        }
+        .message {
+          text-align: center;
+          max-width: 90%;
+        }
+      }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="page">
+      <div class="content">
+        <span class="title">
+          <span class="title-highlight">K</span>ADERBLICK
+        </span>
+        <span class="subtitle">WIRD AKTUALISIERT</span>
+        <p class="message">
+          <span class="dot"></span>
+          Wir spielen kurz in der Kabine – gleich wieder da.
+        </p>
+      </div>
+    </div>
+  <script>
+    function equalizeWidths() {
+      const title    = document.querySelector('.title');
+      const subtitle = document.querySelector('.subtitle');
+
+      // Reset any previous inline override so we measure the natural size
+      subtitle.style.fontSize = '';
+
+      // Only equalize when text is on one line (nowrap mode)
+      if (getComputedStyle(title).whiteSpace !== 'nowrap') return;
+
+      const titleWidth    = title.getBoundingClientRect().width;
+      const subtitleWidth = subtitle.getBoundingClientRect().width;
+      if (!subtitleWidth) return;
+
+      const natural = parseFloat(getComputedStyle(subtitle).fontSize);
+      subtitle.style.fontSize = (natural * titleWidth / subtitleWidth) + 'px';
+    }
+
+    window.addEventListener('load',   equalizeWidths);
+    window.addEventListener('resize', equalizeWidths);
+  </script>
+  </body>
+</html>

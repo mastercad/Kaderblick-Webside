@@ -33,19 +33,29 @@ class VideoTimelineService
 
         $startTimestamp = $game->getCalendarEvent()?->getStartDate()?->getTimestamp();
 
+        // Halbzeitpausen-Korrektur:
+        // GameEvent-Timestamps sind absolute Echtzeit-Datetimes.
+        // Die Video-Timeline hingegen setzt Videos nahtlos hintereinander – sie enthält
+        // keine Halbzeitpause. Deshalb muss für Ereignisse in der 2. Halbzeit (und später)
+        // die Pausendauer von eventSeconds abgezogen werden, damit der berechnete
+        // Video-Zeitpunkt stimmt.
+        $firstHalfEndSeconds = $game->getFirstHalfTotalSeconds();
+        $breakSeconds = $game->getHalftimeBreakDuration() * 60;
+
         foreach ($gameEvents as $event) {
-            // Event-Zeit relativ zum Spielstart (in Sekunden)
-            $eventSeconds = ($event->getTimestamp()->getTimestamp() - $startTimestamp);
+            // Event-Zeit relativ zum Spielstart (in Sekunden, Echtzeit)
+            $eventSecondsRealTime = ($event->getTimestamp()->getTimestamp() - $startTimestamp);
+
+            // Korrektur um Halbzeitpause für Ereignisse nach der 1. Halbzeit
+            $eventSeconds = $eventSecondsRealTime > $firstHalfEndSeconds
+                ? $eventSecondsRealTime - $breakSeconds
+                : $eventSecondsRealTime;
 
             foreach ($videos as $cameraId => $currentVideos) {
                 // Verfolge die akkumulierte Spielzeit über alle Videos dieser Kamera
                 $accumulatedGameTime = 0;
 
                 foreach ($currentVideos as $videoTimelineStart => $video) {
-                    if (!$this->security->isGranted(VideoVoter::VIEW, $video)) {
-                        continue;
-                    }
-
                     $gameStart = $video->getGameStart() ?? 0;
                     $videoLength = $video->getLength();
 
@@ -56,8 +66,11 @@ class VideoTimelineService
                     $gameTimeStart = $accumulatedGameTime;
                     $gameTimeEnd = $accumulatedGameTime + $gameTimeInThisVideo;
 
-                    // Prüfe ob Event in diesem Video liegt
-                    if ($eventSeconds >= $gameTimeStart && $eventSeconds <= $gameTimeEnd) {
+                    // Prüfe ob Event in diesem Video liegt – nur wenn Berechtigung vorhanden
+                    if (
+                        $this->security->isGranted(VideoVoter::VIEW, $video)
+                        && $eventSeconds >= $gameTimeStart && $eventSeconds <= $gameTimeEnd
+                    ) {
                         // Wie viele Sekunden nach gameTimeStart ist das Event?
                         $secondsIntoGameTimeOfThisVideo = $eventSeconds - $gameTimeStart;
 
@@ -95,7 +108,11 @@ class VideoTimelineService
         $cameras = [];
 
         foreach ($videosEntries as $videoEntry) {
-            $cameras[(int) $videoEntry->getCamera()->getId()][(int) $videoEntry->getSort()] = $videoEntry;
+            $camera = $videoEntry->getCamera();
+            if (!$camera) {
+                continue;
+            }
+            $cameras[(int) $camera->getId()][(int) $videoEntry->getSort()] = $videoEntry;
         }
 
         foreach ($cameras as $cameraId => $currentVideos) {

@@ -2,13 +2,20 @@
 
 namespace App\Controller;
 
+use App\Entity\RegistrationRequest;
 use App\Entity\User;
-use App\Entity\UserRelation;
+use App\Event\ProfileCompletenessReachedEvent;
+use App\Event\ProfileUpdatedEvent;
+use App\Service\CoachTeamPlayerService;
 use App\Service\EmailVerificationService;
+use App\Service\SystemSettingService;
 use App\Service\UserTitleService;
+use DateTime;
+use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -23,6 +30,9 @@ class ProfileController extends AbstractController
         private UserPasswordHasherInterface $passwordHasher,
         private ValidatorInterface $validator,
         private EmailVerificationService $emailVerificationService,
+        private CoachTeamPlayerService $coachTeamPlayerService,
+        private SystemSettingService $systemSettingService,
+        private EventDispatcherInterface $dispatcher,
     ) {
     }
 
@@ -32,23 +42,20 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
-        $isCoach = false;
-        $isPlayer = false;
-        /** @var UserRelation $userRelation */
-        foreach ($user->getUserRelations() as $userRelation) {
-            if ('coach' === $userRelation->getRelationType()->getCategory()) {
-                $isCoach = true;
-            } elseif ('player' === $userRelation->getRelationType()->getCategory()) {
-                $isPlayer = true;
-            }
-            if ($isCoach && $isPlayer) {
-                break;
-            }
-        }
+        $isPlayer = count($this->coachTeamPlayerService->collectPlayerTeams($user)) > 0;
+        $isCoach = count($this->coachTeamPlayerService->collectCoachTeams($user)) > 0;
+
+        $hasUserRelations = $user->getUserRelations()->count() > 0;
+        $hasRegistrationRequests = $this->entityManager->getRepository(RegistrationRequest::class)
+            ->count(['user' => $user]) > 0;
+        $featureEnabled = $this->systemSettingService->isRegistrationContextEnabled();
+        $userRoles = $user->getRoles();
+        $isAdminOrAbove = in_array('ROLE_ADMIN', $userRoles, true) || in_array('ROLE_SUPERADMIN', $userRoles, true);
+        $needsRegistrationContext = $featureEnabled && !$isAdminOrAbove && !$hasUserRelations && !$hasRegistrationRequests;
 
         $titleData = $userTitleService->retrieveTitleDataForUser($user);
         $levelData = $user->getUserLevel() ? [
@@ -66,12 +73,17 @@ class ProfileController extends AbstractController
             'shoeSize' => $user->getShoeSize(),
             'shirtSize' => $user->getShirtSize(),
             'pantsSize' => $user->getPantsSize(),
+            'socksSize' => $user->getSocksSize(),
+            'jacketSize' => $user->getJacketSize(),
             'roles' => $user->getRoles(),
             'isCoach' => $isCoach,
             'isPlayer' => $isPlayer,
             'avatarFile' => $user->getAvatarFilename(),
+            'googleAvatarUrl' => $user->getGoogleAvatarUrl(),
+            'useGoogleAvatar' => $user->isUseGoogleAvatar(),
             'title' => $titleData,
-            'level' => $levelData
+            'level' => $levelData,
+            'needsRegistrationContext' => $needsRegistrationContext
         ]);
     }
 
@@ -81,7 +93,7 @@ class ProfileController extends AbstractController
         /** @var ?User $user */
         $user = $this->getUser();
 
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -123,6 +135,17 @@ class ProfileController extends AbstractController
         if (isset($data['pantsSize'])) {
             $user->setPantsSize($data['pantsSize']);
         }
+        if (isset($data['socksSize'])) {
+            $user->setSocksSize($data['socksSize']);
+        }
+        if (isset($data['jacketSize'])) {
+            $user->setJacketSize($data['jacketSize']);
+        }
+
+        // Handle Google avatar toggle
+        if (array_key_exists('useGoogleAvatar', $data)) {
+            $user->setUseGoogleAvatar((bool) $data['useGoogleAvatar']);
+        }
 
         // Handle password change
         if (!empty($data['password'])) {
@@ -143,6 +166,15 @@ class ProfileController extends AbstractController
 
         // Save changes
         $this->entityManager->flush();
+
+        // Dispatch XP events
+        $this->dispatcher->dispatch(new ProfileUpdatedEvent($user));
+        $completeness = $this->calculateProfileCompleteness($user);
+        foreach ([25, 50, 75, 100] as $milestone) {
+            if ($completeness >= $milestone) {
+                $this->dispatcher->dispatch(new ProfileCompletenessReachedEvent($user, $milestone));
+            }
+        }
 
         // Send verification email if email changed
         if ($emailChanged) {
@@ -179,12 +211,30 @@ class ProfileController extends AbstractController
         }
     }
 
+    private function calculateProfileCompleteness(User $user): int
+    {
+        $fields = [
+            'firstName' => null !== $user->getFirstName() && '' !== $user->getFirstName(),
+            'lastName' => null !== $user->getLastName() && '' !== $user->getLastName(),
+            'email' => null !== $user->getEmail() && '' !== $user->getEmail(),
+            'avatar' => null !== $user->getAvatarFilename(),
+            'height' => null !== $user->getHeight(),
+            'weight' => null !== $user->getWeight(),
+            'shoeSize' => null !== $user->getShoeSize(),
+            'shirtSize' => null !== $user->getShirtSize(),
+            'pantsSize' => null !== $user->getPantsSize(),
+            'hasUserRelations' => $user->getUserRelations()->count() > 0,
+        ];
+
+        return (int) round((count(array_filter($fields)) / count($fields)) * 100);
+    }
+
     #[Route('/xp-breakdown', name: 'api_xp_breakdown', methods: ['GET'])]
     public function getXpBreakdown(UserTitleService $userTitleService): JsonResponse
     {
         /** @var ?User $user */
         $user = $this->getUser();
-        if (!($user instanceof User)) {
+        if (!$user instanceof User) {
             return $this->json(['message' => 'Not logged in'], 401);
         }
 
@@ -294,5 +344,63 @@ class ProfileController extends AbstractController
             'titles' => $titlesWithPlayers,
             'users' => $users,
         ]);
+    }
+
+    #[Route('/profile/api-token', name: 'api_profile_api_token_get', methods: ['GET'])]
+    public function getApiToken(): JsonResponse
+    {
+        /** @var ?User $user */
+        $user = $this->getUser();
+
+        if (!$user instanceof User) {
+            return $this->json(['message' => 'Not logged in'], 401);
+        }
+
+        $createdAt = $user->getApiTokenCreatedAt();
+
+        return $this->json([
+            'hasToken' => null !== $user->getApiToken(),
+            'createdAt' => $createdAt?->format(DateTimeInterface::ATOM),
+        ]);
+    }
+
+    #[Route('/profile/api-token', name: 'api_profile_api_token_generate', methods: ['POST'])]
+    public function generateApiToken(): JsonResponse
+    {
+        /** @var ?User $user */
+        $user = $this->getUser();
+
+        if (!$user instanceof User) {
+            return $this->json(['message' => 'Not logged in'], 401);
+        }
+
+        $token = 'kbak_' . bin2hex(random_bytes(24));
+        $now = new DateTime();
+
+        $user->setApiToken($token);
+        $user->setApiTokenCreatedAt($now);
+        $this->entityManager->flush();
+
+        return $this->json([
+            'token' => $token,
+            'createdAt' => $now->format(DateTimeInterface::ATOM),
+        ]);
+    }
+
+    #[Route('/profile/api-token', name: 'api_profile_api_token_revoke', methods: ['DELETE'])]
+    public function revokeApiToken(): JsonResponse
+    {
+        /** @var ?User $user */
+        $user = $this->getUser();
+
+        if (!$user instanceof User) {
+            return $this->json(['message' => 'Not logged in'], 401);
+        }
+
+        $user->setApiToken(null);
+        $user->setApiTokenCreatedAt(null);
+        $this->entityManager->flush();
+
+        return $this->json(['success' => true]);
     }
 }

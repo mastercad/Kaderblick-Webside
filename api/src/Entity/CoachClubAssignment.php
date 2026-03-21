@@ -74,7 +74,7 @@ class CoachClubAssignment
         return $this;
     }
 
-    public function getStartDate(): DateTimeInterface
+    public function getStartDate(): ?DateTimeInterface
     {
         return $this->startDate;
     }

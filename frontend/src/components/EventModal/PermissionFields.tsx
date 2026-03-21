@@ -1,10 +1,12 @@
 import React from 'react';
+import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { EventData, SelectOption, User } from '../../types/event';
 
 interface PermissionFieldsProps {
@@ -36,7 +38,7 @@ const PermissionFieldsComponent: React.FC<PermissionFieldsProps> = ({
           onChange={e => handleChange('permissionType', e.target.value as string)}
         >
           <MenuItem value="public">Öffentlich</MenuItem>
-          <MenuItem value="club">Spezifische Clubs</MenuItem>
+          <MenuItem value="club">Spezifische Vereine</MenuItem>
           <MenuItem value="team">Spezifische Teams</MenuItem>
           <MenuItem value="user">Spezifische Nutzer</MenuItem>
         </Select>
@@ -62,16 +64,16 @@ const PermissionFieldsComponent: React.FC<PermissionFieldsProps> = ({
       {formData.permissionType === 'club' && (
         <Autocomplete
           multiple
-          options={teams.map(t => ({ value: t.value, label: `Club ${t.label}` }))}
+          options={teams.map(t => ({ value: t.value, label: `Verein ${t.label}` }))}
           getOptionLabel={(option) => option.label}
           value={teams
             .filter(t => formData.permissionClubs?.includes(t.value))
-            .map(t => ({ value: t.value, label: `Club ${t.label}` }))}
+            .map(t => ({ value: t.value, label: `Verein ${t.label}` }))}
           onChange={(_, newValue) => handleChange('permissionClubs', newValue.map(c => c.value))}
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Clubs auswählen"
+              label="Vereine auswählen"
               margin="normal"
             />
           )}
@@ -83,10 +85,24 @@ const PermissionFieldsComponent: React.FC<PermissionFieldsProps> = ({
           multiple
           options={users}
           getOptionLabel={(option) =>
-            option.fullName || `${option.firstName} ${option.lastName}` || String(option.id)
+            option.context
+              ? `${option.fullName || `${option.firstName} ${option.lastName}`} (${option.context})`
+              : option.fullName || `${option.firstName} ${option.lastName}` || String(option.id)
           }
           value={users.filter(u => formData.permissionUsers?.includes(String(u.id)))}
           onChange={(_, newValue) => handleChange('permissionUsers', newValue.map(u => String(u.id)))}
+          renderOption={(props, option) => (
+            <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box>
+                <Typography variant="body2">
+                  {option.fullName || `${option.firstName} ${option.lastName}`}
+                </Typography>
+                {option.context && (
+                  <Typography variant="caption" color="text.secondary">{option.context}</Typography>
+                )}
+              </Box>
+            </Box>
+          )}
           renderInput={(params) => (
             <TextField
               {...params}

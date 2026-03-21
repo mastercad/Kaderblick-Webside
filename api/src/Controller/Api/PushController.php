@@ -247,4 +247,56 @@ class PushController extends AbstractController
             ], 500);
         }
     }
+
+    /**
+     * Get push notification preferences for the current user.
+     *
+     * Returns a map of category => enabled (bool). Missing entries default to true.
+     */
+    #[Route('/preferences', name: 'preferences_get', methods: ['GET'])]
+    public function getPreferences(): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        return $this->json([
+            'preferences' => $user->getNotificationPreferences() ?? [],
+        ]);
+    }
+
+    /**
+     * Save push notification preferences for the current user.
+     *
+     * Expects JSON body: { "preferences": { "news": true, "message": false, ... } }
+     */
+    #[Route('/preferences', name: 'preferences_put', methods: ['PUT'])]
+    public function savePreferences(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $data = json_decode($request->getContent(), true);
+        if (!isset($data['preferences']) || !is_array($data['preferences'])) {
+            return $this->json(['error' => 'Invalid data'], 400);
+        }
+
+        // Only allow known category keys, cast values to bool
+        $allowed = [
+            'news', 'message', 'participation', 'event_cancelled',
+            'event_reactivated', 'team_ride', 'team_ride_booking',
+            'feedback', 'survey', 'system',
+        ];
+
+        $sanitised = [];
+        foreach ($allowed as $key) {
+            if (array_key_exists($key, $data['preferences'])) {
+                $sanitised[$key] = (bool) $data['preferences'][$key];
+            }
+        }
+
+        $user->setNotificationPreferences($sanitised);
+        $this->entityManager->flush();
+
+        return $this->json(['success' => true, 'preferences' => $sanitised]);
+    }
 }

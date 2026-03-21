@@ -42,18 +42,20 @@
         const sendMessage = () => {
           try {
             // Methode 1: window.opener (Standard-Popup)
+            // '*' als targetOrigin, da Frontend und Backend unterschiedliche Origins haben können.
+            // Die Validierung erfolgt auf Frontend-Seite über das 'source: google-auth' Flag.
             if (window.opener && !window.opener.closed) {
-              window.opener.postMessage(message, window.location.origin);
+              window.opener.postMessage(message, '*');
             }
             
             // Methode 2: parent window (für iframes oder eingebettete Fenster)
             if (window.parent && window.parent !== window) {
-              window.parent.postMessage(message, window.location.origin);
+              window.parent.postMessage(message, '*');
             }
             
             // Methode 3: top window (für verschachtelte iframes)
             if (window.top && window.top !== window) {
-              window.top.postMessage(message, window.location.origin);
+              window.top.postMessage(message, '*');
             }
           } catch (e) {
             console.error('Error sending message:', e);

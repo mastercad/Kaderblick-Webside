@@ -1,11 +1,28 @@
 name: Quality Assurance
 
 on:
-#  push:
-#    branches:
-#      - '**'
-  pull_request:
   workflow_call:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test (muss in GHCR vorhanden sein).'
+        type: string
+        required: true
+      is_pull_request:
+        description: 'true wenn aus einem PR aufgerufen (aktiviert PR-Kommentare)'
+        type: boolean
+        default: false
+      is_main_push:
+        description: 'true wenn aus Push auf main aufgerufen (aktiviert Badge-Updates)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,7 +41,7 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,11 +59,42 @@ jobs:
       - name: ESLint
         run: npm run lint
 
-      - name: Jest tests
-        run: npm test -- --passWithNoTests --ci --forceExit
+      - name: Jest tests with coverage
+        run: npm test -- --passWithNoTests --ci --forceExit --coverage --coverageReporters=json-summary --coverageReporters=text
 
       - name: Build verification
         run: npm run build
+
+      - name: Jest Coverage Comment
+        id: frontend-coverage
+        if: inputs.is_pull_request
+        uses: MishaKav/jest-coverage-comment@v1
+        with:
+          coverage-summary-path: frontend/coverage/coverage-summary.json
+          title: "🎨 Frontend Test Coverage"
+
+      - name: Extract frontend coverage percentage
+        id: frontend-pct
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            PCT=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.statements.pct)")
+            echo "coverage=$PCT" >> $GITHUB_OUTPUT
+          else
+            echo "coverage=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Frontend Coverage Badge
+        if: inputs.is_main_push
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ secrets.COVERAGE_GIST_ID }}
+          filename: frontend-coverage.json
+          label: Frontend Coverage
+          message: "${{ steps.frontend-pct.outputs.coverage }}%"
+          valColorRange: ${{ steps.frontend-pct.outputs.coverage }}
+          minColorRange: 0
+          maxColorRange: 100
 
   # ============================================================
   #  Backend Quality Assurance
@@ -56,10 +104,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Cache Composer vendors
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: vendor
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
@@ -129,9 +177,10 @@ jobs:
             FLUSH PRIVILEGES;
           "
           
-          docker compose up -d --build --force-recreate api frontend
-
-          docker compose exec -T api composer install
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u mastercad --password-stdin
+          docker pull ghcr.io/mastercad/kaderblick/api:test-${{ inputs.image_tag }}
+          docker pull ghcr.io/mastercad/kaderblick/frontend-prod:${{ inputs.image_tag }}
+          API_IMAGE_TAG=test-${{ inputs.image_tag }} IMAGE_TAG=${{ inputs.image_tag }} docker compose up -d --no-build --force-recreate api frontend
 
           mkdir -p api/config/secrets/test
           # echo "<?php return \"${{ secrets.DEV_DECRYPT_KEY }}\"; ?>" > api/config/secrets/test/test.decrypt.private.php
@@ -140,6 +189,11 @@ jobs:
 
           echo "Decrypt secrets"
           docker compose exec -T api bin/console secrets:decrypt-to-local --env=test --force
+
+          # SMTP ist von GitHub Actions nicht erreichbar – MAILER_DSN nach dem Decrypt überschreiben.
+          # secrets:decrypt-to-local schreibt in .env.test.local (höhere Priorität als .env).
+          docker compose exec -T api sh -c \
+            'sed -i "s|^MAILER_DSN=.*|MAILER_DSN=null://null|" /var/www/symfony/.env.test.local 2>/dev/null || true; echo "MAILER_DSN=null://null" >> /var/www/symfony/.env.test.local'
 
           mkdir -p "api/config/jwt"
 
@@ -160,5 +214,48 @@ jobs:
       - name: run PHPStan
         run: docker compose exec -T api ./vendor/bin/phpstan analyse
 
-      - name: run PHPUnit
-        run: docker compose exec -T api ./vendor/bin/phpunit
+      - name: run PHPUnit with coverage
+        id: phpunit-coverage
+        run: |
+          set -o pipefail
+          docker compose exec -T -e XDEBUG_MODE=coverage api ./vendor/bin/phpunit \
+            --coverage-cobertura var/coverage-cobertura.xml \
+            --coverage-text 2>&1 | tee phpunit-output.txt
+
+          # Extract line coverage percentage
+          COVERAGE=$(grep "Lines:" phpunit-output.txt | head -1 | awk '{print $2}' | tr -d '%')
+          echo "coverage=${COVERAGE:-0}" >> $GITHUB_OUTPUT
+
+          # Coverage-Datei aus Container auf den Runner kopieren
+          mkdir -p api/var
+          docker compose cp api:/var/www/symfony/var/coverage-cobertura.xml api/var/coverage-cobertura.xml
+
+      - name: Generate Backend Coverage Report
+        if: inputs.is_pull_request
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: api/var/coverage-cobertura.xml
+          badge: true
+          format: markdown
+          output: both
+          thresholds: '40 70'
+
+      - name: Add Backend Coverage PR Comment
+        if: inputs.is_pull_request
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: backend-coverage
+          path: code-coverage-results.md
+
+      - name: Update Backend Coverage Badge
+        if: inputs.is_main_push
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ secrets.COVERAGE_GIST_ID }}
+          filename: backend-coverage.json
+          label: Backend Coverage
+          message: "${{ steps.phpunit-coverage.outputs.coverage }}%"
+          valColorRange: ${{ steps.phpunit-coverage.outputs.coverage }}
+          minColorRange: 0
+          maxColorRange: 100

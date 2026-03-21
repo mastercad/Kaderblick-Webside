@@ -39,13 +39,7 @@ class TaskRotationIntegrationTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
-        if (!$ageGroup) {
-            $ageGroup = new AgeGroup();
-            $ageGroup->setName('U19');
-            $entityManager->persist($ageGroup);
-            $entityManager->flush();
-        }
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
 
         $team = new Team();
         $team->setName('Test Team 1');
@@ -126,7 +120,7 @@ class TaskRotationIntegrationTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
 
         $team = new Team();
         $team->setName('Test Team 2');
@@ -197,7 +191,7 @@ class TaskRotationIntegrationTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
 
         $team = new Team();
         $team->setName('Test Team 3');
@@ -267,7 +261,7 @@ class TaskRotationIntegrationTest extends WebTestCase
         $this->cleanup($entityManager);
         $adminUser = $this->createAdminUser($entityManager);
 
-        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        $ageGroup = $this->getOrCreateAgeGroup($entityManager);
 
         $team1 = new Team();
         $team1->setName('Test Team User');
@@ -319,17 +313,20 @@ class TaskRotationIntegrationTest extends WebTestCase
         try {
             $connection->executeStatement('SET FOREIGN_KEY_CHECKS=0');
 
-            $connection->executeStatement('DELETE FROM task_assignment WHERE 1=1');
+            // Task-bezogene Daten (nur Test-Tasks)
+            $connection->executeStatement("DELETE FROM task_assignment WHERE task_id IN (SELECT id FROM task WHERE title LIKE 'Test Task%')");
             $connection->executeStatement("DELETE FROM calendar_events WHERE title LIKE 'Test Task%'");
-            $connection->executeStatement('DELETE FROM task_rotation_users WHERE 1=1');
+            $connection->executeStatement("DELETE FROM task_rotation_users WHERE task_id IN (SELECT id FROM task WHERE title LIKE 'Test Task%')");
             $connection->executeStatement("DELETE FROM task WHERE title LIKE 'Test Task%'");
-            $connection->executeStatement('DELETE FROM games WHERE 1=1');
+
+            // Spiele nur für Test-Teams
+            $connection->executeStatement("DELETE FROM games WHERE home_team_id IN (SELECT id FROM teams WHERE name LIKE 'Test Team%')");
             $connection->executeStatement("DELETE FROM calendar_events WHERE title LIKE 'Test Game%'");
-            $connection->executeStatement('DELETE FROM user_relation WHERE 1=1');
-            $connection->executeStatement('DELETE FROM coach_team_assignments WHERE 1=1');
-            $connection->executeStatement('DELETE FROM player_team_assignments WHERE 1=1');
-            $connection->executeStatement('DELETE FROM coaches WHERE 1=1');
-            $connection->executeStatement('DELETE FROM players WHERE 1=1');
+
+            // Relationen/Spieler nur für Test-User
+            $connection->executeStatement("DELETE FROM user_relation WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test-task-%')");
+            $connection->executeStatement("DELETE FROM player_team_assignments WHERE player_id IN (SELECT id FROM players WHERE email LIKE 'test-task-%')");
+            $connection->executeStatement("DELETE FROM players WHERE email LIKE 'test-task-%'");
             $connection->executeStatement("DELETE FROM users WHERE email LIKE 'test-task-%'");
             $connection->executeStatement("DELETE FROM teams WHERE name LIKE 'Test Team%'");
 
@@ -450,6 +447,24 @@ class TaskRotationIntegrationTest extends WebTestCase
         $entityManager->persist($gameType);
 
         return $gameType;
+    }
+
+    private function getOrCreateAgeGroup(EntityManagerInterface $entityManager): AgeGroup
+    {
+        $ageGroup = $entityManager->getRepository(AgeGroup::class)->findOneBy([]);
+        if (!$ageGroup) {
+            $ageGroup = new AgeGroup();
+            $ageGroup->setCode('A_JUNIOREN_TEST');
+            $ageGroup->setName('A-Junioren (Test)');
+            $ageGroup->setEnglishName('U19');
+            $ageGroup->setMinAge(17);
+            $ageGroup->setMaxAge(18);
+            $ageGroup->setReferenceDate('01-01');
+            $entityManager->persist($ageGroup);
+            $entityManager->flush();
+        }
+
+        return $ageGroup;
     }
 
     /**

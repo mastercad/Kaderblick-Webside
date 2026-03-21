@@ -14,9 +14,7 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 #[ORM\Index(name: 'idx_videos_created_from', columns: ['created_from_id'])]
 #[ORM\Index(name: 'idx_videos_updated_from', columns: ['updated_from_id'])]
 #[ORM\UniqueConstraint(name: 'uniq_game_sort', columns: ['game_id', 'sort'])]
-#[ORM\UniqueConstraint(name: 'uniq_game_name', columns: ['game_id', 'name'])]
 #[UniqueEntity(fields: ['game', 'sort'], message: 'Es darf pro Spiel nur ein Video mit diesem Sort-Wert geben.')]
-#[UniqueEntity(fields: ['game', 'name'], message: 'Es darf pro Spiel nur ein Video mit diesem Namen geben.')]
 #[ORM\Entity(repositoryClass: VideoRepository::class)]
 class Video
 {

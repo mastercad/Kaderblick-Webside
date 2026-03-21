@@ -1,0 +1,75 @@
+name: 'Symfony App Setup'
+description: >
+  Entschlüsselt Symfony-Secrets, wärmt den Cache, führt DB-Migrationen durch
+  und prüft/regeneriert JWT-Keys.
+
+inputs:
+  host:
+    description: 'SSH-Host'
+    required: true
+  username:
+    description: 'SSH-Benutzername (root)'
+    required: true
+  password:
+    description: 'SSH-Passwort'
+    required: true
+  env:
+    description: 'Symfony-Umgebung (prod | staging)'
+    required: true
+  compose_project:
+    description: 'Docker Compose Projektname (z. B. production | staging)'
+    required: true
+  compose_files:
+    description: 'Docker Compose -f Flags als String (z. B. "-f docker-compose.yml -f docker-compose.staging.yml")'
+    required: true
+  work_dir:
+    description: 'Absoluter Pfad zum Arbeitsverzeichnis auf dem Server'
+    required: true
+  main_project_path:
+    description: 'Basis-Projektpfad auf dem Server (für JWT-Key-Backup)'
+    required: true
+  command_timeout:
+    description: 'SSH-Timeout'
+    required: false
+    default: '30m'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup ${{ inputs.env }} – secrets / cache / migrations / JWT
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ inputs.host }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+        command_timeout: ${{ inputs.command_timeout }}
+        script: |
+          set -e
+          cd "${{ inputs.work_dir }}"
+          DC="docker compose ${{ inputs.compose_files }} -p ${{ inputs.compose_project }}"
+          $DC exec -T api sh -c \
+            'touch /var/www/symfony/.env.${{ inputs.env }}.local && \
+             chown www-data:www-data /var/www/symfony/.env.${{ inputs.env }}.local && \
+             chmod 664 /var/www/symfony/.env.${{ inputs.env }}.local'
+          DECRYPT_OUT=$($DC exec -T --user www-data api \
+            bin/console secrets:decrypt-to-local --force --env=${{ inputs.env }} 2>&1) || true
+          echo "$DECRYPT_OUT"
+          if echo "$DECRYPT_OUT" | grep -qiE 'permission denied|failed to open stream|error'; then
+            echo "FEHLER: secrets:decrypt-to-local schlug fehl – Berechtigungsproblem!"
+            exit 1
+          fi
+          $DC exec -T --user www-data api bin/console cache:clear --env=${{ inputs.env }}
+          $DC exec -T --user www-data api bin/console cache:warmup --env=${{ inputs.env }}
+          $DC exec -T --user www-data api bin/console doctrine:migrations:migrate \
+            --no-interaction --env=${{ inputs.env }}
+          if ! $DC exec -T api sh -c \
+              'grep -q "BEGIN PRIVATE KEY" /var/www/symfony/config/jwt/private.pem 2>/dev/null'; then
+            echo "JWT-Keys fehlen oder veraltet – regeneriere (PKCS#8)..."
+            $DC exec -T --user www-data api php bin/console \
+              lexik:jwt:generate-keypair --overwrite --no-interaction --env=${{ inputs.env }}
+            mkdir -p "${{ inputs.main_project_path }}/api/config/jwt"
+            $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/private.pem' \
+              > "${{ inputs.main_project_path }}/api/config/jwt/private.pem" || true
+            $DC exec -T api sh -c 'cat /var/www/symfony/config/jwt/public.pem' \
+              > "${{ inputs.main_project_path }}/api/config/jwt/public.pem"  || true
+          fi

@@ -41,6 +41,13 @@ class Survey
     #[ORM\Column(type: 'boolean', options: ['default' => false])]
     private bool $platform = false;
 
+    /** @var list<string> */
+    #[ORM\Column(type: 'json', options: ['default' => '[]'])]
+    private array $remindersSent = [];
+
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $initialNotificationSent = false;
+
     public function __construct()
     {
         $this->questions = new ArrayCollection();
@@ -174,6 +181,50 @@ class Survey
                 $question->setSurvey(null);
             }
         }
+
+        return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getRemindersSent(): array
+    {
+        return $this->remindersSent;
+    }
+
+    /**
+     * @param list<string> $remindersSent
+     */
+    public function setRemindersSent(array $remindersSent): self
+    {
+        $this->remindersSent = $remindersSent;
+
+        return $this;
+    }
+
+    public function addReminderSent(string $reminderKey): self
+    {
+        if (!in_array($reminderKey, $this->remindersSent, true)) {
+            $this->remindersSent[] = $reminderKey;
+        }
+
+        return $this;
+    }
+
+    public function hasReminderBeenSent(string $reminderKey): bool
+    {
+        return in_array($reminderKey, $this->remindersSent, true);
+    }
+
+    public function isInitialNotificationSent(): bool
+    {
+        return $this->initialNotificationSent;
+    }
+
+    public function setInitialNotificationSent(bool $initialNotificationSent): self
+    {
+        $this->initialNotificationSent = $initialNotificationSent;
 
         return $this;
     }

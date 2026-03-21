@@ -10,8 +10,11 @@ interface GameEventFieldsProps {
   teams: SelectOption[];
   gameTypes: SelectOption[];
   leagues: SelectOption[];
+  cups: SelectOption[];
   isTournament: boolean;
   isTournamentEventType: boolean;
+  isLiga: boolean;
+  isPokal: boolean;
   handleChange: (field: string, value: any) => void;
 }
 
@@ -26,8 +29,11 @@ const GameEventFieldsComponent: React.FC<GameEventFieldsProps> = ({
   teams,
   gameTypes,
   leagues,
+  cups,
   isTournament,
   isTournamentEventType,
+  isLiga,
+  isPokal,
   handleChange,
 }) => {
   return (
@@ -85,7 +91,7 @@ const GameEventFieldsComponent: React.FC<GameEventFieldsProps> = ({
         </FormControl>
       )}
       
-      {leagues.length > 0 && !isTournament && (
+      {isLiga && leagues.length > 0 && !isTournament && (
         <FormControl fullWidth margin="normal">
           <InputLabel id="league-label">Liga</InputLabel>
           <Select
@@ -96,6 +102,23 @@ const GameEventFieldsComponent: React.FC<GameEventFieldsProps> = ({
           >
             <MenuItem value=""><em>Bitte wählen...</em></MenuItem>
             {leagues.map(opt => (
+              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      )}
+
+      {isPokal && cups.length > 0 && !isTournament && (
+        <FormControl fullWidth margin="normal">
+          <InputLabel id="cup-label">Pokal</InputLabel>
+          <Select
+            labelId="cup-label"
+            value={formData.cupId || ''}
+            label="Pokal"
+            onChange={e => handleChange('cupId', e.target.value as string)}
+          >
+            <MenuItem value=""><em>Bitte wählen...</em></MenuItem>
+            {cups.map(opt => (
               <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
             ))}
           </Select>

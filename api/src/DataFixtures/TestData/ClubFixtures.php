@@ -25,6 +25,13 @@ class ClubFixtures extends Fixture implements DependentFixtureInterface, Fixture
 
     public function load(ObjectManager $manager): void
     {
+        $stadiumNames = [
+            1 => 'Testfußballstadion Nord',
+            2 => null,
+            3 => 'Arena Süd',
+            4 => null,
+        ];
+
         for ($clubNumber = 1; $clubNumber <= 4; ++$clubNumber) {
             $name = 'Club ' . $clubNumber;
             $shortName = 'C' . $clubNumber;
@@ -42,6 +49,7 @@ class ClubFixtures extends Fixture implements DependentFixtureInterface, Fixture
             $club->setName($name);
             $club->setShortName($shortName);
             $club->setLocation($location);
+            $club->setStadiumName($stadiumNames[$clubNumber]);
             $manager->persist($club);
             $this->addReference('club' . $clubNumber, $club);
         }

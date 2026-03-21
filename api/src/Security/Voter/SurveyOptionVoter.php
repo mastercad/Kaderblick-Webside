@@ -37,13 +37,34 @@ final class SurveyOptionVoter extends Voter
 
         switch ($attribute) {
             case self::VIEW:
-                // Alle können Optionen sehen, wenn sie die Umfrage sehen können
-                return true;
-            case self::CREATE:
-            case self::EDIT:
-            case self::DELETE:
-                // Nur Admins oder Umfrage-Ersteller
+                // System-Optionen sind immer für alle sichtbar
+                if ($surveyOption->isSystemOption()) {
+                    return true;
+                }
+                // Benutzerdefinierte Optionen: Ersteller darf sie sehen,
+                // und alle dürfen sie sehen wenn sie einer Frage zugeordnet sind (beim Beantworten)
+                if ($surveyOption->getCreatedBy()?->getId() === $user->getId()) {
+                    return true;
+                }
+                // Wenn die Option schon an Fragen gebunden ist, darf jeder sie sehen (Beantwortung)
+                if ($surveyOption->getQuestions()->count() > 0) {
+                    return true;
+                }
+
                 return in_array('ROLE_ADMIN', $user->getRoles())
+                    || in_array('ROLE_SUPERADMIN', $user->getRoles());
+            case self::CREATE:
+                // Jeder angemeldete Benutzer darf eigene Optionen erstellen
+                return true;
+            case self::EDIT:
+                // Nur eigenen Optionen bearbeiten, oder Admin
+                return $surveyOption->getCreatedBy()?->getId() === $user->getId()
+                    || in_array('ROLE_ADMIN', $user->getRoles())
+                    || in_array('ROLE_SUPERADMIN', $user->getRoles());
+            case self::DELETE:
+                // Nur eigene Optionen löschen, oder Admin
+                return $surveyOption->getCreatedBy()?->getId() === $user->getId()
+                    || in_array('ROLE_ADMIN', $user->getRoles())
                     || in_array('ROLE_SUPERADMIN', $user->getRoles());
         }
 

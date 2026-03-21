@@ -5,3 +5,7 @@ dist
 .gitignore
 Dockerfile
 docker-compose.yml
+# api/vendor wird vom Dockerfile selbst via composer install erstellt
+api/vendor
+# api/var enthält nur Runtime-Daten (Cache, Logs) – nicht im Image nötig
+api/var

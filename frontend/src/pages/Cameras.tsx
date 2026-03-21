@@ -1,21 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useMemo } from 'react';
+import VideocamIcon from '@mui/icons-material/Videocam';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import CameraDeleteConfirmationModal from '../modals/CameraDeleteConfirmationModal';
 import CameraEditModal from '../modals/CameraEditModal';
 import { Camera } from '../types/camera';
@@ -24,136 +10,82 @@ const Cameras = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [cameraId, setCameraId] = useState<number | null>(null);
   const [cameraEditModalOpen, setCameraEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteCamera, setDeleteCamera] = useState<Camera | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
 
   const loadCameras = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiJson<{ cameras: Camera[] }>('/api/cameras');
-      if (res && Array.isArray(res.cameras)) {
-        setCameras(res.cameras);
-      } else {
-        setCameras([]);
-      }
-    } catch (e) {
+      setCameras(res && Array.isArray(res.cameras) ? res.cameras : []);
+    } catch {
       setError('Fehler beim Laden der Kameras.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadCameras();
-  }, []);
+  useEffect(() => { loadCameras(); }, []);
 
-  const handleDelete = async (cameraId: number) => {
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/cameras/${cameraId}`, { method: 'DELETE' });
-      setCameras(cameras => cameras.filter(c => c.id !== cameraId));
+      await apiJson(`/api/cameras/${id}`, { method: 'DELETE' });
+      setCameras(prev => prev.filter(c => c.id !== id));
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen der Kamera.');
+      setSnackbar({ open: true, message: 'Kamera gelöscht', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen der Kamera.', severity: 'error' });
     }
   };
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return cameras;
+    const q = search.toLowerCase();
+    return cameras.filter(c => (c.name || '').toLowerCase().includes(q) || (c.createdFrom?.fullName || '').toLowerCase().includes(q));
+  }, [cameras, search]);
+
+  const columns: AdminTableColumn<Camera>[] = [
+    { header: 'Name', render: c => c.name || '' },
+    { header: 'Erstellt von', render: c => c.createdFrom?.fullName || '' },
+    { header: 'Erstellt am', render: c => c.createdAt ? new Date(c.createdAt).toLocaleDateString('de-DE') : '', width: 130 },
+  ];
+
   return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Kameras
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCameraId(null); setCameraEditModalOpen(true) }}>
-          Neue Kamera erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
+    <AdminPageLayout
+      icon={<VideocamIcon />}
+      title="Kameras"
+      itemCount={cameras.length}
+      loading={loading}
+      error={error}
+      createLabel="Neue Kamera"
+      onCreate={() => { setCameraId(null); setCameraEditModalOpen(true); }}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Kamera suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+    >
+      {filtered.length === 0 ? (
+        <AdminEmptyState icon={<VideocamIcon />} title="Keine Kameras vorhanden" createLabel="Neue Kamera" onCreate={() => { setCameraId(null); setCameraEditModalOpen(true); }} />
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Erstellt von</TableCell>
-                <TableCell>Erstellt am</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {cameras.map((camera, idx) => (
-                <TableRow key={camera.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell>
-                    {camera.name || ''}
-                  </TableCell>
-                  <TableCell>
-                    {camera.createdFrom?.fullName || ''}
-                  </TableCell>
-                  <TableCell>
-                    {camera.createdAt ? new Date(camera.createdAt).toLocaleDateString('de-DE') : ''}
-                  </TableCell>
-                  <TableCell>
-                    { camera.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setCameraId(camera.id);
-                          setCameraEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Kamera bearbeiten"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { camera.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeleteCamera(camera);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Kamera löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        )}
-        <CameraEditModal
-            openCameraEditModal={cameraEditModalOpen}
-            cameraId={cameraId}
-            onCameraEditModalClose={() => setCameraEditModalOpen(false)}
-            onCameraSaved={(savedCamera) => {
-                setCameraEditModalOpen(false);
-                loadCameras();
-            }}
+        <AdminTable columns={columns} data={filtered} getKey={c => c.id}
+          renderActions={c => (
+            <AdminActions
+              onEdit={c.permissions?.canEdit ? () => { setCameraId(c.id); setCameraEditModalOpen(true); } : undefined}
+              onDelete={c.permissions?.canDelete ? () => { setDeleteCamera(c); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
         />
-        <CameraDeleteConfirmationModal
-            open={deleteModalOpen}
-            cameraName={deleteCamera?.name}
-            onClose={() => setDeleteModalOpen(false)}
-            onConfirm={async () => handleDelete(deleteCamera!.id) }
-        />
-    </Box>
+      )}
+
+      <CameraEditModal openCameraEditModal={cameraEditModalOpen} cameraId={cameraId} onCameraEditModalClose={() => setCameraEditModalOpen(false)} onCameraSaved={() => { setCameraEditModalOpen(false); loadCameras(); }} />
+      <CameraDeleteConfirmationModal open={deleteModalOpen} cameraName={deleteCamera?.name} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deleteCamera!.id)} />
+    </AdminPageLayout>
   );
 };
 

@@ -11,6 +11,7 @@ import BaseModal from './BaseModal';
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
+  initialTab?: 'login' | 'register';
 }
 
 interface GoogleAuthMessage {
@@ -30,9 +31,9 @@ interface GoogleAuthMessage {
   message?: string;
 }
 
-export default function AuthModal({ open, onClose }: AuthModalProps) {
+export default function AuthModal({ open, onClose, initialTab }: AuthModalProps) {
   const { loginWithGoogle } = useAuth();
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [tab, setTab] = useState<'login' | 'register'>(initialTab ?? 'login');
   const [googleLoginError, setGoogleLoginError] = useState<string | null>(null);
   const [googleLoginSuccess, setGoogleLoginSuccess] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(open);
@@ -54,6 +55,13 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
   useEffect(() => {
     setIsOpen(open);
   }, [open]);
+
+  // Sync tab when initialTab prop changes (e.g. deep-link)
+  useEffect(() => {
+    if (open && initialTab) {
+      setTab(initialTab);
+    }
+  }, [open, initialTab]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -144,7 +152,10 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
           </Alert>
         )}
         
-        {tab === 'login' ? <LoginForm onSuccess={handleClose} onClose={handleClose} /> : <RegisterForm />}
+        {tab === 'login'
+          ? <LoginForm onSuccess={handleClose} onClose={handleClose} />
+          : <RegisterForm onSwitchToLogin={() => setTab('login')} />
+        }
       </Box>
     </BaseModal>
   );

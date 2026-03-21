@@ -11,7 +11,9 @@ services:
     volumes:
       - kaderblick-db-data:/var/lib/mysql
     networks:
-      - kaderblick-net
+      kaderblick-net:
+        aliases:
+          - db
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s

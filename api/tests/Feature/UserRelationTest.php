@@ -20,14 +20,17 @@ class UserRelationTest extends KernelTestCase
     {
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user4@example.com']);
+        self::assertNotNull($user, 'Fixture-User "user4@example.com" nicht gefunden. Bitte Fixtures laden.');
         $player4 = $entityManager->getRepository(Player::class)->findOneBy([
             'firstName' => 'Player_4',
             'lastName' => 'Team 1 / Club 1'
         ]);
+        self::assertNotNull($player4, 'Fixture-Player "Player_4 / Team 1 / Club 1" nicht gefunden.');
         $player5Team2Club2 = $entityManager->getRepository(Player::class)->findOneBy([
             'firstName' => 'Player_5',
             'lastName' => 'Team 2 / Club 2'
         ]);
+        self::assertNotNull($player5Team2Club2, 'Fixture-Player "Player_5 / Team 2 / Club 2" nicht gefunden.');
 
         // Prüfe, ob die Relationen korrekt bestehen
         $relationPlayers = [];
@@ -52,14 +55,17 @@ class UserRelationTest extends KernelTestCase
     {
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user3@example.com']);
+        self::assertNotNull($user, 'Fixture-User "user3@example.com" nicht gefunden. Bitte Fixtures laden.');
         $coach5 = $entityManager->getRepository(Coach::class)->findOneBy([
             'firstName' => 'Coach',
             'lastName' => '5'
         ]);
+        self::assertNotNull($coach5, 'Fixture-Coach "Coach 5" nicht gefunden.');
         $player4 = $entityManager->getRepository(Player::class)->findOneBy([
             'firstName' => 'Player_4',
             'lastName' => 'Team 1 / Club 1'
         ]);
+        self::assertNotNull($player4, 'Fixture-Player "Player_4 / Team 1 / Club 1" nicht gefunden.');
 
         // Prüfe Relationen
         $relationCoaches = [];
@@ -90,14 +96,17 @@ class UserRelationTest extends KernelTestCase
     {
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user2@example.com']);
+        self::assertNotNull($user, 'Fixture-User "user2@example.com" nicht gefunden. Bitte Fixtures laden.');
         $coach3 = $entityManager->getRepository(Coach::class)->findOneBy([
             'firstName' => 'Coach',
             'lastName' => '3'
         ]);
+        self::assertNotNull($coach3, 'Fixture-Coach "Coach 3" nicht gefunden.');
         $player2 = $entityManager->getRepository(Player::class)->findOneBy([
             'firstName' => 'Player_2',
             'lastName' => 'Team 1 / Club 1'
         ]);
+        self::assertNotNull($player2, 'Fixture-Player "Player_2 / Team 1 / Club 1" nicht gefunden.');
 
         // Prüfe Relationen
         $relationCoaches = [];
@@ -129,6 +138,7 @@ class UserRelationTest extends KernelTestCase
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         // Verwende einen existierenden User ohne UserRelation, z.B. user10@example.com (user_10)
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user10@example.com']);
+        self::assertNotNull($user, 'Fixture-User "user10@example.com" nicht gefunden. Bitte Fixtures laden.');
 
         $teams = $entityManager->getRepository(Team::class)->fetchOptimizedList($user);
         $players = $entityManager->getRepository(Player::class)->fetchOptimizedList($user);
@@ -143,10 +153,12 @@ class UserRelationTest extends KernelTestCase
     {
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user3@example.com']); // z.B. Vater von Spieler 3
+        self::assertNotNull($user, 'Fixture-User "user3@example.com" nicht gefunden. Bitte Fixtures laden.');
         $player = $entityManager->getRepository(Player::class)->findOneBy([
             'firstName' => 'Player_3',
             'lastName' => 'Team 2 / Club 2'
         ]);
+        self::assertNotNull($player, 'Fixture-Player "Player_3 / Team 2 / Club 2" nicht gefunden.');
 
         $teams = $entityManager->getRepository(Team::class)->fetchOptimizedList($user);
         $players = $entityManager->getRepository(Player::class)->fetchOptimizedList($user);
@@ -181,14 +193,17 @@ class UserRelationTest extends KernelTestCase
     {
         $entityManager = self::getContainer()->get('doctrine')->getManager();
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user5@example.com']); // user_5: Freund von Coach 2 und Coach 3
+        self::assertNotNull($user, 'Fixture-User "user5@example.com" nicht gefunden. Bitte Fixtures laden.');
         $coach2 = $entityManager->getRepository(Coach::class)->findOneBy([
             'firstName' => 'Coach',
             'lastName' => '2'
         ]);
+        self::assertNotNull($coach2, 'Fixture-Coach "Coach 2" nicht gefunden.');
         $coach3 = $entityManager->getRepository(Coach::class)->findOneBy([
             'firstName' => 'Coach',
             'lastName' => '3'
         ]);
+        self::assertNotNull($coach3, 'Fixture-Coach "Coach 3" nicht gefunden.');
 
         $teams = $entityManager->getRepository(Team::class)->fetchOptimizedList($user);
         $players = $entityManager->getRepository(Player::class)->fetchOptimizedList($user);

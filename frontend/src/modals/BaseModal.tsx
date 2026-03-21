@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -10,6 +10,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { useFabStack } from '../components/FabStackProvider';
 
 export interface BaseModalProps {
   open: boolean;
@@ -51,6 +52,15 @@ const BaseModal: React.FC<BaseModalProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const fabStack = useFabStack();
+
+  // FABs ausblenden solange dieses Modal offen ist
+  useEffect(() => {
+    if (open) {
+      fabStack?.hideForModal();
+      return () => { fabStack?.showAfterModal(); };
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClose = (event: any, reason: string) => {
     // Backdrop-Click verhindern wenn gewünscht
@@ -128,6 +138,8 @@ const BaseModal: React.FC<BaseModalProps> = ({
             pb: 2,
             pt: 1,
             gap: 1,
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
             ...(fullScreen || isMobile ? {
               position: 'fixed',
               bottom: 0,

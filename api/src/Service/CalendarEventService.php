@@ -6,6 +6,7 @@ use App\Entity\CalendarEvent;
 use App\Entity\CalendarEventPermission;
 use App\Entity\CalendarEventType;
 use App\Entity\Club;
+use App\Entity\Cup;
 use App\Entity\Game;
 use App\Entity\GameEvent;
 use App\Entity\GameEventType;
@@ -41,6 +42,7 @@ class CalendarEventService
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly TaskEventGeneratorService $taskEventGeneratorService,
         private readonly Security $security,
+        private readonly TeamMembershipService $teamMembershipService,
     ) {
     }
 
@@ -66,24 +68,33 @@ class CalendarEventService
         if ('Turnier' === $calendarEvent->getCalendarEventType()?->getName()) {
             $tournament = $this->entityManager->getRepository(Tournament::class)->findOneBy(['calendarEvent' => $calendarEvent]);
             if ($tournament) {
-                // Sammle alle Game-IDs, die zu den Matches gehören
-                $gameIds = [];
+                // Lösche Abhängigkeiten der Match-Games (game_events, substitutions, videos),
+                // dann die Matches, das Tournament und zuletzt die Games selbst.
+                $gameEventRepo = $this->entityManager->getRepository(GameEvent::class);
+                $substitutionRepo = $this->entityManager->getRepository(Substitution::class);
+                $videoRepo = $this->entityManager->getRepository(Video::class);
+                $matchGames = [];
+
                 foreach ($tournament->getMatches() as $match) {
-                    if ($match->getGame()) {
-                        $gameIds[] = $match->getGame()->getId();
+                    $matchGame = $match->getGame();
+                    if ($matchGame) {
+                        $matchGames[] = $matchGame;
+                        foreach ($gameEventRepo->findBy(['game' => $matchGame]) as $ge) {
+                            $this->entityManager->remove($ge);
+                        }
+                        foreach ($substitutionRepo->findBy(['game' => $matchGame]) as $sub) {
+                            $this->entityManager->remove($sub);
+                        }
+                        foreach ($videoRepo->findBy(['game' => $matchGame]) as $video) {
+                            $this->entityManager->remove($video);
+                        }
                     }
                     $this->entityManager->remove($match);
                 }
                 $this->entityManager->remove($tournament);
-                // Lösche alle Games, die zu den Matches gehörten (auch wenn sie nicht mehr referenziert werden)
-                if (count($gameIds) > 0) {
-                    $gameRepo = $this->entityManager->getRepository(Game::class);
-                    foreach ($gameIds as $gid) {
-                        $game = $gameRepo->find($gid);
-                        if ($game) {
-                            $this->entityManager->remove($game);
-                        }
-                    }
+                // Match-Games nach Matches/Tournament entfernen, damit keine FK-Verletzung auftritt
+                foreach ($matchGames as $matchGame) {
+                    $this->entityManager->remove($matchGame);
                 }
             }
         }
@@ -148,6 +159,100 @@ class CalendarEventService
      * @param array<mixed> $data
      *
      * @return ConstraintViolationList<int, mixed>
+     */
+    /**
+     * Validates that the authenticated user's own team is part of the game or tournament
+     * they are trying to create or edit.
+     *
+     * Returns null when valid (or when the user is admin/superadmin).
+     * Returns a human-readable German error message when the check fails.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function validateMatchTeamOwnership(array $data, User $user): ?string
+    {
+        // Admins and superadmins may always create events for any team
+        if (
+            in_array('ROLE_SUPERADMIN', $user->getRoles(), true)
+            || in_array('ROLE_ADMIN', $user->getRoles(), true)
+        ) {
+            return null;
+        }
+
+        $calendarEventTypeSpiel = $this->entityManager->getRepository(CalendarEventType::class)->findOneBy(['name' => 'Spiel']);
+        $calendarEventTypeTournament = $this->entityManager->getRepository(CalendarEventType::class)->findOneBy(['name' => 'Turnier']);
+
+        $eventTypeId = (int) ($data['eventTypeId'] ?? 0);
+        $isGameEvent = $calendarEventTypeSpiel && $eventTypeId === $calendarEventTypeSpiel->getId();
+        $isTournamentEvent = $calendarEventTypeTournament && $eventTypeId === $calendarEventTypeTournament->getId();
+        $isTournamentPayload = isset($data['pendingTournamentMatches'])
+            && is_array($data['pendingTournamentMatches'])
+            && count($data['pendingTournamentMatches']) > 0;
+
+        // Only game and tournament events require team-ownership validation
+        if (!$isGameEvent && !$isTournamentEvent) {
+            return null;
+        }
+
+        // Collect IDs of all teams the user is currently coaching
+        $coachTeamIds = [];
+        foreach ($user->getUserRelations() as $relation) {
+            if ($relation->getCoach()) {
+                foreach ($relation->getCoach()->getCoachTeamAssignments() as $assignment) {
+                    $coachTeamIds[] = (int) $assignment->getTeam()->getId();
+                }
+            }
+        }
+
+        if (empty($coachTeamIds)) {
+            return 'Du bist keinem Team als Trainer zugeordnet. '
+                . 'Spiele und Turniere können nur von Trainern ihres eigenen Teams angelegt werden.';
+        }
+
+        // ── Regular game (no tournament payload) ──────────────────────────────
+        if ($isGameEvent && !$isTournamentPayload) {
+            $homeTeamId = (int) ($data['game']['homeTeamId'] ?? 0);
+            $awayTeamId = (int) ($data['game']['awayTeamId'] ?? 0);
+
+            // If teams are not yet set, let the normal validation handle it
+            if (!$homeTeamId || !$awayTeamId) {
+                return null;
+            }
+
+            if (
+                !in_array($homeTeamId, $coachTeamIds, true)
+                && !in_array($awayTeamId, $coachTeamIds, true)
+            ) {
+                return 'Dein Team muss als Heim- oder Auswärtsteam eingetragen sein. '
+                    . 'Du kannst nur Spiele anlegen, an denen eines deiner Teams beteiligt ist.';
+            }
+
+            return null;
+        }
+
+        // ── Tournament event ──────────────────────────────────────────────────
+        if (!$isTournamentPayload) {
+            // No matches defined yet — the user is a coach, allow creation
+            return null;
+        }
+
+        foreach ($data['pendingTournamentMatches'] as $match) {
+            $homeTeamId = (int) ($match['homeTeamId'] ?? 0);
+            $awayTeamId = (int) ($match['awayTeamId'] ?? 0);
+            if (
+                in_array($homeTeamId, $coachTeamIds, true)
+                || in_array($awayTeamId, $coachTeamIds, true)
+            ) {
+                return null; // Own team found — permission granted
+            }
+        }
+
+        return 'Dein Team muss in mindestens einem Turnierspiel als Heim- oder Auswärtsteam vertreten sein. '
+            . 'Du kannst nur Turniere anlegen, an denen eines deiner Teams teilnimmt.';
+    }
+
+    /**
+     * @param array<string, mixed> $data
      */
     public function updateEventFromData(CalendarEvent $calendarEvent, array $data): ConstraintViolationList
     {
@@ -224,7 +329,42 @@ class CalendarEventService
             if (isset($data['leagueId']) && $data['leagueId']) {
                 $league = $this->entityManager->getReference(League::class, (int) $data['leagueId']);
                 $calendarEvent->getGame()?->setLeague($league);
+            } elseif (array_key_exists('leagueId', $data) && !$data['leagueId']) {
+                $calendarEvent->getGame()?->setLeague(null);
             }
+
+            if (isset($data['cupId']) && $data['cupId']) {
+                $cup = $this->entityManager->getReference(Cup::class, (int) $data['cupId']);
+                $calendarEvent->getGame()?->setCup($cup);
+            } elseif (array_key_exists('cupId', $data) && !$data['cupId']) {
+                $calendarEvent->getGame()?->setCup(null);
+            }
+
+            // Game timing fields
+            if (isset($data['game']['halfDuration'])) {
+                $calendarEvent->getGame()?->setHalfDuration((int) $data['game']['halfDuration']);
+            }
+            if (isset($data['game']['halftimeBreakDuration'])) {
+                $calendarEvent->getGame()?->setHalftimeBreakDuration((int) $data['game']['halftimeBreakDuration']);
+            }
+            if (array_key_exists('firstHalfExtraTime', $data['game'] ?? [])) {
+                $val = $data['game']['firstHalfExtraTime'];
+                $calendarEvent->getGame()?->setFirstHalfExtraTime(null !== $val && '' !== $val ? (int) $val : null);
+            }
+            if (array_key_exists('secondHalfExtraTime', $data['game'] ?? [])) {
+                $val = $data['game']['secondHalfExtraTime'];
+                $calendarEvent->getGame()?->setSecondHalfExtraTime(null !== $val && '' !== $val ? (int) $val : null);
+            }
+        }
+
+        // Auto-calculate end date for Spiel events if not provided in payload
+        if ($isGameEvent && !$isTournamentPayload && !isset($data['endDate']) && null !== $calendarEvent->getStartDate()) {
+            $halfDur = $calendarEvent->getGame()?->getHalfDuration() ?? 45;
+            $breakDur = $calendarEvent->getGame()?->getHalftimeBreakDuration() ?? 15;
+            $totalMinutes = 2 * $halfDur + $breakDur;
+            $endDt = DateTime::createFromInterface($calendarEvent->getStartDate());
+            $endDt->modify("+{$totalMinutes} minutes");
+            $calendarEvent->setEndDate($endDt);
         }
 
         if (isset($data['task']) && is_array($data['task'])) {
@@ -306,6 +446,10 @@ class CalendarEventService
         if (!$tournament) {
             $tournament = new Tournament();
             $tournament->setCalendarEvent($calendarEvent);
+            $currentUser = $this->security->getUser();
+            if ($currentUser instanceof User) {
+                $tournament->setCreatedBy($currentUser);
+            }
             $this->entityManager->persist($tournament);
             $calendarEvent->setTournament($tournament);
         }
@@ -666,7 +810,7 @@ class CalendarEventService
         $eventType = $calendarEvent->getCalendarEventType();
 
         // Für Spiel- und Aufgaben-Events keine Standard-Permissions erstellen
-        if (in_array($eventType->getName(), ['Spiel', 'Aufgabe'])) {
+        if (null === $eventType || in_array($eventType->getName(), ['Spiel', 'Aufgabe'])) {
             return;
         }
 
@@ -677,14 +821,9 @@ class CalendarEventService
         $this->entityManager->persist($permission);
     }
 
-    /** @return array<int, string> */
+    /** @return User[] */
     public function loadEventRecipients(CalendarEvent $calendarEvent): array
     {
-        return $this->entityManager->getRepository(User::class)
-            ->createQueryBuilder('u')
-            ->select('u.email')
-            ->where('u.isVerified = true')
-            ->getQuery()
-            ->getSingleColumnResult();
+        return $this->teamMembershipService->resolveEventRecipients($calendarEvent);
     }
 }

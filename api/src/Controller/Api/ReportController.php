@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Entity\ReportDefinition;
 use App\Entity\User;
 use App\Security\Voter\ReportVoter;
+use App\Service\CoachTeamPlayerService;
 use App\Service\ReportDataService;
 use App\Service\ReportFieldAliasService;
 use DateTimeImmutable;
@@ -19,40 +20,34 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_USER')]
 class ReportController extends AbstractController
 {
+    public function __construct(
+        private readonly CoachTeamPlayerService $coachTeamPlayerService,
+    ) {
+    }
+
     #[Route('/builder-data', name: 'api_report_builder_data', methods: ['GET'])]
     public function builderData(EntityManagerInterface $em): JsonResponse
     {
         $fieldAliases = ReportFieldAliasService::fieldAliases($em);
 
-        // Teams, Spieler, Ereignistypen für Filter
-        $teamRepo = $em->getRepository(\App\Entity\Team::class);
-        $playerRepo = $em->getRepository(\App\Entity\Player::class);
-        $eventTypeRepo = $em->getRepository(\App\Entity\GameEventType::class);
-        $gameEventRepo = $em->getRepository(\App\Entity\GameEvent::class);
+        // Only teams that have actual game events (avoids loading all 900+ teams)
+        $teams = $em->createQuery(
+            'SELECT DISTINCT t FROM App\Entity\Team t INNER JOIN t.gameEvents ge ORDER BY t.name ASC'
+        )->getResult();
 
-        $teams = $teamRepo->findAll();
-        $players = $playerRepo->findAll();
-        $eventTypes = $eventTypeRepo->findAll();
+        $eventTypes = $em->getRepository(\App\Entity\GameEventType::class)->findAll();
 
-        // Convert to simple arrays to avoid circular references
         $teamsData = array_map(fn ($team) => [
             'id' => $team->getId(),
             'name' => $team->getName()
         ], $teams);
-
-        $playersData = array_map(fn ($player) => [
-            'id' => $player->getId(),
-            'fullName' => $player->getFullName(),
-            'firstName' => $player->getFirstName(),
-            'lastName' => $player->getLastName()
-        ], $players);
 
         $eventTypesData = array_map(fn ($eventType) => [
             'id' => $eventType->getId(),
             'name' => $eventType->getName()
         ], $eventTypes);
 
-        // Surface types for filter + metrics
+        // Surface types for filter
         $surfaceTypeRepo = $em->getRepository(\App\Entity\SurfaceType::class);
         $surfaceTypes = $surfaceTypeRepo->findAll();
         $surfaceTypesData = array_map(fn ($s) => [
@@ -60,21 +55,26 @@ class ReportController extends AbstractController
             'name' => $s->getName()
         ], $surfaceTypes);
 
-        $dateRows = $gameEventRepo->createQueryBuilder('e')
-            ->select('e.timestamp')
-            ->orderBy('e.timestamp', 'ASC')
-            ->getQuery()->getArrayResult();
-        $availableDates = array_unique(array_map(
-            fn ($row) => $row['timestamp']->format('Y-m-d'),
-            $dateRows
-        ));
-        $availableDates = array_values($availableDates);
+        // Game types for filter
+        $gameTypeRepo = $em->getRepository(\App\Entity\GameType::class);
+        $gameTypes = $gameTypeRepo->findAll();
+        $gameTypesData = array_map(fn ($gt) => [
+            'id' => $gt->getId(),
+            'name' => $gt->getName()
+        ], $gameTypes);
+
+        // Available dates from events: single efficient DISTINCT DATE() query via DBAL
+        $availableDates = $em->getConnection()->fetchFirstColumn(
+            'SELECT DISTINCT DATE(timestamp) AS d FROM game_events ORDER BY d ASC'
+        );
         $minDate = $availableDates[0] ?? null;
         $maxDate = $availableDates[count($availableDates) - 1] ?? null;
 
-        $fields = [];
-        $advancedFields = [];
+        // Separate aliases into dimensions and metrics for the frontend
+        $dimensions = [];
+        $metrics = [];
         foreach ($fieldAliases as $key => $data) {
+            $category = $data['category'] ?? 'dimension';
             $item = [
                 'key' => $key,
                 'label' => $data['label'],
@@ -83,93 +83,91 @@ class ReportController extends AbstractController
                 'isMetricCandidate' => isset($data['aggregate']) && is_callable($data['aggregate']),
             ];
 
-            if (isset($data['accessibleFromEvent']) && $data['accessibleFromEvent']) {
-                $fields[] = $item;
+            if ('metric' === $category) {
+                $metrics[] = $item;
             } else {
-                $advancedFields[] = $item;
+                $dimensions[] = $item;
             }
         }
 
-        // Expose metrics (alias-based aggregates) to the frontend as selectable metrics
-        $metrics = [];
+        // Fields = dimensions (for X-Axis, GroupBy) + metrics (for Y-Axis)
+        // Both are shown to the user as selectable options
+        $fields = array_merge($dimensions, $metrics);
+
+        // Metric tokens for radar charts
+        $radarMetrics = [];
         foreach ($fieldAliases as $key => $data) {
             if (isset($data['aggregate']) && is_callable($data['aggregate'])) {
-                $metrics[] = [
+                $radarMetrics[] = [
                     'key' => $key,
                     'label' => $data['label'],
                 ];
             }
         }
-        // Also expose event types as metric tokens (eventType:{id})
-        foreach ($eventTypes as $et) {
-            $metrics[] = [
-                'key' => 'eventType:' . $et->getId(),
-                'label' => 'Ereignis: ' . $et->getName(),
-            ];
-        }
-        // Expose surface types as metric tokens (surfaceType:{id})
-        foreach ($surfaceTypes as $st) {
-            $metrics[] = [
-                'key' => 'surfaceType:' . $st->getId(),
-                'label' => 'Platztyp: ' . $st->getName(),
-            ];
-        }
-        // Weather-based metrics (simple tokens)
-        $metrics[] = [
+
+        // Weather metric for radar
+        $radarMetrics[] = [
             'key' => 'weather:precipitation',
-            'label' => 'Regen / Niederschlag (Spieltag)'
+            'label' => 'Regen / Niederschlag (Spieltag)',
         ];
 
-        // Preset templates for common reports (frontend can offer these as one-click configs)
-        $presets = [
-            [
-                'key' => 'goals_per_player',
-                'label' => 'Tore pro Spieler',
-                'config' => [
-                    'diagramType' => 'bar',
-                    'xField' => 'player',
-                    'yField' => 'goals',
-                    'groupBy' => ['player'],
-                    'showLegend' => false,
-                ],
-            ],
-            [
-                'key' => 'goals_per_team',
-                'label' => 'Tore pro Mannschaft',
-                'config' => [
-                    'diagramType' => 'bar',
-                    'xField' => 'team',
-                    'yField' => 'goals',
-                    'groupBy' => ['team'],
-                    'showLegend' => false,
-                ],
-            ],
-            [
-                'key' => 'events_per_type',
-                'label' => 'Ereignisse pro Typ',
-                'config' => [
-                    'diagramType' => 'bar',
-                    'xField' => 'eventType',
-                    'yField' => 'eventType',
-                    'groupBy' => ['eventType'],
-                    'showLegend' => false,
-                ],
-            ],
-        ];
+        // Surface type metrics for radar (per surface type)
+        foreach ($surfaceTypes as $st) {
+            $radarMetrics[] = [
+                'key' => 'surfaceType:' . $st->getId(),
+                'label' => $st->getName() . ' (Spielfeld)',
+            ];
+        }
 
-        return $this->json([
+        // Presets: common report templates for non-technical users
+        $presets = $this->buildPresets();
+
+        $response = $this->json([
             'fields' => $fields,
-            'advancedFields' => $advancedFields,
+            'advancedFields' => [],
             'presets' => $presets,
             'teams' => $teamsData,
-            'players' => $playersData,
             'eventTypes' => $eventTypesData,
             'surfaceTypes' => $surfaceTypesData,
-            'metrics' => $metrics,
+            'gameTypes' => $gameTypesData,
+            'metrics' => $radarMetrics,
             'availableDates' => $availableDates,
             'minDate' => $minDate,
             'maxDate' => $maxDate,
         ]);
+        // Cache for 5 minutes — event types, teams and dates change rarely
+        $response->setMaxAge(300)->setPrivate();
+
+        return $response;
+    }
+
+    /**
+     * Lightweight player autocomplete for the report builder filter.
+     * Returns up to 20 players whose first or last name contains the search term.
+     */
+    #[Route('/player-search', name: 'api_report_player_search', methods: ['GET'])]
+    public function playerSearch(Request $request, EntityManagerInterface $em): JsonResponse
+    {
+        $q = trim((string) $request->query->get('q', ''));
+        if (mb_strlen($q) < 2) {
+            return $this->json([]);
+        }
+
+        $players = $em->createQuery(
+            'SELECT p FROM App\Entity\Player p
+             WHERE LOWER(p.firstName) LIKE :q OR LOWER(p.lastName) LIKE :q
+             ORDER BY p.lastName ASC, p.firstName ASC'
+        )
+            ->setParameter('q', '%' . mb_strtolower($q) . '%')
+            ->setMaxResults(20)
+            ->getResult();
+
+        return $this->json(array_map(fn ($p) => [
+            'id' => $p->getId(),
+            'fullName' => $p->getFullName(),
+            'firstName' => $p->getFirstName(),
+            'lastName' => $p->getLastName(),
+        ], $players));
     }
 
     #[Route('/preview', name: 'api_report_preview', methods: ['POST'])]
@@ -201,12 +199,25 @@ class ReportController extends AbstractController
 
         $reportData = $reportDataService->generateReportData($configData);
 
-        return $this->json([
+        $response = [
             'labels' => $reportData['labels'],
             'datasets' => $reportData['datasets'],
             'diagramType' => $configData['diagramType'] ?? 'bar',
             'meta' => $reportData['meta'] ?? null,
-        ]);
+        ];
+
+        // For faceted charts, include the panels array and sub-type
+        if (isset($reportData['panels'])) {
+            $response['panels'] = $reportData['panels'];
+        }
+        if (isset($reportData['facetSubType'])) {
+            $response['facetSubType'] = $reportData['facetSubType'];
+        }
+        if (isset($reportData['facetLayout'])) {
+            $response['facetLayout'] = $reportData['facetLayout'];
+        }
+
+        return $this->json($response);
     }
 
     #[Route('/available', name: 'api_report_available', methods: ['GET'])]
@@ -254,19 +265,33 @@ class ReportController extends AbstractController
                 $filters[$k] = $v;
             }
         }
+        $diagramType = $config['diagramType'] ?? 'bar';
         $config['filters'] = $filters;
 
         $reportData = $reportDataService->generateReportData($config);
 
-        return $this->json([
+        $response = [
             'name' => $report->getName(),
             'description' => $report->getDescription(),
             'config' => $config,
             'labels' => $reportData['labels'],
             'datasets' => $reportData['datasets'],
-            'diagramType' => $config['diagramType'] ?? 'bar',
+            'diagramType' => $diagramType,
             'meta' => $reportData['meta'] ?? null,
-        ]);
+        ];
+
+        // For faceted charts, include the panels array and sub-type
+        if (isset($reportData['panels'])) {
+            $response['panels'] = $reportData['panels'];
+        }
+        if (isset($reportData['facetSubType'])) {
+            $response['facetSubType'] = $reportData['facetSubType'];
+        }
+        if (isset($reportData['facetLayout'])) {
+            $response['facetLayout'] = $reportData['facetLayout'];
+        }
+
+        return $this->json($response);
     }
 
     #[Route('/definitions', name: 'api_report_definitions', methods: ['GET'])]
@@ -301,6 +326,29 @@ class ReportController extends AbstractController
         return $this->json([
             'templates' => $templatesData,
             'userReports' => $userReportsData
+        ]);
+    }
+
+    #[Route('/definition/{id}', name: 'api_report_get', methods: ['GET'])]
+    public function getDefinition(int $id, EntityManagerInterface $em): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+        $report = $em->getRepository(ReportDefinition::class)->find($id);
+        if (!$report) {
+            return $this->json(['error' => 'Report not found'], 404);
+        }
+        // Allow access to own reports and templates
+        if (!$report->isTemplate() && $report->getUser()?->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Access denied'], 403);
+        }
+
+        return $this->json([
+            'id' => $report->getId(),
+            'name' => $report->getName(),
+            'description' => $report->getDescription(),
+            'config' => $report->getConfig(),
+            'isTemplate' => $report->isTemplate(),
         ]);
     }
 
@@ -345,8 +393,16 @@ class ReportController extends AbstractController
         $report->setName($data['name']);
         $report->setDescription($data['description'] ?? null);
         $report->setConfig($data['config']);
-        $report->setUser($user);
-        $report->setIsTemplate(false);
+        if (
+            !empty($data['isTemplate'])
+            && (in_array('ROLE_ADMIN', $user->getRoles()) || in_array('ROLE_SUPERADMIN', $user->getRoles()))
+        ) {
+            $report->setIsTemplate(true);
+            $report->setUser(null);
+        } else {
+            $report->setIsTemplate(false);
+            $report->setUser($user);
+        }
         $em->persist($report);
         $em->flush();
 
@@ -417,11 +473,31 @@ class ReportController extends AbstractController
                 $em->flush();
 
                 return $this->json(['status' => 'success', 'id' => $newReport->getId()]);
-            } else {
-                $report->setUpdatedAt(new DateTimeImmutable());
-                $em->flush();
             }
+            // Admin/SuperAdmin: update in-place.
+            // Also allow demoting the template back to a regular report.
+            if (isset($data['isTemplate']) && false === (bool) $data['isTemplate']) {
+                $report->setIsTemplate(false);
+                $report->setUser($user);
+            }
+            $report->setUpdatedAt(new DateTimeImmutable());
+            $em->flush();
         } else {
+            // Allow Admin/SuperAdmin to promote/demote isTemplate on their own report
+            if (
+                isset($data['isTemplate'])
+                && (
+                    in_array('ROLE_ADMIN', $user->getRoles())
+                    || in_array('ROLE_SUPERADMIN', $user->getRoles())
+                )
+            ) {
+                $report->setIsTemplate((bool) $data['isTemplate']);
+                if ((bool) $data['isTemplate']) {
+                    $report->setUser(null);
+                } else {
+                    $report->setUser($user);
+                }
+            }
             $report->setUpdatedAt(new DateTimeImmutable());
             $em->flush();
         }
@@ -437,9 +513,305 @@ class ReportController extends AbstractController
         if ($report->getUser()?->getId() !== $user->getId()) {
             return $this->json(['error' => 'Access denied'], 403);
         }
+
+        // Zugehörige Dashboard-Widgets entfernen, damit keine verwaisten Einträge bleiben
+        foreach ($report->getWidgets() as $widget) {
+            $em->remove($widget);
+        }
+
         $em->remove($report);
         $em->flush();
 
         return $this->json(['status' => 'success']);
+    }
+
+    /**
+     * Lightweight endpoint: returns only the preset list (no heavy field/date queries).
+     * Used by the ReportsOverview page on initial load instead of the full builder-data call.
+     */
+    #[Route('/presets', name: 'api_report_presets', methods: ['GET'])]
+    public function presets(): JsonResponse
+    {
+        return $this->json(['presets' => $this->buildPresets()]);
+    }
+
+    /**
+     * Lightweight endpoint: returns only teams and players for the context-selection modal.
+     * Loaded lazily – only when the user actually clicks "Übernehmen" on a preset/template
+     * that involves a team or player dimension.
+     */
+    #[Route('/context-data', name: 'api_report_context_data', methods: ['GET'])]
+    public function contextData(EntityManagerInterface $em): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $isSuperAdmin = in_array('ROLE_SUPERADMIN', $user->getRoles(), true);
+        $isAdmin = in_array('ROLE_ADMIN', $user->getRoles(), true);
+
+        if ($isSuperAdmin || $isAdmin) {
+            // Admins: only teams that have actual game events
+            $allTeams = $em->createQuery(
+                'SELECT DISTINCT t FROM App\Entity\Team t INNER JOIN t.gameEvents ge ORDER BY t.name ASC'
+            )->getResult();
+            // Players: only those who actually appear in game events
+            $allPlayers = $em->createQuery(
+                'SELECT DISTINCT p FROM App\Entity\Player p INNER JOIN p.gameEvents ge ORDER BY p.lastName ASC, p.firstName ASC'
+            )->getResult();
+
+            return $this->json([
+                'teams' => array_map(fn ($t) => ['id' => $t->getId(), 'name' => $t->getName()], $allTeams),
+                'players' => array_map(fn ($p) => ['id' => $p->getId(), 'fullName' => $p->getFullName()], $allPlayers),
+            ]);
+        }
+
+        // Normale Nutzer: nur ihre aktuell aktiven Zuordnungen (Spieler- und Coach-Beziehungen)
+        // werden über den CoachTeamPlayerService korrekt ausgewertet.
+        $coachTeams = $this->coachTeamPlayerService->collectCoachTeams($user);
+        $playerTeams = $this->coachTeamPlayerService->collectPlayerTeams($user);
+
+        // Zusammenführen, nach Team-ID deduplizieren
+        $teamMap = $coachTeams + $playerTeams;
+
+        // Spieler aus allen zugänglichen Teams sammeln (ebenfalls dedupliziert)
+        $playerMap = [];
+        foreach ($teamMap as $team) {
+            foreach ($this->coachTeamPlayerService->collectTeamPlayers($team) as $entry) {
+                $pid = $entry['player']['id'];
+                if (null !== $pid && !isset($playerMap[$pid])) {
+                    $playerMap[$pid] = ['id' => $pid, 'fullName' => $entry['player']['name']];
+                }
+            }
+        }
+
+        return $this->json([
+            'teams' => array_values(array_map(fn ($t) => ['id' => $t->getId(), 'name' => $t->getName()], $teamMap)),
+            'players' => array_values($playerMap),
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Private helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /** @return array<int, array<string, mixed>> */
+    private function buildPresets(): array
+    {
+        return [
+            [
+                'key' => 'goals_per_player',
+                'label' => 'Tore pro Spieler',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'player',
+                    'yField' => 'goals',
+                    'groupBy' => ['player'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'goals_per_team',
+                'label' => 'Tore pro Mannschaft',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'team',
+                    'yField' => 'goals',
+                    'groupBy' => ['team'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'assists_per_player',
+                'label' => 'Torvorlagen pro Spieler',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'player',
+                    'yField' => 'assists',
+                    'groupBy' => ['player'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'cards_per_player',
+                'label' => 'Karten pro Spieler',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'player',
+                    'yField' => 'yellowCards',
+                    'groupBy' => ['player'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'goals_home_away',
+                'label' => 'Tore: Heim vs. Auswärts',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'homeAway',
+                    'yField' => 'goals',
+                    'groupBy' => ['homeAway'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'goals_per_position',
+                'label' => 'Tore nach Position',
+                'config' => [
+                    'diagramType' => 'pie',
+                    'xField' => 'position',
+                    'yField' => 'goals',
+                    'groupBy' => ['position'],
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'goals_per_month',
+                'label' => 'Tore pro Monat',
+                'config' => [
+                    'diagramType' => 'line',
+                    'xField' => 'month',
+                    'yField' => 'goals',
+                    'groupBy' => ['month'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'events_per_type',
+                'label' => 'Ereignisse pro Typ',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'eventType',
+                    'yField' => 'eventType',
+                    'groupBy' => ['eventType'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'goals_per_game_type',
+                'label' => 'Tore nach Spieltyp',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'gameType',
+                    'yField' => 'goals',
+                    'groupBy' => ['gameType'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'player_radar',
+                'label' => 'Spieler-Profil (Radar)',
+                'config' => [
+                    'diagramType' => 'radar',
+                    'xField' => 'player',
+                    'yField' => 'goals',
+                    'groupBy' => ['player'],
+                    'metrics' => ['goals', 'assists', 'shots', 'dribbles', 'duelsWonPercent', 'passes'],
+                    'radarNormalize' => true,
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'performance_by_surface',
+                'label' => 'Leistung nach Spielfeldtyp',
+                'config' => [
+                    'diagramType' => 'radaroverlay',
+                    'xField' => 'surfaceType',
+                    'yField' => 'goals',
+                    'groupBy' => ['surfaceType'],
+                    'metrics' => ['goals', 'assists', 'shots', 'yellowCards', 'fouls'],
+                    'radarNormalize' => false,
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'performance_by_weather',
+                'label' => 'Leistung nach Wetterlage',
+                'config' => [
+                    'diagramType' => 'radaroverlay',
+                    'xField' => 'weatherCondition',
+                    'yField' => 'goals',
+                    'groupBy' => ['weatherCondition'],
+                    'metrics' => ['goals', 'assists', 'shots', 'yellowCards', 'fouls'],
+                    'radarNormalize' => false,
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'performance_by_temperature',
+                'label' => 'Leistung nach Temperatur',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'temperatureRange',
+                    'yField' => 'goals',
+                    'groupBy' => ['temperatureRange'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'goals_by_surface_bar',
+                'label' => 'Tore pro Spielfeldtyp',
+                'config' => [
+                    'diagramType' => 'bar',
+                    'xField' => 'surfaceType',
+                    'yField' => 'goals',
+                    'groupBy' => ['surfaceType'],
+                    'showLegend' => false,
+                ],
+            ],
+            [
+                'key' => 'surface_weather_matrix',
+                'label' => 'Spielfeld × Wetter (Vergleich)',
+                'config' => [
+                    'diagramType' => 'stackedarea',
+                    'xField' => 'surfaceType',
+                    'yField' => 'goals',
+                    'groupBy' => ['weatherCondition'],
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'wind_performance',
+                'label' => 'Leistung bei Wind',
+                'config' => [
+                    'diagramType' => 'radaroverlay',
+                    'xField' => 'windStrength',
+                    'yField' => 'goals',
+                    'groupBy' => ['windStrength'],
+                    'metrics' => ['goals', 'assists', 'shots', 'yellowCards', 'fouls', 'passes'],
+                    'radarNormalize' => false,
+                    'showLegend' => true,
+                ],
+            ],
+            [
+                'key' => 'player_events_by_surface',
+                'label' => 'Spieler-Events nach Spielfeldtyp (Radar)',
+                'config' => [
+                    'diagramType' => 'faceted',
+                    'facetSubType' => 'radar',
+                    'facetLayout' => 'interactive',
+                    'facetBy' => 'surfaceType',
+                    'xField' => 'player',
+                    'yField' => 'eventType',
+                    'groupBy' => ['eventType'],
+                    'showLegend' => true,
+                    'showLabels' => false,
+                ],
+            ],
+            [
+                'key' => 'player_events_by_game_type',
+                'label' => 'Spieler-Events nach Spieltyp (Area)',
+                'config' => [
+                    'diagramType' => 'faceted',
+                    'facetSubType' => 'area',
+                    'facetLayout' => 'vertical',
+                    'facetBy' => 'gameType',
+                    'xField' => 'player',
+                    'yField' => 'eventType',
+                    'groupBy' => ['eventType'],
+                    'showLegend' => true,
+                    'showLabels' => false,
+                ],
+            ],
+        ];
     }
 }

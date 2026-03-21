@@ -1,144 +1,198 @@
-# Videos & Spielanalyse
+# Video-Analyse
 
-Mit der Video-Funktion wird die Spielnachbereitung bei Kaderblick richtig stark: Verknüpft Spielvideos direkt mit dem Spielgeschehen – und springt dann mit einem einzigen Klick genau zur Szene, die ihr analysieren wollt.
-
----
-
-## Was ist die Videoanalyse?
-
-Stellt euch vor: Ihr habt das Spiel auf YouTube oder als Datei vorliegen. Ihr tragt das Video in Kaderblick ein – und das System weiß dann zu jedem eingetragenen Spielereignis (Tor in Minute 23, Rote Karte in Minute 67, Wechsel in Minute 74), an welcher Stelle im Video diese Szene zu finden ist. Per Klick springt der Player direkt dorthin. Keine lästige Suche im Video mehr!
+Mit der Video-Analyse könnt ihr Spielvideos anschauen, wichtige Szenen markieren und einzelne Highlight-Clips erstellen. Ob YouTube-Videos oder eigene Aufnahmen — alles an einem Ort.
 
 ---
 
-## Videos zu einem Spiel hinzufügen
+## Videos aufrufen
 
-1. Das Spiel öffnen (Spielliste → Spiel anklicken)
-2. Im Bereich „Videos" auf **„Video hinzufügen"** klicken
-3. Folgende Daten eintragen:
+Videos sind **an ein Spiel gekoppelt**. Öffnet ein Spiel und scrollt zum Bereich **„Videos"**. Dort seht ihr alle zum Spiel gehörenden Aufnahmen. Alternativ findet ihr Videos auch direkt über die Video-Verwaltung.
 
-| Feld | Was trage ich ein? |
-|---|---|
-| **Name** | Bezeichnung, z. B. „Komplettaufnahme Kamera 1" oder „Highlights" |
-| **YouTube-Link oder Dateipfad** | Die URL des YouTube-Videos oder der Pfad zur hochgeladenen Datei |
-| **Videotyp** | z. B. Gesamtaufnahme, Highlights, Trainingsvideo |
-| **Kamera** | Falls mehrere Kameras vorhanden: welche Kamera ist das? |
-| **Spielstart** | ⭐ Die wichtigste Angabe! – Die Sekunde im Video, bei der der Schiedsrichter angepfiffen hat |
+Jedes Video hat folgende Informationen:
 
-4. Speichern
-
----
-
-## Was ist der Spielstart?
-
-Das ist der **Schlüssel zur automatischen Spielszenen-Navigation**. 
-
-Beispiel: Ihr habt ein 90-Minuten-Video hochgeladen, aber das Video fängt 3 Minuten und 45 Sekunden vor dem Anpfiff an (Aufwärmen, Platzbeschreibung, etc.). Dann tragt ihr bei „Spielstart" die Zahl **225** ein (= 3 Minuten × 60 + 45 Sekunden).
-
-Ab sofort kann das System jedes Spielereignis exakt umrechnen: Tor in Minute 23 → Startzeit 225 + 23×60 = Sekunde 1605 im Video. Klick – und ihr seid direkt beim Tor!
-
-> 💡 **Tipp:** Spielt das Video kurz an bis zum Moment des Anpfiffs und schaut auf die Zeitanzeige des Players. Diese Sekundenzahl tragt ihr als „Spielstart" ein.
+| Feld | Beschreibung |
+|------|-------------|
+| **Name** | Bezeichnung des Videos (z. B. „Erste Halbzeit", „Zusammenfassung") |
+| **Videotyp** | z. B. „Spielvideo", „Highlights", „Taktik-Analyse" |
+| **Kamera** | Welche Kamera wurde benutzt (z. B. „Hauptkamera", „Taktik-Kamera") |
+| **Länge** | Dauer des Videos |
+| **Sortierung** | Reihenfolge, wenn mehrere Videos zu einem Spiel gehören |
+| **YouTube-ID** | Falls es ein YouTube-Video ist — die ID wird automatisch aus dem Link extrahiert |
+| **Spielstart-Offset** | Ab welcher Sekunde im Video das Spiel tatsächlich beginnt (wichtig für die Zeitmarken!) |
 
 ---
 
-## Spielszenen anspringen – die Zeitleiste
+## Der Video-Player
 
-Sobald Videos und Spielereignisse vorhanden sind, erscheint unter dem Video-Player die **Zeitleiste**: eine visuelle Darstellung aller Ereignisse im Spielverlauf.
+### YouTube-Videos
+YouTube-Videos werden direkt **eingebettet** abgespielt — ihr braucht die App nicht verlassen. Der Player startet automatisch und zeigt keine störende YouTube-Werbung-Oberfläche.
 
-- Klickt auf ein Tor in der Liste → Video springt direkt zur Szene
-- Klickt auf eine Karte → Ihr seht die Situation sofort
-- Klickt auf einen Wechsel → Hintergrundinfos und Szene gleichzeitig
-
-Das macht Videoanalysen im Training extrem effizient – kein manuelles Suchen mehr.
+### Eigene Video-Dateien
+Hochgeladene Videos (über Dateipfad oder URL) werden mit dem Standard-HTML5-Player abgespielt.
 
 ---
 
-## Mehrere Videos pro Spiel
+## Die Zeitleiste (Timeline)
 
-Ein Spiel kann beliebig viele Videos haben – z. B. verschiedene Kameraperspektiven:
+Unter dem Video befindet sich die **Zeitleiste** — das Herzstück der Video-Analyse. Sie zeigt alle **Spielereignisse** als farbige Markierungen:
 
-- **Kamera 1**: Totale vom Dach (Gesamtüberblick)
-- **Kamera 2**: Nahaufnahme auf den Strafraum
-- **Highlights**: Zusammenschnitt der wichtigsten Szenen
+### Ereignis-Markierungen
 
-Alle Videos sind gleichzeitig aufrufbar und mit derselben Ereignisliste synchronisiert.
+- Jedes Spielereignis (Tor, Karte, Auswechslung, usw.) wird als **farbiger Kreis** auf der Zeitleiste dargestellt
+- Die **Farbe** entspricht dem Ereignistyp (z. B. Rot für Rote Karte, Gelb für Gelbe Karte)
+- Die **Position** auf der Zeitleiste entspricht dem Zeitpunkt im Video
+- **Tooltip**: Fahrt mit der Maus über eine Markierung → ihr seht den Ereignistyp und die Minute
 
----
+### Mit der Zeitleiste arbeiten
 
-## Szenen markieren (Videosegmente)
+| Aktion | Was passiert |
+|--------|-------------|
+| **Klick auf die Zeitleiste** | Video springt zu diesem Zeitpunkt |
+| **Klick auf eine Markierung** | Video springt genau zu diesem Ereignis |
+| **Markierung ziehen** | Verschiebt die Zeit des Ereignisses (z. B. wenn der Zeitstempel nicht ganz stimmt) |
 
-Innerhalb eines Videos können beliebige Abschnitte als **Szenen** (Segmente) markiert werden:
-
-- Großchancen
-- Defensivfehler
-- Standardsituationen
-- Taktische Muster
-
-Segmente haben einen Start- und Endpunkt und eine Beschreibung. Sie helfen dabei, im Training gezielt auf bestimmte Situationen einzugehen.
+> 💡 Die Zeitleiste nutzt den **Spielstart-Offset**: Wenn das Video erst in Sekunde 45 mit dem Anpfiff beginnt, werden die Ereignisse entsprechend verschoben, sodass „Minute 1" auch wirklich dem Anpfiff entspricht.
 
 ---
 
-## Videos hochladen
+## Feinabstimmung (Fine-Tuning)
 
-Neben YouTube-Links können Videos auch direkt in die Plattform hochgeladen werden. Genutzte Videodateien liegen dann im Vereins-Speicher und sind für alle berechtigten Mitglieder zugänglich.
+Wenn eine Markierung nicht ganz den richtigen Zeitpunkt trifft, könnt ihr **fein justieren**:
+
+1. **Länger auf eine Markierung drücken** (ca. 500 Millisekunden)
+2. Es öffnet sich der **Feinabstimmungs-Modus**:
+   - Ein **kreisförmiger Schieberegler** erscheint um die Markierung
+   - Ihr könnt den Zeitpunkt um **±10 Sekunden** verschieben
+   - Das Video springt in Echtzeit mit, sodass ihr die perfekte Stelle findet
+3. **Loslassen** → der neue Zeitpunkt wird übernommen
+
+Das ist besonders nützlich, wenn ihr z. B. ein Tor markiert habt, aber die Markierung eine Sekunde zu früh oder zu spät sitzt.
+
+> 💡 Auf dem Handy funktioniert die Feinabstimmung genauso — einfach den Finger länger auf der Markierung halten.
 
 ---
 
-## Berechtigungen
+## Schnitt-Modus (Cut Mode)
 
-- **Videos ansehen**: Alle Mitglieder des Teams, zu dem das Spiel gehört
-- **Videos hochladen und verwalten**: Nur Administratoren
+Der Schnitt-Modus erlaubt euch, **Highlight-Clips** zu erstellen — bestimmte Szenen aus dem Video zu „schneiden":
+
+### Schnitt-Modus aktivieren
+
+1. Klickt auf das **Scheren-Symbol** (✂️) in der Toolbar
+2. Die Toolbar zeigt jetzt: „Schnitt-Modus" — die Zeitleiste wechselt in den Bearbeitungsmodus
+
+### Szene markieren
+
+1. **Klickt auf die Zeitleiste** am **Startpunkt** der Szene
+2. Ein **orangefarbener Balken** erscheint mit:
+   - **Start-Griff** (links) — zum Anpassen des Beginns
+   - **End-Griff** (rechts) — zum Anpassen des Endes
+   - Der Balken zeigt den **markierten Bereich** visuell an
+3. Verschiebt Start- und End-Griff, bis die gewünschte Szene genau eingefasst ist
+4. Während ihr den Bereich anpasst, seht ihr ein **pulsierendes Scheren-Symbol**, das anzeigt, dass ein Schnitt bereitsteht
+5. **Bestätigen** → die Szene wird als Video-Segment gespeichert
+
+### Schnitt abbrechen
+
+- Drückt die **Escape-Taste** (oder tippt auf den Abbrechen-Button) → der aktuelle Schnitt wird verworfen
+- Der orangefarbene Balken verschwindet und ihr könnt von vorne beginnen
+
+### Schnitt-Modus beenden
+
+- Klickt erneut auf das **Scheren-Symbol** → ihr seid zurück im normalen Modus
+
+---
+
+## Video-Segmente
+
+Video-Segmente sind die einzelnen **Highlight-Clips**, die ihr aus einem Video geschnitten habt. Jedes Segment hat:
+
+| Feld | Beschreibung |
+|------|-------------|
+| **Titel** | Name des Segments (z. B. „Tor zum 2:1") |
+| **Untertitel** | Ergänzende Info (z. B. „Kopfball nach Ecke") |
+| **Spieler** | Welcher Spieler ist relevant für diese Szene |
+| **Startminute** | Ab welcher Minute im Video das Segment beginnt (Dezimalwert möglich, z. B. 23.5 für 23:30) |
+| **Länge** | Dauer des Segments in Sekunden |
+| **Audio einschließen** | Soll der Ton des Videos mit drin sein? (An/Aus) |
+| **Sortierung** | Reihenfolge der Segmente |
+
+### Segment erstellen
+
+Es gibt zwei Wege:
+
+1. **Über den Schnitt-Modus**: Markiert eine Szene auf der Zeitleiste (siehe oben) und füllt im Dialog Titel, Untertitel und Spieler aus
+2. **Manuell über den Button**: Klickt auf „Segment hinzufügen" → gebt Start-Minute und Länge direkt ein
+
+### Segment bearbeiten
+
+Klickt auf ein bestehendes Segment → im Dialog könnt ihr alle Felder anpassen. Ändert z. B. den Titel oder verschiebt den Startzeitpunkt.
+
+### Segment löschen
+
+Im Segment-Dialog gibt es einen „Löschen"-Button. Bestätigt die Löschung im Bestätigungs-Dialog.
+
+---
+
+## CSV-Export
+
+Ihr könnt alle Segmente eines Videos als **CSV-Datei exportieren**. Das ist nützlich, wenn ihr die Szenen-Liste ausdrucken oder in einem Tabellenprogramm weiterverarbeiten wollt.
+
+Klickt auf den **„CSV exportieren"**-Button → eine Datei wird heruntergeladen mit allen Segmenten und ihren Zeitangaben.
+
+---
+
+## Videotypen und Kameras
+
+### Videotypen
+
+In der Verwaltung könnt ihr verschiedene **Videotypen** anlegen, z. B.:
+- Spielvideo (volle Aufnahme)
+- Highlights
+- Taktik-Analyse
+- Training
+
+### Kameras
+
+Verschiedene **Kameras** können hinterlegt werden, z. B.:
+- Hauptkamera (Tribüne)
+- Taktik-Kamera (hoch oben, Vogelperspektive)
+- Handykamera
+
+So wisst ihr immer, **aus welcher Perspektive** ein Video aufgenommen wurde.
+
+---
+
+## Tipps zur Video-Analyse
+
+### Für Trainer
+- **Spielstart-Offset eintragen**: Messt, bei welcher Sekunde im Video der Anpfiff ist → so stimmen alle Zeitmarken automatisch
+- **Segmente pro Spieler erstellen**: Schneidet Szenen mit dem Spielernamen → ideal für individuelle Nachbesprechungen
+- **Audio aus für taktische Clips**: Schaltet den Ton ab, wenn ihr die Clips in der Besprechung mit eigenen Kommentaren zeigen wollt
+
+### Für Spieler
+- **Eigene Szenen finden**: Schaut in den Segmenten, ob euer Name bei einem Clip markiert ist
+- **Vor dem nächsten Spiel**: Schaut euch die Highlights des letzten Spiels nochmal an — hilft bei der Vorbereitung
+
+### Allgemein
+- **YouTube-Links verwenden**: Ladet Videos auf YouTube hoch (privat/nicht gelistet) und tragt die YouTube-ID ein → beste Qualität und kein eigener Speicherplatz nötig
+- **Mehrere Videos pro Spiel**: Ihr könnt pro Spiel mehrere Videos anlegen (z. B. erste + zweite Halbzeit, oder verschiedene Kameraperspektiven) — nutzt die Sortierung, um die Reihenfolge festzulegen
 
 ---
 
 ## Häufige Fragen
 
-**Das Video springt an die falsche Stelle – was ist passiert?**
-→ Der Spielstart ist falsch eingetragen. Spielt das Video bis zum Anpfiff vor, notiert die Sekunde und korrigiert den Spielstart-Wert beim Video.
+### Kann ich jedes YouTube-Video einbinden?
+Ja, solange das Video nicht als „privat" markiert ist. „Nicht gelistete" Videos funktionieren problemlos — ihr braucht nur die YouTube-ID (den Teil nach `v=` in der URL).
 
-**Kann ich auch Videos ohne YouTube-Link nutzen?**
-→ Ja, Videos können auch direkt hochgeladen werden. Achtet dabei auf ausreichend Speicherplatz auf dem Server.
+### Was ist der Spielstart-Offset?
+Viele Aufnahmen beginnen nicht exakt beim Anpfiff — vielleicht filmt jemand schon beim Warmmachen. Der Offset gibt an, bei **welcher Sekunde im Video** das Spiel tatsächlich beginnt. Dann stimmen alle Zeitmarken (z. B. „Tor in Minute 23") genau.
 
-**Wie viele Kameras / Videos darf ein Spiel haben?**
-→ Technisch unbegrenzt – aber für die Übersichtlichkeit empfehlen wir, nicht mehr als 3–4 Videos pro Spiel einzutragen.
+### Kann ich Schnitte rückgängig machen?
+Segmente können jederzeit bearbeitet oder gelöscht werden. Das Original-Video wird nie verändert — Segmente sind nur Markierungen.
 
----
+### Funktioniert die Zeitleiste auf dem Handy?
+Ja — auf Touch-Geräten könnt ihr Markierungen antippen (springt zum Zeitpunkt) und länger drücken (Feinabstimmung). Der Schnitt-Modus funktioniert ebenfalls per Touch.
 
-## Grundprinzip
-
-Jedes Spiel kann beliebig viele Videos haben. Ein Video enthält grundlegende Metadaten (Name, URL/Dateipfad, Länge) sowie einen **Spielstart-Offset** (`gameStart`): die Sekunde im Video, zu der die Partie angepfiffen wurde. Durch diesen Offset kann das System die Spielminute jedes Spielereignisses direkt in einen Zeitstempel im Video umrechnen.
-
----
-
-## Video-Felder
-
-| Feld | Beschreibung |
-|---|---|
-| Name | Bezeichnung des Videos (eindeutig pro Spiel) |
-| URL | Link zum Video (z. B. YouTube-URL) |
-| YouTube-ID | Wird automatisch aus der URL extrahiert |
-| Dateipfad | Alternativer Pfad für lokal hochgeladene Dateien |
-| Spielstart (`gameStart`) | Sekunde im Video, bei der das Spiel beginnt |
-| Sortierung (`sort`) | Reihenfolge der Videos pro Spiel (eindeutig) |
-| Länge | Gesamtlänge des Videos in Sekunden |
-| Videotyp | Kategorie des Videos (z. B. Gesamtaufnahme, Highlight, Ausschnitt) |
-| Kamera | Welche Kamera das Video aufgenommen hat |
-| Erstellt von | Benutzer, der das Video angelegt hat |
-
----
-
-## Videotypen
-
-Videotypen kategorisieren Videos (z. B. "Vollaufnahme", "Torausschnitt", "Taktikvideos"). Sie werden zentral verwaltet (Route `/videoTypes`).
-
----
-
-## Kameras
-
-Kameras repräsentieren physische oder virtuelle Aufnahmepositionen. Sie ermöglichen die Zuordnung mehrerer Videos pro Spiel zu verschiedenen Kameraperspektiven. Verwaltung über Route `/cameras`.
-
----
-
-## Video-Zeitleiste (Timeline)
-
-Unterhalb des Videos werden alle erfassten Spielereignisse als klickbare Markierungen auf einer Zeitleiste angezeigt. Ein Klick auf z. B. „67. Minute: Tor – Müller" springt das Video sofort zur exakten Szene – kein manuelles Suchen mehr.
-
+### Was passiert, wenn ich ein Spiel lösche?
+Die Videos und Segmente, die mit dem Spiel verknüpft sind, werden ebenfalls gelöscht. YouTube-Videos selbst bleiben natürlich auf YouTube — nur die Verknüpfung in Kaderblick wird entfernt.

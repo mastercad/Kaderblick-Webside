@@ -1,21 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useMemo } from 'react';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import StrongFeetDeleteConfirmationModal from '../modals/StrongFeetDeleteConfirmationModal';
 import StrongFeetEditModal from '../modals/StrongFeetEditModal';
 import { StrongFeet } from '../types/strongFeet';
@@ -24,132 +10,81 @@ const StrongFeets = () => {
   const [strongFeets, setStrongFeets] = useState<StrongFeet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [strongFeetId, setStrongFeetId] = useState<number | null>(null);
   const [strongFeetEditModalOpen, setStrongFeetEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteStrongFeet, setDeleteStrongFeet] = useState<StrongFeet | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
 
   const loadStrongFeets = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiJson<{ strongFeets: StrongFeet[] }>('/api/strong-feet');
-      if (res && Array.isArray(res.strongFeets)) {
-        setStrongFeets(res.strongFeets);
-      } else {
-        setStrongFeets([]);
-      }
-    } catch (e) {
+      setStrongFeets(res && Array.isArray(res.strongFeets) ? res.strongFeets : []);
+    } catch {
       setError('Fehler beim Laden der starken Füße.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadStrongFeets();
-  }, []);
+  useEffect(() => { loadStrongFeets(); }, []);
 
-  const handleDelete = async (strongFeetId: number) => {
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/strong-feet/${strongFeetId}`, { method: 'DELETE' });
-      setStrongFeets(strongFeets => strongFeets.filter(c => c.id !== strongFeetId));
+      await apiJson(`/api/strong-feet/${id}`, { method: 'DELETE' });
+      setStrongFeets(prev => prev.filter(c => c.id !== id));
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen der starken Füße.');
+      setSnackbar({ open: true, message: 'Starker Fuß gelöscht', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen.', severity: 'error' });
     }
   };
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return strongFeets;
+    const q = search.toLowerCase();
+    return strongFeets.filter(s => (s.name || '').toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q));
+  }, [strongFeets, search]);
+
+  const columns: AdminTableColumn<StrongFeet>[] = [
+    { header: 'Name', render: s => s.name || '' },
+    { header: 'Code', render: s => s.code || '', width: 120 },
+  ];
+
   return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Starke Füße
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setStrongFeetId(null); setStrongFeetEditModalOpen(true) }}>
-          Neuen starken Fuß erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
+    <AdminPageLayout
+      icon={<DirectionsRunIcon />}
+      title="Starke Füße"
+      itemCount={strongFeets.length}
+      loading={loading}
+      error={error}
+      createLabel="Neuer starker Fuß"
+      onCreate={() => { setStrongFeetId(null); setStrongFeetEditModalOpen(true); }}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+    >
+      {filtered.length === 0 ? (
+        <AdminEmptyState icon={<DirectionsRunIcon />} title="Keine starken Füße vorhanden" createLabel="Neuer starker Fuß" onCreate={() => { setStrongFeetId(null); setStrongFeetEditModalOpen(true); }} />
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Code</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {strongFeets.map((strongFeet, idx) => (
-                <TableRow key={strongFeet.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell>
-                    {strongFeet.name || ''}
-                  </TableCell>
-                  <TableCell>
-                    {strongFeet.code || ''}
-                  </TableCell>
-                  <TableCell>
-                    { strongFeet.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setStrongFeetId(strongFeet.id);
-                          setStrongFeetEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Starken Fuß bearbeiten"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { strongFeet.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeleteStrongFeet(strongFeet);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Starken Fuß löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        )}
-        <StrongFeetEditModal
-            openStrongFeetEditModal={strongFeetEditModalOpen}
-            strongFeetId={strongFeetId}
-            onStrongFeetEditModalClose={() => setStrongFeetEditModalOpen(false)}
-            onStrongFeetSaved={(savedStrongFeet) => {
-                setStrongFeetEditModalOpen(false);
-                loadStrongFeets();
-            }}
+        <AdminTable columns={columns} data={filtered} getKey={s => s.id}
+          renderActions={s => (
+            <AdminActions
+              onEdit={s.permissions?.canEdit ? () => { setStrongFeetId(s.id); setStrongFeetEditModalOpen(true); } : undefined}
+              onDelete={s.permissions?.canDelete ? () => { setDeleteStrongFeet(s); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
         />
-        <StrongFeetDeleteConfirmationModal
-            open={deleteModalOpen}
-            positionName={deleteStrongFeet?.name}
-            onClose={() => setDeleteModalOpen(false)}
-            onConfirm={async () => handleDelete(deleteStrongFeet!.id) }
-        />
-    </Box>
+      )}
+
+      <StrongFeetEditModal openStrongFeetEditModal={strongFeetEditModalOpen} strongFeetId={strongFeetId} onStrongFeetEditModalClose={() => setStrongFeetEditModalOpen(false)} onStrongFeetSaved={() => { setStrongFeetEditModalOpen(false); loadStrongFeets(); }} />
+      <StrongFeetDeleteConfirmationModal open={deleteModalOpen} positionName={deleteStrongFeet?.name} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deleteStrongFeet!.id)} />
+    </AdminPageLayout>
   );
 };
 

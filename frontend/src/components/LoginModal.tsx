@@ -19,6 +19,7 @@ const style = {
 
 interface AuthData {
   success: boolean;
+  isNewUser?: boolean;
   user?: any;
   error?: string;
   message?: string;
@@ -53,7 +54,8 @@ export default function LoginModal() {
         }
 
         try {
-          loginWithGoogle(event.data as AuthData);
+          const authData = event.data as AuthData;
+          loginWithGoogle(authData);
         } catch (error) {
           console.error('Login failed:', error);
         }

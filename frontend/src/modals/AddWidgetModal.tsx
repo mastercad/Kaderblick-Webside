@@ -22,9 +22,9 @@ interface AddWidgetModalProps {
 const widgetOptions = [
   { type: 'calendar', label: 'Kalender', icon: <CalendarMonthIcon /> },
   { type: 'messages', label: 'Nachrichten', icon: <EmailIcon /> },
-  { type: 'news', label: 'News', icon: <NewspaperIcon /> },
-  { type: 'upcoming_events', label: 'Anstehende Veranstaltungen', icon: <EventIcon /> },
-  { type: 'report', label: 'Report Widget', icon: <DescriptionIcon /> },
+  { type: 'news', label: 'Neuigkeiten', icon: <NewspaperIcon /> },
+  { type: 'upcoming_events', label: 'Anstehende Termine', icon: <EventIcon /> },
+  { type: 'report', label: 'Statistik Widget', icon: <DescriptionIcon /> },
 ];
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

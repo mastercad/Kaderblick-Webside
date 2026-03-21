@@ -26,4 +26,14 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  // Jest mock files use CommonJS (module.exports) – treat them as Node scripts
+  {
+    files: ['**/__mocks__/**/*.{js,cjs}', '**/*.mock.{js,cjs}'],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        sourceType: 'script',
+      },
+    },
+  },
 ])

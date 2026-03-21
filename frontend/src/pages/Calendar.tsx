@@ -1,8 +1,10 @@
 import CalendarFab from '../components/CalendarFab';
 import { useFabStack } from '../components/FabStackProvider';
+import { MobileCalendar } from '../components/MobileCalendar';
 // ErrorBoundary für bessere Fehlerdiagnose
 import React from 'react';
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { EventDetailsModal } from '../modals/EventDetailsModal';
 import { EventModal } from '../modals/EventModal';
 import { getEventTypeFlags } from '../hooks/useEventTypeFlags';
@@ -23,7 +25,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import TodayIcon from '@mui/icons-material/Today';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { apiJson, apiRequest } from '../utils/api';
+import { apiJson, apiRequest, getApiErrorMessage } from '../utils/api';
 import { TournamentGameMode, TournamentType } from '../types/tournament';
 import moment from 'moment';
 import AddIcon from '@mui/icons-material/Add';
@@ -107,8 +109,26 @@ type CalendarEvent = {
     };
   };
   permissionType?: string;
+  trainingTeamId?: number;
+  trainingWeekdays?: number[];
+  trainingSeriesEndDate?: string;
+  trainingSeriesId?: string;
   pendingTournamentMatches?: any[];
   teamIds?: any[];
+  permissions?: {
+    canCreate?: boolean;
+    canEdit?: boolean;
+    canDelete?: boolean;
+    canCancel?: boolean;
+  };
+  cancelled?: boolean;
+  cancelReason?: string;
+  cancelledBy?: string;
+  // Externe Kalender-Events (importiert via iCal)
+  isExternal?: boolean;
+  externalCalendarId?: number;
+  externalCalendarName?: string;
+  externalCalendarColor?: string;
 };
 
 type CalendarEventType = {
@@ -120,6 +140,8 @@ type CalendarEventType = {
 type Team = {
   id: number;
   name: string;
+  defaultHalfDuration?: number | null;
+  defaultHalftimeBreakDuration?: number | null;
 };
 
 type GameType = {
@@ -211,6 +233,18 @@ type EventFormData = {
     }
   }
   teamIds?: any[];
+  // Training-bezogene Felder
+  trainingTeamId?: string;
+  trainingRecurring?: boolean;
+  trainingWeekdays?: number[];
+  trainingEndDate?: string;
+  trainingDuration?: number;
+  trainingSeriesId?: string;
+  // Game timing fields (only for Spiel events)
+  gameHalfDuration?: number;
+  gameHalftimeBreakDuration?: number;
+  gameFirstHalfExtraTime?: number | null;
+  gameSecondHalfExtraTime?: number | null;
 };
 
 const messages = {
@@ -249,22 +283,16 @@ type CalendarProps = {
 function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
   // Handler für globalen FabStack setzen/entfernen
   const fabStack = useFabStack();
-  React.useEffect(() => {
-    // CalendarFab nur auf Kalender-Seite anzeigen
-    fabStack?.addFab(<CalendarFab onClick={handleAddEvent} />, 'calendar-fab');
-    return () => {
-      fabStack?.removeFab('calendar-fab');
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [view, setView] = useState(isMobile ? Views.DAY : Views.MONTH);
   const [date, setDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [initialOpenRides, setInitialOpenRides] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([]);
   
   // Event Modal State
   const [eventModalOpen, setEventModalOpen] = useState(false);
@@ -280,15 +308,80 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     taskOffset: 0
   });
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editingEventPermissions, setEditingEventPermissions] = useState<{ canEdit?: boolean; canDelete?: boolean } | null>(null);
   const [eventSaving, setEventSaving] = useState(false);
   
   // Zusätzliche Daten
   const [eventTypes, setEventTypes] = useState<{ createAndEditAllowed: boolean; entries: CalendarEventType[] }>({ createAndEditAllowed: false, entries: [] });
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);  // own teams (filtered by user)
+  const [allTeams, setAllTeams] = useState<Team[]>([]);  // all teams (for match/tournament context)
   const [gameTypes, setGameTypes] = useState<{ createAndEditAllowed: boolean; entries: GameType[] }>({ createAndEditAllowed: false, entries: [] });
   const [locations, setLocations] = useState<Location[]>([]);
   const [leagues, setLeagues] = useState<League[]>([]);
-  const [users, setUsers] = useState<{ id: string | number; fullName?: string; firstName?: string; lastName?: string }[]>([]);
+
+  // CalendarFab nur anzeigen wenn der Benutzer Events erstellen darf
+  React.useEffect(() => {
+    if (!eventTypes.createAndEditAllowed) {
+      fabStack?.removeFab('calendar-fab');
+      return;
+    }
+    fabStack?.addFab(<CalendarFab onClick={handleAddEvent} />, 'calendar-fab');
+    return () => {
+      fabStack?.removeFab('calendar-fab');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventTypes.createAndEditAllowed]);
+
+  // Deep-link: open event details (and optionally rides) from URL params
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkEventId = searchParams.get('eventId');
+  const deepLinkOpenRides = searchParams.get('openRides') === '1';
+
+  useEffect(() => {
+    if (!deepLinkEventId) return;
+    const eventId = parseInt(deepLinkEventId, 10);
+    if (isNaN(eventId)) return;
+
+    // Try to find in already-loaded events first
+    const found = events.find(e => e.id === eventId);
+    if (found) {
+      setSelectedEvent(found);
+      setInitialOpenRides(deepLinkOpenRides);
+      // Clear params so we don't re-trigger
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    // Fetch event details if not in current view
+    apiJson(`/api/calendar/event/${eventId}`)
+      .then((ev: any) => {
+        if (ev && !ev.error) {
+          const calEvent: CalendarEvent = {
+            id: ev.id || eventId,
+            title: ev.title || 'Termin',
+            start: new Date(ev.start || ev.startDate),
+            end: new Date(ev.end || ev.endDate),
+            description: ev.description || '',
+            eventType: ev.type || {},
+            location: ev.location || {},
+            game: ev.game || undefined,
+            task: ev.task || undefined,
+            weatherData: ev.weatherData || undefined,
+            permissions: ev.permissions || {},
+            cancelled: ev.cancelled || false,
+            cancelReason: ev.cancelReason || undefined,
+            cancelledBy: ev.cancelledBy || undefined,
+          } as CalendarEvent;
+          setSelectedEvent(calEvent);
+          setInitialOpenRides(deepLinkOpenRides);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setSearchParams({}, { replace: true });
+      });
+  }, [deepLinkEventId, events]);
+  const [users, setUsers] = useState<{ id: string | number; fullName?: string; firstName?: string; lastName?: string; context?: string }[]>([]);
 
   // Filter State - Set mit aktiven Event-Type-IDs (standardmäßig alle aktiv)
   const [activeEventTypeIds, setActiveEventTypeIds] = useState<Set<number>>(new Set());
@@ -319,6 +412,8 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
 
   const [taskDeletionModal, setTaskDeletionModal] = useState<{
     open: boolean;
+    mode?: 'task' | 'training';
+    eventId?: number;
   }>({
     open: false
   });
@@ -350,10 +445,11 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     Promise.all([
       apiJson<{ createAndEditAllowed: boolean; entries: CalendarEventType[] }>('/api/calendar-event-types').catch(() => ({ createAndEditAllowed: false, entries: [] })),
       apiJson<TeamsApiResponse[]>('/api/teams/list').catch(() => []),
+      apiJson<TeamsApiResponse[]>('/api/teams/list?context=match').catch(() => []),
       apiJson<{ createAndEditAllowed: boolean; entries: GameType[] }>('/api/game-types').catch(() => ({ createAndEditAllowed: false, entries: [] })),
       apiJson<LocationsApiResponse>('/api/locations').catch(() => ({ locations: [], permissions: { canCreate: false, canEdit: false, canView: false, canDelete: false } })),
-      apiJson<{ users: { id: string; firstName: string; lastName: string }[] }>('/api/users').catch(() => ({ users: [] }))
-    ]).then(([eventTypesData, teamsData, gameTypesData, locationsData, usersData]) => {
+      apiJson<{ users: { id: string; fullName: string; context?: string }[] }>('/api/users/contacts').catch(() => ({ users: [] }))
+    ]).then(([eventTypesData, teamsData, allTeamsData, gameTypesData, locationsData, usersData]) => {
       // Defensive: handle possible error objects
       if ('error' in eventTypesData) {
         setEventTypes({ createAndEditAllowed: false, entries: [] });
@@ -365,18 +461,17 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
           entries: (eventTypesData.entries || []).filter(et => et.name !== 'Turnier-Match')
         });
       }
-      if (Array.isArray(teamsData)) {
-        // Defensive: teamsData might be an array of teams or an array with a single object containing teams
-        if (teamsData.length > 0 && 'teams' in teamsData[0]) {
-          setTeams((teamsData[0] as any).teams || []);
-        } else {
-          setTeams([]);
+      const parseTeams = (data: any): Team[] => {
+        if (Array.isArray(data)) {
+          if (data.length > 0 && 'teams' in data[0]) return (data[0] as any).teams || [];
+          return [];
+        } else if (data && typeof data === 'object' && 'teams' in data) {
+          return (data as any).teams || [];
         }
-      } else if (teamsData && typeof teamsData === 'object' && 'teams' in teamsData) {
-        setTeams((teamsData as any).teams || []);
-      } else {
-        setTeams([]);
-      }
+        return [];
+      };
+      setTeams(parseTeams(teamsData));
+      setAllTeams(parseTeams(allTeamsData));
       if ('error' in gameTypesData) {
         setGameTypes({ createAndEditAllowed: false, entries: [] });
       } else {
@@ -452,6 +547,15 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
             game: ev.game || undefined,
             task: ev.task || undefined,
             weatherData: ev.weatherData || undefined,
+            permissions: ev.permissions || {},
+            permissionType: ev.permissionType || undefined,
+            trainingTeamId: ev.trainingTeamId || undefined,
+            trainingWeekdays: ev.trainingWeekdays || undefined,
+            trainingSeriesEndDate: ev.trainingSeriesEndDate || undefined,
+            trainingSeriesId: ev.trainingSeriesId || undefined,
+            cancelled: ev.cancelled || false,
+            cancelReason: ev.cancelReason || undefined,
+            cancelledBy: ev.cancelledBy || undefined,
             tournamentId: ev.tournament?.id,
             tournamentType: tournamentSettings?.type,
             tournamentRoundDuration: tournamentSettings?.roundDuration,
@@ -473,8 +577,32 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       });
   }, [date, view]);
 
+  // Externe Kalender-Events laden (einmal beim Mounten + bei Bedarf)
+  useEffect(() => {
+    apiJson('/api/profile/calendar/external/events/all')
+      .then((data: any) => {
+        if (!Array.isArray(data)) return;
+        const mapped: CalendarEvent[] = data.map((ev: any, idx: number) => ({
+          id: -(idx + 1),  // negative IDs um Konflikte mit echten Events zu vermeiden
+          title: ev.title || 'Externer Termin',
+          start: new Date(ev.start),
+          end: new Date(ev.end),
+          description: ev.description || '',
+          isExternal: true,
+          externalCalendarId: ev.calendarId,
+          externalCalendarName: ev.calendarName,
+          externalCalendarColor: ev.calendarColor,
+        }));
+        setExternalEvents(mapped);
+      })
+      .catch(() => {
+        // Fehler beim Laden externer Kalender → still ignorieren
+      });
+  }, []);
+
   // Event-Handler für das Erstellen neuer Events
   const handleDateClick = (slotInfo: any) => {
+    if (!eventTypes.createAndEditAllowed) return;
     const clickedDate = moment(slotInfo.start).format('YYYY-MM-DD');
     setEventFormData({
       title: '',
@@ -487,11 +615,16 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       taskOffset: 0
     });
     setEditingEventId(null);
+    setEditingEventPermissions(null);
     setEventModalOpen(true);
   };
 
   // Event-Handler für das Bearbeiten existierender Events
   const handleEventClick = (info: any) => {
+    // Externe Events sind schreibgeschützt – kein EventDetailsModal öffnen
+    if (info?.isExternal) {
+      return;
+    }
     setSelectedEvent(info);
   };
 
@@ -539,6 +672,10 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       }
     }
 
+    const trainingDuration = endDate && endDate.isAfter(startDate)
+      ? endDate.diff(startDate, 'minutes')
+      : (event as any).trainingDuration || 90;
+
     setEventFormData({
       title: event.title,
       date: startDate.format('YYYY-MM-DD'),
@@ -552,7 +689,13 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       awayTeam: event.game?.awayTeam?.id?.toString() || '',
       gameType: resolvedGameType,
       leagueId: event.game && (event.game as any).league?.id ? (event.game as any).league.id.toString() : '',
-      permissionType: event.permissionType ?? 'public',
+      permissionType: (event as any).permissionType ?? 'public',
+      trainingTeamId: event.trainingTeamId?.toString() || '',
+      trainingRecurring: !!(event.trainingWeekdays && event.trainingWeekdays.length > 0),
+      trainingWeekdays: event.trainingWeekdays || [],
+      trainingEndDate: event.trainingSeriesEndDate || '',
+      trainingSeriesId: event.trainingSeriesId || undefined,
+      trainingDuration,
       tournamentId: event.tournament?.id?.toString() || (event as any).tournamentId?.toString() || '',
       tournamentType: event.tournament?.settings?.tournamentType || undefined,
       tournamentRoundDuration: event.tournament?.settings?.roundDuration || 10,
@@ -573,6 +716,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       } : undefined
     });
     setEditingEventId(event.id);
+    setEditingEventPermissions(event.permissions ?? null);
     setSelectedEvent(null);
     setEventModalOpen(true);
   };
@@ -604,10 +748,22 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     }
 
     // Event type flags — single source of truth
-    const { isMatchEvent, isTournament, isTask } = getEventTypeFlags(
+    const { isMatchEvent, isTournament, isTask, isTraining } = getEventTypeFlags(
       eventFormData.eventType, eventFormData.gameType, eventTypesOptions, gameTypesOptions,
     );
     
+    // Validation for recurring training
+    if (isTraining && eventFormData.trainingRecurring) {
+      if (!eventFormData.trainingWeekdays || eventFormData.trainingWeekdays.length === 0) {
+        showAlert('Bitte mindestens einen Wochentag für das Training auswählen.', 'warning', 'Wochentage fehlen');
+        return;
+      }
+      if (!eventFormData.trainingEndDate) {
+        showAlert('Bitte ein Enddatum für die Trainingsserie angeben.', 'warning', 'Enddatum fehlt');
+        return;
+      }
+    }
+
     if (isMatchEvent && !isTournament) {
       if (!eventFormData.homeTeam) {
         showAlert('Bitte wählen Sie ein Heim-Team aus.', 'warning', 'Heim-Team fehlt');
@@ -626,18 +782,76 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     setEventSaving(true);
 
     try {
+      // Recurring Training: use dedicated bulk endpoint
+      if (isTraining && eventFormData.trainingRecurring && !editingEventId) {
+        const seriesPayload = {
+          title: eventFormData.title,
+          startDate: eventFormData.date,
+          seriesEndDate: eventFormData.trainingEndDate,
+          weekdays: eventFormData.trainingWeekdays,
+          time: eventFormData.time || null,
+          endTime: eventFormData.endTime || null,
+          duration: eventFormData.trainingDuration || 90,
+          eventTypeId: eventFormData.eventType ? parseInt(eventFormData.eventType) : undefined,
+          teamId: eventFormData.trainingTeamId ? parseInt(eventFormData.trainingTeamId) : undefined,
+          locationId: eventFormData.locationId ? parseInt(eventFormData.locationId) : undefined,
+          description: eventFormData.description || '',
+        };
+
+        const response = await apiRequest('/api/calendar/training-series', {
+          method: 'POST',
+          body: seriesPayload,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Unbekannter Fehler' }));
+          throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        await refreshEvents();
+        setEventModalOpen(false);
+        setEventFormData({
+          title: '',
+          date: '',
+          time: '',
+          eventType: '',
+          locationId: '',
+          description: '',
+          permissionType: 'public',
+          taskOffset: 0,
+        });
+        showAlert(`${result.createdCount} Trainings wurden erfolgreich erstellt!`, 'success', 'Trainingsserie erstellt');
+        setEventSaving(false);
+        return;
+      }
+
       // Start-DateTime zusammenbauen
       const startDateTime = eventFormData.time 
         ? `${eventFormData.date}T${eventFormData.time}:00`
         : `${eventFormData.date}T00:00:00`;
       
       // End-DateTime zusammenbauen (falls vorhanden)
-      let endDateTime = startDateTime;
+      let endDateTime: string | undefined;
       if (eventFormData.endDate) {
         endDateTime = eventFormData.endTime 
           ? `${eventFormData.endDate}T${eventFormData.endTime}:00`
           : `${eventFormData.endDate}T23:59:59`;
       }
+
+      // For Spiel events without explicit end time: auto-compute from timing fields
+      if (!endDateTime && isMatchEvent && !isTournament) {
+        const halfDur  = typeof eventFormData.gameHalfDuration === 'number' ? eventFormData.gameHalfDuration : 45;
+        const breakDur = typeof eventFormData.gameHalftimeBreakDuration === 'number' ? eventFormData.gameHalftimeBreakDuration : 15;
+        const totalMins = 2 * halfDur + breakDur;
+        const startDate = new Date(startDateTime);
+        startDate.setMinutes(startDate.getMinutes() + totalMins);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        endDateTime = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}T${pad(startDate.getHours())}:${pad(startDate.getMinutes())}:00`;
+      }
+
+      // Fallback: keep endDate = startDate for events without explicit end time
+      if (!endDateTime) endDateTime = startDateTime;
 
       const payload: any = {
         title: eventFormData.title,
@@ -658,7 +872,11 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
         if (!isTournament && eventFormData.homeTeam && eventFormData.awayTeam) {
           payload.game = {
             homeTeamId: parseInt(eventFormData.homeTeam),
-            awayTeamId: parseInt(eventFormData.awayTeam)
+            awayTeamId: parseInt(eventFormData.awayTeam),
+            halfDuration: typeof eventFormData.gameHalfDuration === 'number' ? eventFormData.gameHalfDuration : undefined,
+            halftimeBreakDuration: typeof eventFormData.gameHalftimeBreakDuration === 'number' ? eventFormData.gameHalftimeBreakDuration : undefined,
+            firstHalfExtraTime: eventFormData.gameFirstHalfExtraTime ?? undefined,
+            secondHalfExtraTime: eventFormData.gameSecondHalfExtraTime ?? undefined,
           };
         }
 
@@ -707,6 +925,12 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
         }
       }
 
+      // Single training: set team permission automatically
+      if (isTraining && eventFormData.trainingTeamId) {
+        payload.permissionType = 'team';
+        payload.permissionTeams = [parseInt(eventFormData.trainingTeamId)];
+      }
+
       const url = editingEventId ? `/api/calendar/event/${editingEventId}` : '/api/calendar/event';
       const method = editingEventId ? 'PUT' : 'POST';
 
@@ -716,10 +940,10 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unbekannter Fehler' }));
+        const errorData = await response.json().catch(() => ({ error: 'Unbekannter Fehler' }));
         console.error(response);
         console.error(errorData);
-        throw new Error(errorData.message || `HTTP ${response.status}`);
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
       }
 
       await refreshEvents();
@@ -740,7 +964,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       
     } catch (error: any) {
       console.error('Error saving event:', error);
-      showAlert('Fehler beim Speichern des Events: ' + error.message, 'error', 'Speichern fehlgeschlagen');
+      showAlert(getApiErrorMessage(error), 'error', 'Speichern fehlgeschlagen');
     } finally {
       setEventSaving(false);
     }
@@ -750,9 +974,12 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     if (!editingEventId) return;
 
     const isTaskEvent = eventFormData.task && Object.keys(eventFormData.task).length > 0;
+    const isTrainingSeries = (eventFormData.trainingWeekdays?.length ?? 0) > 0 || !!eventFormData.trainingSeriesId;
 
     if (isTaskEvent) {
-      setTaskDeletionModal({ open: true });
+      setTaskDeletionModal({ open: true, eventId: editingEventId });
+    } else if (isTrainingSeries) {
+      setTaskDeletionModal({ open: true, mode: 'training', eventId: editingEventId });
     } else {
       showConfirm(
         'Möchten Sie dieses Event wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -764,25 +991,48 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     }
   };
 
-  const performDeleteEvent = async (deletionMode: 'single' | 'series') => {
-    if (!editingEventId) return;
+  const handleDeleteSelectedEvent = async () => {
+    if (!selectedEvent) return;
+
+    const isTaskEvent = selectedEvent.task && Object.keys(selectedEvent.task).length > 0;
+    const isTrainingSeries = !!selectedEvent.trainingSeriesId;
+
+    if (isTaskEvent) {
+      setTaskDeletionModal({ open: true, eventId: selectedEvent.id });
+    } else if (isTrainingSeries) {
+      setTaskDeletionModal({ open: true, mode: 'training', eventId: selectedEvent.id });
+    } else {
+      showConfirm(
+        'Möchten Sie dieses Event wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+        async () => {
+          await performDeleteEvent('single', selectedEvent.id);
+        },
+        'Event löschen'
+      );
+    }
+  };
+
+  const performDeleteEvent = async (deletionMode: 'single' | 'series', eventId?: number) => {
+    const id = eventId ?? editingEventId;
+    if (!id) return;
     
     setEventSaving(true);
     try {
-      const response = await apiRequest(`/api/calendar/event/${editingEventId}`, {
+      const response = await apiRequest(`/api/calendar/event/${id}`, {
         method: 'DELETE',
         body: {deletionMode: deletionMode}
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unbekannter Fehler' }));
-        throw new Error(errorData.message || `HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: 'Unbekannter Fehler' }));
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
       }
 
       // Events neu laden
       await refreshEvents();
 
       setEventModalOpen(false);
+      setSelectedEvent(null);
       setTaskDeletionModal({ open: false });
       setEventFormData({
         title: '',
@@ -799,7 +1049,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       
     } catch (error: any) {
       console.error('Error deleting event:', error);
-      showAlert('Fehler beim Löschen des Events: ' + error.message, 'error', 'Löschen fehlgeschlagen');
+      showAlert(getApiErrorMessage(error), 'error', 'Löschen fehlgeschlagen');
     } finally {
       setEventSaving(false);
     }
@@ -824,7 +1074,19 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
         location: ev.location || {},
         game: ev.game || undefined,
         task: ev.task || undefined,
-        weatherData: ev.weatherData || undefined
+        weatherData: ev.weatherData || undefined,
+        permissions: ev.permissions || {},
+        permissionType: ev.permissionType || undefined,
+        trainingTeamId: ev.trainingTeamId || undefined,
+        trainingWeekdays: ev.trainingWeekdays || undefined,
+        trainingSeriesEndDate: ev.trainingSeriesEndDate || undefined,
+        trainingSeriesId: ev.trainingSeriesId || undefined,
+        cancelled: ev.cancelled || false,
+        cancelReason: ev.cancelReason || undefined,
+        cancelledBy: ev.cancelledBy || undefined,
+        tournamentId: ev.tournament?.id,
+        tournament: ev.tournament,
+        matches: ev.tournament?.matches,
       }));
     }
     setEvents(mappedEvents);
@@ -843,30 +1105,34 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       taskOffset: 0
     });
     setEditingEventId(null);
+    setEditingEventPermissions(null);
     setEventModalOpen(true);
   };
 
   // Custom Event-Styling basierend auf dem Event-Type
   const eventStyleGetter = (event: any) => {
-    // Verwende die Farbe des Event-Types, falls vorhanden
-    let backgroundColor = event.eventType?.color || theme.palette.primary.main;
+    // Externe Events: Farbe des externen Kalenders verwenden
+    let backgroundColor = event.isExternal
+      ? (event.externalCalendarColor || '#607d8b')
+      : (event.eventType?.color || theme.palette.primary.main);
     
     return {
       style: {
         backgroundColor,
         borderRadius: '4px',
-        opacity: 0.9,
+        opacity: event.cancelled ? 0.45 : (event.isExternal ? 0.75 : 0.9),
         color: 'white',
-        border: '0px',
+        border: event.cancelled ? '2px dashed rgba(255,255,255,0.5)' : (event.isExternal ? '1px dashed rgba(255,255,255,0.6)' : '0px'),
         display: 'block',
         fontWeight: 'bold',
-        fontSize: isMobile ? '0.75rem' : '0.875rem'
+        fontSize: isMobile ? '0.75rem' : '0.875rem',
+        cursor: event.isExternal ? 'default' : 'pointer',
       }
     };
   };
 
   const calendarStyle = useMemo(() => ({
-    height: isMobile ? 'calc(100vh - 200px)' : 'calc(100vh - 200px)',
+    height: isMobile ? 'calc(100dvh - 200px)' : 'calc(100dvh - 200px)',
     minHeight: isMobile ? '400px' : '500px',
     backgroundColor: theme.palette.background.paper,
     '& .rbc-calendar': {
@@ -992,13 +1258,15 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
 
   // Gefilterte Events basierend auf den aktiven Event-Types
   const filteredEvents = useMemo(() => {
-    return events.filter(event => {
+    const platformEvents = events.filter(event => {
       // Events ohne eventType sind immer sichtbar
       if (!event.eventType?.id) return true;
       // Nur Events mit aktiven Event-Types anzeigen
       return activeEventTypeIds.has(event.eventType.id);
     });
-  }, [events, activeEventTypeIds]);
+    // Externe Events immer anhängen (sie haben keinen eventType)
+    return [...platformEvents, ...externalEvents];
+  }, [events, activeEventTypeIds, externalEvents]);
 
   // Toggle-Funktion für Event-Type-Filter
   const toggleEventType = (eventTypeId: number) => {
@@ -1024,6 +1292,21 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     () => teams.map(team => ({ value: team.id.toString(), label: team.name })),
     [teams]
   );
+
+  const allTeamsOptions = useMemo(
+    () => allTeams.map(team => ({ value: team.id.toString(), label: team.name })),
+    [allTeams]
+  );
+
+  const teamDefaultsMap = useMemo(
+    () => Object.fromEntries(
+      allTeams.map(t => [t.id.toString(), {
+        defaultHalfDuration: t.defaultHalfDuration ?? null,
+        defaultHalftimeBreakDuration: t.defaultHalftimeBreakDuration ?? null,
+      }])
+    ),
+    [allTeams]
+  );
   
   const gameTypesOptions = useMemo(
     () => gameTypes.entries.map(gt => ({ value: gt.id.toString(), label: gt.name })),
@@ -1042,54 +1325,98 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
     <>
       <Box sx={{ width: '100%', height: '100%', p: 3 }}>
         <Box sx={{ p: { xs: 1, sm: 2 } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: { xs: 0, sm: 2 } }}>
             <Typography variant={isMobile ? "h5" : "h4"} component="h1">
               Kalender
             </Typography>
-            
-            {/* Event-Type Filter mit Chips */}
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                {eventTypes.entries.map(et => (
-                  <Chip
-                    key={et.id}
-                    label={et.name}
-                    onClick={() => toggleEventType(et.id)}
-                    variant={activeEventTypeIds.has(et.id) ? 'filled' : 'outlined'}
-                    sx={{
-                      backgroundColor: activeEventTypeIds.has(et.id) ? (et.color || '#1976d2') : 'transparent',
-                      color: activeEventTypeIds.has(et.id) ? '#ffffff' : (et.color || '#1976d2'),
-                      borderColor: et.color || '#1976d2',
-                      fontWeight: 'bold',
-                      '&:hover': {
-                        backgroundColor: activeEventTypeIds.has(et.id) 
-                          ? (et.color || '#1976d2')
-                          : `${et.color || '#1976d2'}20`,
-                        transform: 'scale(1.05)',
-                      },
-                      '&:active': {
-                        transform: 'scale(0.95)',
-                      }
-                    }}
-                  />
-                ))}
-              </Stack>
-              
-              {eventTypes.createAndEditAllowed && (
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleAddEvent}
-                  size={isMobile ? "small" : "medium"}
-                >
-                  {isMobile ? "Neu" : "Neues Event"}
-                </Button>
-              )}
-            </Box>
+
+            {/* Desktop: Chips + Button in Titelzeile */}
+            {!isMobile && (
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                  {eventTypes.entries.map(et => (
+                    <Chip
+                      key={et.id}
+                      label={et.name}
+                      onClick={() => toggleEventType(et.id)}
+                      variant={activeEventTypeIds.has(et.id) ? 'filled' : 'outlined'}
+                      sx={{
+                        backgroundColor: activeEventTypeIds.has(et.id) ? (et.color || '#1976d2') : 'transparent',
+                        color: activeEventTypeIds.has(et.id) ? '#ffffff' : (et.color || '#1976d2'),
+                        borderColor: et.color || '#1976d2',
+                        fontWeight: 'bold',
+                        '&:hover': {
+                          backgroundColor: activeEventTypeIds.has(et.id)
+                            ? (et.color || '#1976d2')
+                            : `${et.color || '#1976d2'}20`,
+                          transform: 'scale(1.05)',
+                        },
+                        '&:active': { transform: 'scale(0.95)' },
+                      }}
+                    />
+                  ))}
+                </Stack>
+                {eventTypes.createAndEditAllowed && (
+                  <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddEvent}>
+                    Neues Event
+                  </Button>
+                )}
+              </Box>
+            )}
+
+            {/* Mobile: nur Add-Button in Titelzeile */}
+            {isMobile && eventTypes.createAndEditAllowed && (
+              <IconButton
+                onClick={handleAddEvent}
+                color="primary"
+                sx={{ bgcolor: 'primary.main', color: '#fff', '&:hover': { bgcolor: 'primary.dark' }, borderRadius: 2 }}
+                size="small"
+              >
+                <AddIcon />
+              </IconButton>
+            )}
           </Box>
+
+          {/* Mobile: horizontal scrollbare Filter-Chips */}
+          {isMobile && eventTypes.entries.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                gap: 1,
+                py: 1,
+                mb: 1,
+                mx: -1,
+                px: 1,
+                // Scrollbar ausblenden (aber scrollbar bleiben)
+                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': { display: 'none' },
+                '-ms-overflow-style': 'none',
+              }}
+            >
+              {eventTypes.entries.map(et => (
+                <Chip
+                  key={et.id}
+                  label={et.name}
+                  onClick={() => toggleEventType(et.id)}
+                  variant={activeEventTypeIds.has(et.id) ? 'filled' : 'outlined'}
+                  size="small"
+                  sx={{
+                    flexShrink: 0,
+                    backgroundColor: activeEventTypeIds.has(et.id) ? (et.color || '#1976d2') : 'transparent',
+                    color: activeEventTypeIds.has(et.id) ? '#ffffff' : (et.color || '#1976d2'),
+                    borderColor: et.color || '#1976d2',
+                    fontWeight: 'bold',
+                    '&:active': { transform: 'scale(0.95)' },
+                  }}
+                />
+              ))}
+            </Box>
+          )}
           
-          {/* Mobile Navigation */}
-          {isMobile && (
+          {/* Mobile Navigation — only shown for Day/Agenda view; Month view has its own built-in nav */}
+          {isMobile && view !== 'month' && (
             <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <IconButton onClick={navigateBack} size="small">
@@ -1097,7 +1424,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
               </IconButton>
               
               <Typography variant="h6" component="div" sx={{ textAlign: 'center', flex: 1 }}>
-                {moment(date).format('MMMM YYYY')}
+                {moment(date).format(view === 'day' ? 'ddd, D. MMM YYYY' : 'MMMM YYYY')}
               </Typography>
               
               <IconButton onClick={navigateForward} size="small">
@@ -1125,9 +1452,54 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
             </Box>
           </Paper>
           )}
+
+          {/* Mobile Month view: compact mini-grid with event list */}
+          {isMobile && view === 'month' && (
+            <Box sx={{ mb: 1 }}>
+              {/* View switcher for mobile month view */}
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+                <ButtonGroup variant="outlined" size="small">
+                  {availableViews.map((v) => (
+                    <Button
+                      key={v}
+                      variant={view === v ? 'contained' : 'outlined'}
+                      onClick={() => setView(v as any)}
+                      size="small"
+                    >
+                      {getViewLabel(v)}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </Box>
+              <MobileCalendar
+                date={date}
+                onNavigate={setDate}
+                events={filteredEvents}
+                onEventClick={handleEventClick}
+                onDateClick={(d) => {
+                  if (!eventTypes.createAndEditAllowed) return;
+                  const clickedDate = moment(d).format('YYYY-MM-DD');
+                  setEventFormData({
+                    title: '',
+                    date: clickedDate,
+                    time: '',
+                    eventType: '',
+                    locationId: '',
+                    description: '',
+                    permissionType: 'public',
+                    taskOffset: 0,
+                  });
+                  setEditingEventId(null);
+                  setEditingEventPermissions(null);
+                  setEventModalOpen(true);
+                }}
+                canCreate={eventTypes.createAndEditAllowed}
+              />
+            </Box>
+          )}
         </Box>
         
-        <Box sx={calendarStyle}>
+        <Box sx={isMobile && view === 'month' ? { display: 'none' } : calendarStyle}>
           <BigCalendar
             localizer={localizer}
             events={filteredEvents}
@@ -1146,6 +1518,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
             step={30}
             showMultiDayTimes
             defaultDate={new Date()}
+            scrollToTime={(() => { const t = new Date(); t.setMinutes(t.getMinutes() - 30); return t; })()}
             onSelectEvent={handleEventClick}
             onSelectSlot={handleDateClick}
             selectable={true}
@@ -1174,16 +1547,21 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
                   </span>
                 )) as any,
                 event: (({ event }: { event: any }) => (
-                  <span style={{ fontWeight: '500' }}>
+                  <span style={{ 
+                    fontWeight: '500',
+                    textDecoration: event.cancelled ? 'line-through' : undefined,
+                    opacity: event.cancelled ? 0.6 : 1,
+                  }}>
+                    {event.cancelled && '❌ '}
                     {event.title}
                     {event.eventType?.name && (
                       <span style={{ 
                         marginLeft: '8px', 
                         fontSize: '12px', 
-                        color: event.eventType.color || '#666',
+                        color: event.eventType?.color || '#666',
                         fontWeight: '600'
                       }}>
-                        [{event.eventType.name}]
+                        [{event.eventType?.name}]
                       </span>
                     )}
                   </span>
@@ -1197,7 +1575,7 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
       {/* Event Details Modal */}
       <EventDetailsModal 
         open={!!selectedEvent} 
-        onClose={() => setSelectedEvent(null)} 
+        onClose={() => { setSelectedEvent(null); setInitialOpenRides(false); }} 
         event={selectedEvent ? {
           id: selectedEvent.id,
           title: selectedEvent.title,
@@ -1208,10 +1586,20 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
           location: selectedEvent.location,
           game: selectedEvent.game,
           task: selectedEvent.task,
-          weatherData: selectedEvent.weatherData
+          weatherData: selectedEvent.weatherData,
+          permissions: selectedEvent.permissions,
+          cancelled: selectedEvent.cancelled,
+          cancelReason: selectedEvent.cancelReason,
+          cancelledBy: selectedEvent.cancelledBy,
         } : null}
-        onEdit={() => selectedEvent && handleEditEvent(selectedEvent)}
-        showEdit={true}
+        onEdit={selectedEvent?.permissions?.canEdit ? () => selectedEvent && handleEditEvent(selectedEvent) : undefined}
+        showEdit={selectedEvent?.permissions?.canEdit === true}
+        onDelete={selectedEvent?.permissions?.canDelete ? handleDeleteSelectedEvent : undefined}
+        onCancelled={() => {
+          setSelectedEvent(null);
+          refreshEvents();
+        }}
+        initialOpenRides={initialOpenRides}
       />
 
       {/* Event Create/Edit Modal */}
@@ -1231,16 +1619,18 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
           });
         }}
         onSave={handleSaveEvent}
-        onDelete={editingEventId ? handleDeleteEvent : undefined}
-        showDelete={!!editingEventId}
+        onDelete={editingEventId && editingEventPermissions?.canDelete ? handleDeleteEvent : undefined}
+        showDelete={!!editingEventId && editingEventPermissions?.canDelete === true}
         event={eventFormData as any}
         eventTypes={eventTypesOptions}
         teams={tournamentTeams}
+        allTeams={allTeamsOptions}
         gameTypes={gameTypesOptions}
         locations={locationsOptions}
         users={users}
         onChange={handleFormChange}
         loading={eventSaving}
+        teamDefaultsMap={teamDefaultsMap}
       />
 
       {/* Alert Modal */}
@@ -1268,17 +1658,27 @@ function CalendarInner({ setCalendarFabHandler }: CalendarProps) {
         loading={eventSaving}
       />
 
-      {/* Task Deletion Modal with 3 buttons */}
+      {/* Task / Training Deletion Modal */}
       <TaskDeletionModal
         open={taskDeletionModal.open}
         onClose={() => setTaskDeletionModal({ open: false })}
+        title={taskDeletionModal.mode === 'training' ? 'Training löschen' : 'Task löschen'}
+        message={
+          taskDeletionModal.mode === 'training'
+            ? 'Möchten Sie nur diesen einzelnen Trainingstermin oder die gesamte Trainings-Serie löschen?'
+            : 'Möchten Sie nur dieses Event oder die gesamte Task-Serie löschen?'
+        }
+        singleLabel={taskDeletionModal.mode === 'training' ? 'Nur diesen Termin' : 'Nur dieses Event'}
+        seriesLabel="Gesamte Serie"
         onDeleteSingle={() => {
+          const { eventId } = taskDeletionModal;
           setTaskDeletionModal({ open: false });
-          performDeleteEvent('single');
+          performDeleteEvent('single', eventId);
         }}
         onDeleteSeries={() => {
+          const { eventId } = taskDeletionModal;
           setTaskDeletionModal({ open: false });
-          performDeleteEvent('series');
+          performDeleteEvent('series', eventId);
         }}
         loading={eventSaving}
       />

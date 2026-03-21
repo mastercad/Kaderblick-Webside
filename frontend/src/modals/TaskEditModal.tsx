@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Button, TextField, Checkbox, FormControlLabel, CircularProgress, Autocomplete } from '@mui/material';
+import { Button, TextField, Checkbox, FormControlLabel, CircularProgress, Autocomplete, Box, Typography } from '@mui/material';
 import { apiJson } from '../utils/api';
 import BaseModal from './BaseModal';
 
 interface User {
   id: number;
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   fullName?: string;
+  context?: string;
 }
 
 interface Task {
@@ -55,7 +56,7 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({ open, onClose, task }) =>
   const [rotationCount, setRotationCount] = useState<number>(1);
 
   useEffect(() => {
-    apiJson<{ users: User[] }>('/api/users')
+    apiJson<{ users: User[] }>('/api/users/contacts')
       .then(data => {
         if (Array.isArray(data.users)) {
           setUsers(data.users);
@@ -171,14 +172,25 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({ open, onClose, task }) =>
           multiple
           options={users}
           getOptionLabel={u => {
-            if (u.fullName) return u.fullName;
-            if (u.firstName && u.lastName) return `${u.firstName} ${u.lastName}`;
-            if (u.firstName) return u.firstName;
-            if (u.lastName) return u.lastName;
-            return `User #${u.id}`;
+            const name = u.fullName
+              ? u.fullName
+              : u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.firstName || u.lastName || `User #${u.id}`;
+            return u.context ? `${name} (${u.context})` : name;
           }}
           value={rotationUsers}
           onChange={(_, val) => setRotationUsers(val)}
+          renderOption={(props, option) => (
+            <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box>
+                <Typography variant="body2">
+                  {option.fullName || `${option.firstName} ${option.lastName}`}
+                </Typography>
+                {option.context && (
+                  <Typography variant="caption" color="text.secondary">{option.context}</Typography>
+                )}
+              </Box>
+            </Box>
+          )}
           renderInput={params => <TextField {...params} label="Benutzer-Rotation" margin="normal" />}
           sx={{ mt: 2, mb: 2 }}
         />

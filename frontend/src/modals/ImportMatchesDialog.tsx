@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiRequest } from '../utils/api';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -131,10 +132,9 @@ export default function ImportMatchesDialog({ open, onClose, tournamentId, onImp
       return;
     }
     try {
-      const res = await fetch(`/api/tournaments/${tournamentId}/generate-plan`, {
+      const res = await apiRequest(`/api/tournaments/${tournamentId}/generate-plan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matches, createGames: false }),
+        body: { matches, createGames: false },
       });
       if (!res.ok) {
         const txt = await res.text();

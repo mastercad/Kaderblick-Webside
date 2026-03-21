@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Repository\UserRepository;
 use DateTime;
+use Deprecated;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
@@ -12,9 +13,6 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: 'users')]
-#[ORM\Index(name: 'idx_users_player_id', columns: ['player_id'])]
-#[ORM\Index(name: 'idx_users_coach_id', columns: ['coach_id'])]
-#[ORM\Index(name: 'idx_users_club_id', columns: ['club_id'])]
 #[ORM\UniqueConstraint(name: 'uniq_users_email', columns: ['email'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
@@ -55,6 +53,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $avatarFilename = null;
 
+    #[ORM\Column(type: 'string', length: 500, nullable: true)]
+    private ?string $googleAvatarUrl = null;
+
+    #[ORM\Column(type: 'boolean')]
+    private bool $useGoogleAvatar = false;
+
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?DateTime $verificationExpires = null;
 
@@ -73,6 +77,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 10, nullable: true)]
     private ?string $pantsSize = null;
 
+    #[ORM\Column(length: 10, nullable: true)]
+    private ?string $socksSize = null;
+
+    #[ORM\Column(length: 3, nullable: true)]
+    private ?string $jacketSize = null;
+
+    /** @var array<string, bool>|null */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $notificationPreferences = null;
+
     #[ORM\Column(length: 180, nullable: true)]
     private ?string $newEmail = null;
 
@@ -81,6 +95,32 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?DateTime $emailVerificationTokenExpiresAt = null;
+
+    #[ORM\Column(length: 64, nullable: true, unique: true)]
+    private ?string $apiToken = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?DateTime $apiTokenCreatedAt = null;
+
+    /** Token für öffentliche iCal-Feeds (persönlich / Verein / Plattform) */
+    #[ORM\Column(length: 64, nullable: true, unique: true)]
+    private ?string $calendarToken = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?DateTime $calendarTokenCreatedAt = null;
+
+    /**
+     * @var Collection<int, ExternalCalendar>
+     */
+    #[ORM\OneToMany(mappedBy: 'user', targetEntity: ExternalCalendar::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $externalCalendars;
+
+    /**
+     * Zeitstempel der letzten API-Aktivität des Benutzers.
+     * Wird vom UserActivitySubscriber bei jedem authentifizierten Request (max. alle 5 Min.) aktualisiert.
+     */
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?DateTime $lastActivityAt = null;
 
     #[ORM\OneToOne(mappedBy: 'user', targetEntity: UserLevel::class, cascade: ['persist', 'remove'])]
     private ?UserLevel $userLevel = null;
@@ -165,6 +205,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         $this->videoSegments = new ArrayCollection();
         $this->videoSegments = new ArrayCollection();
         $this->userXpEvents = new ArrayCollection();
+        $this->externalCalendars = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -220,19 +261,19 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function getRoles(): array
     {
-        /*
         $roles = $this->roles;
+
         if ($this->isVerified) {
             $roles[] = 'ROLE_USER';
         } else {
             $roles[] = 'ROLE_GUEST';
         }
+
         if ($this->userRelations->count() > 0) {
             $roles[] = 'ROLE_RELATED_USER';
         }
-        */
 
-        return array_unique($this->roles);
+        return array_unique($roles);
     }
 
     /**
@@ -374,6 +415,48 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    public function getSocksSize(): ?string
+    {
+        return $this->socksSize;
+    }
+
+    public function setSocksSize(?string $socksSize): self
+    {
+        $this->socksSize = $socksSize;
+
+        return $this;
+    }
+
+    public function getJacketSize(): ?string
+    {
+        return $this->jacketSize;
+    }
+
+    public function setJacketSize(?string $jacketSize): self
+    {
+        $this->jacketSize = $jacketSize;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, bool>|null
+     */
+    public function getNotificationPreferences(): ?array
+    {
+        return $this->notificationPreferences;
+    }
+
+    /**
+     * @param array<string, bool>|null $notificationPreferences
+     */
+    public function setNotificationPreferences(?array $notificationPreferences): self
+    {
+        $this->notificationPreferences = $notificationPreferences;
+
+        return $this;
+    }
+
     public function getNewEmail(): ?string
     {
         return $this->newEmail;
@@ -406,6 +489,72 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setEmailVerificationTokenExpiresAt(?DateTime $expiresAt): self
     {
         $this->emailVerificationTokenExpiresAt = $expiresAt;
+
+        return $this;
+    }
+
+    public function getApiToken(): ?string
+    {
+        return $this->apiToken;
+    }
+
+    public function setApiToken(?string $apiToken): self
+    {
+        $this->apiToken = $apiToken;
+
+        return $this;
+    }
+
+    public function getApiTokenCreatedAt(): ?DateTime
+    {
+        return $this->apiTokenCreatedAt;
+    }
+
+    public function setApiTokenCreatedAt(?DateTime $apiTokenCreatedAt): self
+    {
+        $this->apiTokenCreatedAt = $apiTokenCreatedAt;
+
+        return $this;
+    }
+
+    public function getCalendarToken(): ?string
+    {
+        return $this->calendarToken;
+    }
+
+    public function setCalendarToken(?string $calendarToken): self
+    {
+        $this->calendarToken = $calendarToken;
+
+        return $this;
+    }
+
+    public function getCalendarTokenCreatedAt(): ?DateTime
+    {
+        return $this->calendarTokenCreatedAt;
+    }
+
+    public function setCalendarTokenCreatedAt(?DateTime $calendarTokenCreatedAt): self
+    {
+        $this->calendarTokenCreatedAt = $calendarTokenCreatedAt;
+
+        return $this;
+    }
+
+    /** @return Collection<int, ExternalCalendar> */
+    public function getExternalCalendars(): Collection
+    {
+        return $this->externalCalendars;
+    }
+
+    public function getLastActivityAt(): ?DateTime
+    {
+        return $this->lastActivityAt;
+    }
+
+    public function setLastActivityAt(?DateTime $lastActivityAt): self
+    {
+        $this->lastActivityAt = $lastActivityAt;
 
         return $this;
     }
@@ -673,6 +822,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    public function getGoogleAvatarUrl(): ?string
+    {
+        return $this->googleAvatarUrl;
+    }
+
+    public function setGoogleAvatarUrl(?string $googleAvatarUrl): self
+    {
+        $this->googleAvatarUrl = $googleAvatarUrl;
+
+        return $this;
+    }
+
+    public function isUseGoogleAvatar(): bool
+    {
+        return $this->useGoogleAvatar;
+    }
+
+    public function setUseGoogleAvatar(bool $useGoogleAvatar): self
+    {
+        $this->useGoogleAvatar = $useGoogleAvatar;
+
+        return $this;
+    }
+
     public function getGoogleId(): ?string
     {
         return $this->googleId;
@@ -737,6 +910,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    #[Deprecated]
     public function eraseCredentials(): void
     {
     }

@@ -21,13 +21,16 @@ const Footer: React.FC = () => {
       component="footer"
       sx={{
         mt: 'auto',
-        py: 3,
+        py: 1.5,
+        pb: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
         background: isHome
           ? 'transparent'
           : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+        backgroundColor: isHome ? 'transparent' : undefined,
         color: isHome
           ? '#fff'
           : theme.palette.primary.contrastText,
+        '& *': isHome ? { color: '#fff' } : {},
         fontSize: '0.95em',
       }}
     >
@@ -37,7 +40,7 @@ const Footer: React.FC = () => {
           flexDirection: { xs: 'column', sm: 'row' },
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 2
+          gap: { xs: 0.5, sm: 2 }
         }}
       >
         <Box>
@@ -63,6 +66,9 @@ const Footer: React.FC = () => {
             window.dispatchEvent(event);
           }}>
             Kontakt
+          </Link>
+          <Link component={RouterLink} to="https://docs.kaderblick.de" color="inherit" underline="hover">
+            Dokumentation
           </Link>
         </Box>
       </Container>

@@ -33,8 +33,8 @@ export default defineConfig({
         short_name: 'Kaderblick',
         start_url: '.',
         display: 'standalone',
-        background_color: '#ffffff',
-        theme_color: '#1976d2',
+        background_color: '#4e4e4e',
+        theme_color: '#B5AD9D',
         description: 'Die Vereinsapp für Mitglieder, Teams und Fans.',
         icons: [
           {
@@ -70,6 +70,6 @@ export default defineConfig({
     }
   },
   build: {
-    sourcemap: true
+    sourcemap: false
   }
 })

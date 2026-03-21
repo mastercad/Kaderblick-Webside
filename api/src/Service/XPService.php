@@ -4,33 +4,27 @@ namespace App\Service;
 
 use App\Entity\User;
 use App\Entity\UserLevel;
+use App\Repository\XpRuleRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
 class XPService
 {
-    public function __construct(private EntityManagerInterface $entityManager)
-    {
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private XpRuleRepository $xpRuleRepository,
+    ) {
     }
 
+    /**
+     * Returns the XP value for the given action type from the configurable xp_rules table.
+     * Falls back to 0 when no enabled rule is found.
+     */
     public function retrieveXPForAction(string $action): int
     {
-        return match ($action) {
-            'create_post' => 10,
-            'comment' => 5,
-            'like' => 2,
-            'share' => 8,
-            'calendar_event' => 10,
-            'profile_update' => 5,
-            'game_event' => 15,
-            'goal_scored' => 50,
-            'goal_assisted' => 30,
-            'profile_completion_25' => 25,
-            'profile_completion_50' => 50,
-            'profile_completion_75' => 75,
-            'profile_completion_100' => 100,
-            default => 0,
-        };
+        $rule = $this->xpRuleRepository->findEnabledByActionType($action);
+
+        return null !== $rule ? $rule->getXpValue() : 0;
     }
 
     public function addXPToUser(User $user, int $xp): void

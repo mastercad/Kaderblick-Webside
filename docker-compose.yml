@@ -2,35 +2,52 @@ name: ${COMPOSE_PROJECT_NAME:-kaderblick}
 
 services:
   api:
-    build: ./.docker/api
+    # Produktions-Image aus GHCR. Enthält Source-Code + vendor/ (composer install gebaked).
+    # IMAGE_TAG wird beim Deploy auf den git-SHA gesetzt: IMAGE_TAG=${{ github.sha }}
+    # API_IMAGE_TAG kann abweichen (z.B. test-<sha> in QA). Fallback: IMAGE_TAG, dann latest.
+    # Für lokale Entwicklung: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+    image: ghcr.io/mastercad/kaderblick/api:${API_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${API_PORT:-8081}:80"
     volumes:
-      - ./api:/var/www/symfony
+      # Runtime-Konfiguration: wird beim Deploy auf den Server geschrieben und eingebunden.
+      # vendor/ und Source-Code kommen aus dem Image – kein Source-Mount mehr.
+      - ./api/.env:/var/www/symfony/.env
+      - ./api/config/jwt:/var/www/symfony/config/jwt
+      - ./api/config/secrets:/var/www/symfony/config/secrets
       - ./public/uploads:/var/www/symfony/public/uploads
     environment:
-      DATABASE_URL: mysql://kaderblick:kaderblick@db:3306/kaderblick
-      XDEBUG_MODE: develop,debug
-      XDEBUG_CONFIG: "client_host=host.docker.internal client_port=9003"
-      XDEBUG_LOG: /tmp/xdebug.log
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DATABASE_URL: ${DATABASE_URL:-mysql://kaderblick:kaderblick@db:3306/kaderblick}
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      HOST_UID: ${HOST_UID:-10000}
+      HOST_GID: ${HOST_GID:-1003}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - kaderblick-net
 
   frontend:
-    build:
-      context: ./
-      dockerfile: .docker/frontend/Dockerfile
+    # Produktions-Image aus GHCR. VITE_BACKEND_URL ist zur Build-Zeit eingebettet.
+    # Staging-Variante überschreibt das Image via docker-compose.staging.yml.
+    image: ghcr.io/mastercad/kaderblick/frontend-prod:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${REACT_PORT:-8080}:80"
     volumes:
-      - ./frontend:/app
       - ./public/uploads:/usr/share/nginx/html/uploads
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - kaderblick-net
 

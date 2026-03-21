@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box } from '@mui/material';
 import FeedbackFab from './FeedbackFab';
 import { useFabStack } from './FabStackProvider';
@@ -17,13 +17,23 @@ const FabStack: React.FC = () => {
     <Box
       sx={{
         position: 'fixed',
-        bottom: { xs: 16, sm: 24 },
+        bottom: { xs: 72, sm: 24 },
         right: { xs: 16, sm: 24 },
         zIndex: 2000,
         display: 'flex',
         flexDirection: 'row',
         gap: 2,
         alignItems: 'center',
+        // FABs ausblenden wenn ein Modal offen ist
+        ...(fabStack?.hidden ? {
+          opacity: 0,
+          pointerEvents: 'none',
+          transition: 'opacity 0.2s ease',
+        } : {
+          opacity: 1,
+          pointerEvents: 'auto',
+          transition: 'opacity 0.2s ease',
+        }),
       }}
     >
       <FeedbackFab />

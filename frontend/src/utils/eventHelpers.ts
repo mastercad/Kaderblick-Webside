@@ -4,11 +4,12 @@ import { User } from '../types/event';
  * Formats a user label for display purposes.
  */
 export const getUserLabel = (user: User): string => {
-  if (user.fullName) return user.fullName;
-  if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
-  if (user.firstName) return user.firstName;
-  if (user.lastName) return user.lastName;
-  return `User #${user.id}`;
+  const name = user.fullName
+    ? user.fullName
+    : user.firstName && user.lastName
+      ? `${user.firstName} ${user.lastName}`
+      : user.firstName || user.lastName || `User #${user.id}`;
+  return user.context ? `${name} (${user.context})` : name;
 };
 
 // Event type classification has moved to hooks/useEventTypeFlags.ts

@@ -40,11 +40,14 @@ phpstan.neon
 /config/secrets/prod/prod.decrypt.private.php
 /config/secrets/*/dev.decrypt.private.php
 /config/secrets/*/prod.decrypt.private.php
+/config/secrets/*/staging.decrypt.private.php
 /config/secrets/*/test.decrypt.private.php
 /config/secrets/*/dev.decrypt.*.php
 /config/secrets/*/prod.decrypt.*.php
 /config/secrets/*/test.decrypt.*.php
+/config/secrets/*/staging.decrypt.*.php
 /public/bundles/
 /var/
 /vendor/
+composer.phar
 /public/uploads/*

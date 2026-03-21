@@ -1,0 +1,29 @@
+# Lokale Entwicklung: Fügt Build-Kontexte und Source-Mounts hinzu.
+# Verwendung: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Die Source-Mounts überlagern die Image-Inhalte zur Laufzeit, sodass
+# Codeänderungen ohne Rebuild sofort sichtbar sind.
+# vendor/ wird lokal via 'composer install' in api/vendor/ bereitgestellt.
+
+services:
+  api:
+    build:
+      context: ./
+      dockerfile: .docker/api/Dockerfile
+    volumes:
+      - ./api:/var/www/symfony
+      - ./public/uploads:/var/www/symfony/public/uploads
+    environment:
+      XDEBUG_MODE: ${XDEBUG_MODE:-develop,debug}
+      XDEBUG_CONFIG: ${XDEBUG_CONFIG:-"client_host=host.docker.internal client_port=9003"}
+      XDEBUG_LOG: /tmp/xdebug.log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./
+      dockerfile: .docker/frontend/Dockerfile
+    volumes:
+      - ./frontend:/app
+      - ./public/uploads:/usr/share/nginx/html/uploads

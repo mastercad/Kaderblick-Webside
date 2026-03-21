@@ -3,6 +3,8 @@ export interface User {
   fullName?: string;
   firstName?: string;
   lastName?: string;
+  /** Team/club context for disambiguation, e.g. "U17 · 1. Mannschaft" */
+  context?: string;
 }
 
 export interface EventData {
@@ -18,6 +20,7 @@ export interface EventData {
   awayTeam?: string;
   gameType?: string;
   leagueId?: string;
+  cupId?: string;
   permissionType?: string;
   permissionTeams?: string[];
   permissionClubs?: string[];
@@ -42,6 +45,17 @@ export interface EventData {
   taskRotationUsers?: string[];
   taskRotationCount?: number;
   taskOffset?: number;
+  // Training fields
+  trainingTeamId?: string;
+  trainingRecurring?: boolean;
+  trainingWeekdays?: number[];  // 0=So, 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa
+  trainingEndDate?: string;     // YYYY-MM-DD — end of recurring series
+  trainingDuration?: number;    // Duration in minutes (default: 90)
+  // Game timing fields (only for Spiel events, not tournaments)
+  gameHalfDuration?: number;
+  gameHalftimeBreakDuration?: number;
+  gameFirstHalfExtraTime?: number | null;
+  gameSecondHalfExtraTime?: number | null;
   // Tournament fields
   tournamentId?: string;
   tournamentMatchId?: string;

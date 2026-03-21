@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "jest",
     "test:push": "jest src/services/__tests__/sw.test.ts src/services/__tests__/notificationService.test.ts",
+    "ci": "jest --no-coverage && vite build",
     "verify-push": "bash scripts/verify-push-build.sh",
     "set-publish-date": "./scripts/set-publish-date.sh"
   },
@@ -25,12 +26,24 @@
     "@mui/material": "^7.3.2",
     "@mui/x-charts": "^8.11.1",
     "@react-oauth/google": "^0.12.2",
+    "@tiptap/extension-color": "^3.20.2",
+    "@tiptap/extension-highlight": "^3.20.2",
+    "@tiptap/extension-image": "^3.20.2",
+    "@tiptap/extension-link": "^3.20.2",
+    "@tiptap/extension-placeholder": "^3.20.2",
+    "@tiptap/extension-text-align": "^3.20.2",
+    "@tiptap/extension-text-style": "^3.20.2",
+    "@tiptap/extension-underline": "^3.20.2",
+    "@tiptap/pm": "^3.20.2",
+    "@tiptap/react": "^3.20.2",
+    "@tiptap/starter-kit": "^3.20.2",
     "axios": "^1.12.0",
     "html2canvas": "^1.4.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
     "moment": "^2.30.1",
     "prettier": "^3.6.2",
+    "qrcode.react": "^4.2.0",
     "react": "^19.1.1",
     "react-big-calendar": "^1.19.4",
     "react-chartjs-2": "^5.3.0",
@@ -66,6 +79,12 @@
     "testEnvironment": "jsdom",
     "setupFiles": [
       "<rootDir>/src/test-setup.ts"
-    ]
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/test-setup-jest-dom.ts"
+    ],
+    "moduleNameMapper": {
+      "\\.(css|less|scss|sass)$": "<rootDir>/src/__mocks__/styleMock.js"
+    }
   }
 }

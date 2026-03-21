@@ -1,121 +1,107 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import PlaceIcon from '@mui/icons-material/Place';
 import LocationEditModal, { LocationFormValues } from '../modals/LocationEditModal';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, Paper } from '@mui/material';
 import { DynamicConfirmationModal } from '../modals/DynamicConfirmationModal';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { apiJson } from '../utils/api';
 import { Location } from '../types/location';
 import { SurfaceType } from '../types/surfaceType';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 
 const Locations = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [surfaceTypes, setSurfaceTypes] = useState<SurfaceType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editInitialValues, setEditInitialValues] = useState<LocationFormValues | undefined>(undefined);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Location | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
-  useEffect(() => {
-    loadLocations();
-  }, []);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
 
   const loadLocations = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const res = await apiJson('/api/locations');
       setLocations(res.locations || []);
       setSurfaceTypes(res.surfaceTypes || []);
-    } catch (e) {
-      // handle error
+    } catch {
+      setError('Fehler beim Laden der Spielstätten.');
     } finally {
       setLoading(false);
     }
   };
-  
+
+  useEffect(() => { loadLocations(); }, []);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return locations;
+    const q = search.toLowerCase();
+    return locations.filter(l =>
+      l.name?.toLowerCase().includes(q) ||
+      l.address?.toLowerCase().includes(q) ||
+      l.city?.toLowerCase().includes(q)
+    );
+  }, [locations, search]);
+
+  const openEdit = (location?: Location) => {
+    if (location) {
+      setEditInitialValues({
+        id: location.id,
+        name: location.name,
+        address: location.address || '',
+        city: location.city || '',
+        latitude: location.latitude ?? '',
+        longitude: location.longitude ?? '',
+        capacity: location.capacity ?? '',
+        surfaceTypeId: location.surfaceTypeId ?? location.surfaceType?.id ?? 0,
+        hasFloodlight: location.hasFloodlight ?? false,
+        facilities: location.facilities ?? '',
+      });
+    } else {
+      setEditInitialValues(undefined);
+    }
+    setEditModalOpen(true);
+  };
+
+  const columns: AdminTableColumn<Location>[] = [
+    { header: 'Name', render: l => l.name || '' },
+    { header: 'Adresse', render: l => l.address || '' },
+    { header: 'Stadt', render: l => l.city || '' },
+    { header: 'Latitude', render: l => l.latitude ?? '', width: '120px' },
+    { header: 'Longitude', render: l => l.longitude ?? '', width: '120px' },
+  ];
+
   return (
-    <Box sx={{ p: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4">Spielstätten verwalten</Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => {
-            setEditInitialValues(undefined);
-            setEditModalOpen(true);
-          }}
-        >
-          Neue Spielstätte anlegen
-        </Button>
-      </Box>
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Adresse</TableCell>
-              <TableCell>Stadt</TableCell>
-              <TableCell>Latitude</TableCell>
-              <TableCell>Longitude</TableCell>
-              <TableCell>Aktionen</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {locations.map((location) => (
-              <TableRow key={location.id}>
-                <TableCell>{location.name}</TableCell>
-                <TableCell>{location.address}</TableCell>
-                <TableCell>{location.city}</TableCell>
-                <TableCell>{location.latitude}</TableCell>
-                <TableCell>{location.longitude}</TableCell>
-                <TableCell>
-                  {location.permissions?.canEdit && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="primary"
-                      startIcon={<EditIcon />}
-                      sx={{ mr: 1 }}
-                      onClick={() => {
-                        setEditInitialValues({
-                          id: location.id,
-                          name: location.name,
-                          address: location.address || '',
-                          city: location.city || '',
-                          latitude: location.latitude ?? '',
-                          longitude: location.longitude ?? '',
-                          capacity: location.capacity ?? '',
-                          surfaceTypeId: location.surfaceTypeId ?? location.surfaceType?.id ?? 0,
-                          hasFloodlight: location.hasFloodlight ?? false,
-                          facilities: location.facilities ?? '',
-                        });
-                        setEditModalOpen(true);
-                      }}
-                    >
-                      Bearbeiten
-                    </Button>
-                  )}
-                  {location.permissions?.canDelete && (
-                    <Button
-                        size="small"
-                        variant="contained"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => {
-                        setDeleteTarget(location);
-                        setDeleteModalOpen(true);
-                        }}
-                    >
-                        Löschen
-                    </Button>
-                      )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+    <AdminPageLayout
+      icon={<PlaceIcon />}
+      title="Spielstätten"
+      itemCount={locations.length}
+      loading={loading}
+      error={error}
+      createLabel="Neue Spielstätte"
+      onCreate={() => openEdit()}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Spielstätten suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+    >
+      {filtered.length === 0 ? (
+        <AdminEmptyState icon={<PlaceIcon />} title="Keine Spielstätten vorhanden" createLabel="Neue Spielstätte" onCreate={() => openEdit()} />
+      ) : (
+        <AdminTable columns={columns} data={filtered} getKey={l => l.id}
+          renderActions={l => (
+            <AdminActions
+              onEdit={l.permissions?.canEdit ? () => openEdit(l) : undefined}
+              onDelete={l.permissions?.canDelete ? () => { setDeleteTarget(l); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
+        />
+      )}
+
       <LocationEditModal
         openLocationEditModal={editModalOpen}
         onLocationEditModalClose={() => setEditModalOpen(false)}
@@ -123,32 +109,36 @@ const Locations = () => {
         isEdit={!!editInitialValues}
         surfaceTypes={surfaceTypes}
         onSaved={() => {
-          setLoading(true);
+          setEditModalOpen(false);
+          setSnackbar({ open: true, message: editInitialValues ? 'Spielstätte aktualisiert' : 'Spielstätte erstellt', severity: 'success' });
           loadLocations();
         }}
       />
       <DynamicConfirmationModal
-          open={deleteModalOpen}
-          onClose={() => setDeleteModalOpen(false)}
-          onConfirm={async () => {
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={async () => {
           if (!deleteTarget) return;
           setDeleteLoading(true);
           try {
-              await apiJson(`/locations/delete/${deleteTarget.id}`, { method: 'DELETE' });
-              setLocations((prev) => prev.filter(l => l.id !== deleteTarget.id));
-              setDeleteModalOpen(false);
-              setDeleteTarget(null);
+            await apiJson(`/locations/delete/${deleteTarget.id}`, { method: 'DELETE' });
+            setLocations(prev => prev.filter(l => l.id !== deleteTarget.id));
+            setDeleteModalOpen(false);
+            setDeleteTarget(null);
+            setSnackbar({ open: true, message: 'Spielstätte gelöscht', severity: 'success' });
+          } catch {
+            setSnackbar({ open: true, message: 'Fehler beim Löschen der Spielstätte.', severity: 'error' });
           } finally {
-              setDeleteLoading(false);
+            setDeleteLoading(false);
           }
-          }}
-          title="Löschen bestätigen"
-          message={`Möchtest du die Spielstätte "${deleteTarget?.name}" wirklich löschen?`}
-          confirmText="Löschen"
-          confirmColor="error"
-          loading={deleteLoading}
+        }}
+        title="Löschen bestätigen"
+        message={`Möchtest du die Spielstätte "${deleteTarget?.name}" wirklich löschen?`}
+        confirmText="Löschen"
+        confirmColor="error"
+        loading={deleteLoading}
       />
-    </Box>
+    </AdminPageLayout>
   );
 };
 

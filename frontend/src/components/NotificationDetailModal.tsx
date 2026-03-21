@@ -18,6 +18,11 @@ import NewsIcon from '@mui/icons-material/Article';
 import MessageIcon from '@mui/icons-material/Message';
 import EventIcon from '@mui/icons-material/Event';
 import SystemIcon from '@mui/icons-material/Info';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import FeedbackIcon from '@mui/icons-material/Feedback';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { useNavigate } from 'react-router-dom';
 import { AppNotification } from '../types/notifications';
 
 interface NotificationDetailModalProps {
@@ -32,6 +37,15 @@ const getNotificationIcon = (type: AppNotification['type']) => {
     case 'message': return <MessageIcon />;
     case 'participation': return <EventIcon />;
     case 'system': return <SystemIcon />;
+    case 'team_ride':
+    case 'team_ride_booking':
+    case 'team_ride_cancel':
+    case 'team_ride_deleted':
+      return <DirectionsCarIcon />;
+    case 'event_cancelled':
+      return <EventBusyIcon />;
+    case 'feedback':
+      return <FeedbackIcon />;
     default: return <SystemIcon />;
   }
 };
@@ -42,6 +56,16 @@ const getNotificationColor = (type: AppNotification['type']) => {
     case 'message': return '#2e7d32';
     case 'participation': return '#ed6c02';
     case 'system': return '#0288d1';
+    case 'team_ride':
+    case 'team_ride_booking':
+      return '#7b1fa2';
+    case 'team_ride_cancel':
+    case 'team_ride_deleted':
+      return '#d32f2f';
+    case 'event_cancelled':
+      return '#e65100';
+    case 'feedback':
+      return '#7b5ea7';
     default: return '#757575';
   }
 };
@@ -52,6 +76,12 @@ const getNotificationLabel = (type: AppNotification['type']) => {
     case 'message': return 'Nachricht';
     case 'participation': return 'Teilnahme';
     case 'system': return 'System';
+    case 'team_ride': return 'Mitfahrgelegenheit';
+    case 'team_ride_booking': return 'Mitfahrt gebucht';
+    case 'team_ride_cancel': return 'Mitfahrt storniert';
+    case 'team_ride_deleted': return 'Mitfahrt gelöscht';
+    case 'event_cancelled': return 'Event abgesagt';
+    case 'feedback': return 'Feedback-Antwort';
     default: return 'Benachrichtigung';
   }
 };
@@ -62,6 +92,7 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
   onClose
 }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
 
   if (!notification) {
     return null;
@@ -70,6 +101,11 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
   const color = getNotificationColor(notification.type);
   const icon = getNotificationIcon(notification.type);
   const label = getNotificationLabel(notification.type);
+
+  const handleNavigate = (url: string) => {
+    onClose();
+    navigate(url);
+  };
 
   return (
     <Dialog
@@ -149,10 +185,7 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
             borderRadius: 1,
             border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
           }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-              Zusätzliche Informationen
-            </Typography>
-            {renderNotificationData(notification.type, notification.data)}
+            {renderNotificationData(notification.type, notification.data, handleNavigate)}
           </Box>
         )}
       </DialogContent>
@@ -166,8 +199,18 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
   );
 };
 
+// Keys that should be hidden (internal IDs etc.)
+const HIDDEN_KEYS = new Set(['eventId', 'id', 'rideId', 'userId', 'conversationId']);
+
+// Keys that represent a title — shown as text without label
+const TITLE_KEYS = new Set(['eventTitle', 'title', 'eventName', 'name']);
+
+// Keys that represent a URL — rendered as clickable button
+const URL_KEYS = new Set(['url', 'link']);
+
 // Hilfsfunktion zum Rendern typenspezifischer Daten
-const renderNotificationData = (type: AppNotification['type'], data: any) => {
+const renderNotificationData = (type: AppNotification['type'], data: any, onNavigate: (url: string) => void) => {
+  // Type-specific rendering for known types
   switch (type) {
     case 'news':
       return (
@@ -182,14 +225,7 @@ const renderNotificationData = (type: AppNotification['type'], data: any) => {
               <strong>Kategorie:</strong> {data.category}
             </Typography>
           )}
-          {data.url && (
-            <Typography variant="body2">
-              <strong>Link:</strong>{' '}
-              <a href={data.url} target="_blank" rel="noopener noreferrer">
-                {data.url}
-              </a>
-            </Typography>
-          )}
+          {renderSmartUrl(data.url, onNavigate)}
         </Box>
       );
 
@@ -201,11 +237,7 @@ const renderNotificationData = (type: AppNotification['type'], data: any) => {
               <strong>Von:</strong> {data.sender}
             </Typography>
           )}
-          {data.conversationId && (
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Konversations-ID:</strong> {data.conversationId}
-            </Typography>
-          )}
+          {renderSmartUrl(data.url, onNavigate)}
         </Box>
       );
 
@@ -228,10 +260,11 @@ const renderNotificationData = (type: AppNotification['type'], data: any) => {
             </Typography>
           )}
           {data.status && (
-            <Typography variant="body2">
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
               <strong>Status:</strong> {data.status}
             </Typography>
           )}
+          {renderSmartUrl(data.url, onNavigate)}
         </Box>
       );
 
@@ -248,18 +281,69 @@ const renderNotificationData = (type: AppNotification['type'], data: any) => {
               <strong>Priorität:</strong> {data.priority}
             </Typography>
           )}
+          {renderSmartUrl(data.url, onNavigate)}
+        </Box>
+      );
+
+    case 'feedback':
+      return (
+        <Box>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<FeedbackIcon />}
+            onClick={() => onNavigate(data.url ?? '/mein-feedback')}
+            sx={{ mt: 0.5 }}
+          >
+            Feedback öffnen
+          </Button>
         </Box>
       );
 
     default:
-      return (
-        <Box>
-          {Object.entries(data).map(([key, value]) => (
-            <Typography key={key} variant="body2" sx={{ mb: 0.5 }}>
-              <strong>{key}:</strong> {String(value)}
-            </Typography>
-          ))}
-        </Box>
-      );
+      return renderSmartData(data, onNavigate);
   }
+};
+
+// Smart rendering for URL fields
+const renderSmartUrl = (url: string | undefined, onNavigate: (url: string) => void) => {
+  if (!url) return null;
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<OpenInNewIcon />}
+        onClick={() => onNavigate(url)}
+      >
+        Öffnen
+      </Button>
+    </Box>
+  );
+};
+
+// Generic smart rendering for any data object
+const renderSmartData = (data: any, onNavigate: (url: string) => void) => {
+  const entries = Object.entries(data);
+  const titleEntry = entries.find(([key]) => TITLE_KEYS.has(key));
+  const urlEntry = entries.find(([key]) => URL_KEYS.has(key));
+  const otherEntries = entries.filter(
+    ([key]) => !HIDDEN_KEYS.has(key) && !TITLE_KEYS.has(key) && !URL_KEYS.has(key)
+  );
+
+  return (
+    <Box>
+      {titleEntry && (
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+          {String(titleEntry[1])}
+        </Typography>
+      )}
+      {otherEntries.map(([key, value]) => (
+        <Typography key={key} variant="body2" sx={{ mb: 0.5 }}>
+          <strong>{key}:</strong> {String(value)}
+        </Typography>
+      ))}
+      {renderSmartUrl(urlEntry ? String(urlEntry[1]) : undefined, onNavigate)}
+    </Box>
+  );
 };

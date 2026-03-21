@@ -19,8 +19,13 @@ class TournamentVoter extends Voter
 
     protected function supports(string $attribute, $subject): bool
     {
-        if (!in_array($attribute, [self::VIEW, self::EDIT, self::DELETE], true)) {
+        if (!in_array($attribute, [self::VIEW, self::EDIT, self::DELETE, self::CREATE], true)) {
             return false;
+        }
+
+        // CREATE does not require a Tournament subject
+        if (self::CREATE === $attribute) {
+            return true;
         }
 
         if (!$subject instanceof Tournament) {
@@ -45,15 +50,17 @@ class TournamentVoter extends Voter
             return true;
         }
 
-        switch ($attribute) {
-            case self::VIEW:
-            case self::EDIT:
-            case self::DELETE:
-                return $this->isOwner($subject, $user);
-        }
-
         if (self::CREATE === $attribute) {
             return $user->isVerified() && in_array('ROLE_ADMIN', $user->getRoles(), true);
+        }
+
+        switch ($attribute) {
+            case self::VIEW:
+                return $this->isOwner($subject, $user);
+            case self::EDIT:
+            case self::DELETE:
+                return in_array('ROLE_ADMIN', $user->getRoles(), true)
+                    || $this->isOwner($subject, $user);
         }
 
         return false;

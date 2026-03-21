@@ -1,21 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useMemo } from 'react';
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import PositionDeleteConfirmationModal from '../modals/PositionDeleteConfirmationModal';
 import PositionEditModal from '../modals/PositionEditModal';
 import { Position } from '../types/position';
@@ -24,136 +10,82 @@ const Positions = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [positionId, setPositionId] = useState<number | null>(null);
   const [positionEditModalOpen, setPositionEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePosition, setDeletePosition] = useState<Position | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
 
   const loadPositions = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiJson<{ positions: Position[] }>('/api/positions');
-      if (res && Array.isArray(res.positions)) {
-        setPositions(res.positions);
-      } else {
-        setPositions([]);
-      }
-    } catch (e) {
+      setPositions(res && Array.isArray(res.positions) ? res.positions : []);
+    } catch {
       setError('Fehler beim Laden der Positionen.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadPositions();
-  }, []);
+  useEffect(() => { loadPositions(); }, []);
 
-  const handleDelete = async (positionId: number) => {
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/positions/${positionId}`, { method: 'DELETE' });
-      setPositions(positions => positions.filter(c => c.id !== positionId));
+      await apiJson(`/api/positions/${id}`, { method: 'DELETE' });
+      setPositions(prev => prev.filter(c => c.id !== id));
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen der Position.');
+      setSnackbar({ open: true, message: 'Position gelöscht', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen der Position.', severity: 'error' });
     }
   };
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return positions;
+    const q = search.toLowerCase();
+    return positions.filter(p => (p.name || '').toLowerCase().includes(q) || (p.shortName || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
+  }, [positions, search]);
+
+  const columns: AdminTableColumn<Position>[] = [
+    { header: 'Name', render: p => p.name || '' },
+    { header: 'Code', render: p => p.shortName || '', width: 100 },
+    { header: 'Beschreibung', render: p => p.description || '' },
+  ];
+
   return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Positionen
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setPositionId(null); setPositionEditModalOpen(true) }}>
-          Neue Position erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
+    <AdminPageLayout
+      icon={<CenterFocusStrongIcon />}
+      title="Positionen"
+      itemCount={positions.length}
+      loading={loading}
+      error={error}
+      createLabel="Neue Position"
+      onCreate={() => { setPositionId(null); setPositionEditModalOpen(true); }}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Position suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+    >
+      {filtered.length === 0 ? (
+        <AdminEmptyState icon={<CenterFocusStrongIcon />} title="Keine Positionen vorhanden" createLabel="Neue Position" onCreate={() => { setPositionId(null); setPositionEditModalOpen(true); }} />
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Code</TableCell>
-                <TableCell>Beschreibung</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {positions.map((position, idx) => (
-                <TableRow key={position.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell>
-                    {position.name || ''}
-                  </TableCell>
-                  <TableCell>
-                    {position.shortName || ''}
-                  </TableCell>
-                  <TableCell>
-                    {position.description || ''}
-                  </TableCell>
-                  <TableCell>
-                    { position.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setPositionId(position.id);
-                          setPositionEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Position bearbeiten"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { position.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeletePosition(position);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Position löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        )}
-        <PositionEditModal
-            openPositionEditModal={positionEditModalOpen}
-            positionId={positionId}
-            onPositionEditModalClose={() => setPositionEditModalOpen(false)}
-            onPositionSaved={(savedPosition) => {
-                setPositionEditModalOpen(false);
-                loadPositions();
-            }}
+        <AdminTable columns={columns} data={filtered} getKey={p => p.id}
+          renderActions={p => (
+            <AdminActions
+              onEdit={p.permissions?.canEdit ? () => { setPositionId(p.id); setPositionEditModalOpen(true); } : undefined}
+              onDelete={p.permissions?.canDelete ? () => { setDeletePosition(p); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
         />
-        <PositionDeleteConfirmationModal
-            open={deleteModalOpen}
-            positionName={deletePosition?.name}
-            onClose={() => setDeleteModalOpen(false)}
-            onConfirm={async () => handleDelete(deletePosition!.id) }
-        />
-    </Box>
+      )}
+
+      <PositionEditModal openPositionEditModal={positionEditModalOpen} positionId={positionId} onPositionEditModalClose={() => setPositionEditModalOpen(false)} onPositionSaved={() => { setPositionEditModalOpen(false); loadPositions(); }} />
+      <PositionDeleteConfirmationModal open={deleteModalOpen} positionName={deletePosition?.name} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deletePosition!.id)} />
+    </AdminPageLayout>
   );
 };
 

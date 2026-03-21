@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Entity\UserRelation;
+use App\Service\UserContactService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -15,6 +16,7 @@ class UserController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
+        private UserContactService $userContactService,
     ) {
     }
 
@@ -36,9 +38,28 @@ class UserController extends AbstractController
             'users' => array_map(fn (User $user) => [
                 'id' => $user->getId(),
                 'fullName' => $user->getFullName(),
-                'email' => $user->getEmail()
             ], $users)
         ]);
+    }
+
+    /**
+     * Returns only users that share an active team or club assignment with the
+     * current user (via any of the four assignment types). No email addresses
+     * are exposed. Each result carries a `context` hint (role + team/club name)
+     * so that users with identical names can be visually distinguished.
+     * ROLE_SUPERADMIN receives all active users without restriction.
+     */
+    #[Route('/contacts', name: 'contacts', methods: ['GET'])]
+    public function contacts(): JsonResponse
+    {
+        /** @var User $me */
+        $me = $this->getUser();
+
+        if ($this->isGranted('ROLE_SUPERADMIN')) {
+            return $this->json(['users' => $this->userContactService->findAllUsers($me)]);
+        }
+
+        return $this->json(['users' => $this->userContactService->findContacts($me)]);
     }
 
     #[Route('/relations', name: 'relations', methods: ['GET'])]
@@ -52,6 +73,7 @@ class UserController extends AbstractController
                 'id' => $userRelation->getId(),
                 'fullName' => $userRelation->getPlayer() ? $userRelation->getPlayer()->getFullname() :
                     ($userRelation->getCoach() ? $userRelation->getCoach()->getFullname() : 'N/A'),
+                'name' => $userRelation->getRelationType()->getName(),
                 'identifier' => $userRelation->getRelationType()->getIdentifier(),
                 'category' => $userRelation->getRelationType()->getCategory()
             ], $user->getUserRelations()->toArray())
@@ -87,6 +109,7 @@ class UserController extends AbstractController
 
         // User-Entity aktualisieren
         $user->setAvatarFilename($filename);
+        $user->setUseGoogleAvatar(false); // manual upload overrides Google avatar
         $this->entityManager->flush();
 
         // URL für Frontend
@@ -103,8 +126,10 @@ class UserController extends AbstractController
         $uploadDir = $this->getParameter('kernel.project_dir') . '/public/uploads/avatar';
         $old = $user->getAvatarFilename();
 
-        if ($old && file_exists($uploadDir . '/' . $old)) {
-            @unlink($uploadDir . '/' . $old);
+        if ($old) {
+            if (file_exists($uploadDir . '/' . $old)) {
+                @unlink($uploadDir . '/' . $old);
+            }
             $user->setAvatarFilename(null);
             $this->entityManager->flush();
         }

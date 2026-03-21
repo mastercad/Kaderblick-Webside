@@ -1,10 +1,11 @@
-import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect, useCallback } from 'react';
 import { GameEvent } from '../types/games';
 import YouTube, { YouTubePlayer, YouTubeEvent } from 'react-youtube';
 import BaseModal from './BaseModal';
 import { Box, Button, IconButton, Tooltip, List, ListItem, ListItemText, Typography } from '@mui/material';
 import { ContentCut as ContentCutIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import VideoTimeline from '../components/VideoTimeline';
+import MobileVideoControls from '../components/MobileVideoControls';
 import { mapGameEventsToTimelineEvents, calculateCumulativeOffset } from '../utils/videoTimeline';
 import { updateGameEvent } from '../services/games';
 import { fetchVideoSegments, saveVideoSegment, updateVideoSegment, deleteVideoSegment, VideoSegment } from '../services/videoSegments';
@@ -27,6 +28,10 @@ interface VideoPlayModalProps {
   onEventUpdated?: () => void | Promise<void>;
   allVideos?: Array<any>; // Videos array with id, gameStart, length, sort
   youtubeLinks?: any; // { [eventId]: { [cameraId]: [urls] } } - flexible type from backend
+  /** Callback: Ereignis an einer bestimmten Video-Position anlegen (für Mobile-Steuerung) */
+  onCreateEventAtPosition?: (videoPositionSeconds: number) => void;
+  /** Ob der Benutzer Events anlegen darf (steuert Mobile-Button-Sichtbarkeit) */
+  canCreateEvents?: boolean;
   children?: React.ReactNode;
 }
 
@@ -40,7 +45,7 @@ function secondsToMinuteFormat(seconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, videoId, videoName, videoObj, gameEvents, gameStartDate, gameId, onEventUpdated, allVideos, youtubeLinks, children }, ref) => {
+const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, videoId, videoName, videoObj, gameEvents, gameStartDate, gameId, onEventUpdated, allVideos, youtubeLinks, onCreateEventAtPosition, canCreateEvents, children }, ref) => {
   const playerRef = useRef<YouTubePlayer | null>(null);
   const playerReadyRef = useRef<boolean>(false);
   const lastSeekTimeRef = useRef<number>(0);
@@ -48,6 +53,9 @@ const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, vi
   const [videoDuration, setVideoDuration] = useState<number>(safeVideoObj.length || 0);
   const [movedEvents, setMovedEvents] = useState<ReturnType<typeof mapGameEventsToTimelineEvents> | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Pending cut marker start für Mobile-Steuerung (zwei-Schritt-Flow)
+  const [pendingCutStart, setPendingCutStart] = useState<number | null>(null);
   
   // Schnittmarken State
   const [cutModeActive, setCutModeActive] = useState(false);
@@ -66,6 +74,7 @@ const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, vi
       setMovedEvents(null); // Reset moved events when modal closes
       playerReadyRef.current = false; // Reset player ready state
       lastSeekTimeRef.current = 0; // Reset seek throttle
+      setPendingCutStart(null); // Reset pending cut marker
       return;
     }
     
@@ -294,6 +303,31 @@ const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, vi
       .catch(err => console.error('Fehler beim Löschen der Schnittmarke:', err));
   };
 
+  // Mobile: Ereignis an aktueller Position anlegen
+  const handleMobileCreateEvent = useCallback((videoPositionSeconds: number) => {
+    // Video pausieren
+    try {
+      playerRef.current?.pauseVideo?.();
+    } catch { /* ignore */ }
+    onCreateEventAtPosition?.(videoPositionSeconds);
+  }, [onCreateEventAtPosition]);
+
+  // Mobile: Schnittmarke setzen (zwei-Schritt-Flow: Start → Ende)
+  const handleMobileSetCutMarker = useCallback((videoPositionSeconds: number) => {
+    if (pendingCutStart === null) {
+      // Erster Tap: Start-Position merken
+      setPendingCutStart(videoPositionSeconds);
+    } else {
+      // Zweiter Tap: Ende-Position → Schnittmarke erstellen
+      const start = Math.min(pendingCutStart, videoPositionSeconds);
+      const end = Math.max(pendingCutStart, videoPositionSeconds);
+      if (end - start >= 1) {
+        handleCutMarkerAdd(start, end);
+      }
+      setPendingCutStart(null);
+    }
+  }, [pendingCutStart, handleCutMarkerAdd]);
+
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => playerRef.current?.getCurrentTime() ?? 0,
@@ -375,6 +409,23 @@ const VideoPlayModal = forwardRef<any, VideoPlayModalProps>(({ open, onClose, vi
         )}
       </Box>
       
+      {/* Mobile-Steuerung: Jog-Buttons, Positionsanzeige, Aktionsbuttons */}
+      {videoDuration > 0 && (
+        <MobileVideoControls
+          playerRef={playerRef}
+          playerReady={playerReadyRef.current}
+          duration={videoDuration}
+          onSeek={handleSeek}
+          onCreateEvent={handleMobileCreateEvent}
+          onSetCutMarker={handleMobileSetCutMarker}
+          cutModeActive={cutModeActive}
+          pendingCutStart={pendingCutStart}
+          canCreateEvents={canCreateEvents}
+          gameStart={safeVideoObj.gameStart || 0}
+          cumulativeOffset={cumulativeOffset}
+        />
+      )}
+
       {/* Schnittmarken Toggle Button */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
         <Tooltip title={cutModeActive ? "Schnittmarken-Modus deaktivieren" : "Schnittmarken-Modus aktivieren"}>

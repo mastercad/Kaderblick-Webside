@@ -1,68 +1,119 @@
-# Willkommen bei Kaderblick!
+# Kaderblick — Dokumentation
 
-**Kaderblick** ist eure digitale Vereinsplattform – alles, was ihr für den Vereinsalltag braucht, an einem Ort. Ob Spielergebnisse, Trainingsplanung, Termine, Nachrichten oder Trikotgrößen: Mit Kaderblick habt ihr alles im Griff – egal ob am Computer, Tablet oder Smartphone.
+Willkommen zur Dokumentation von **Kaderblick** — der Web-App für euren Fußballverein!
 
-Diese Dokumentation erklärt euch alle Funktionen der Plattform – Schritt für Schritt und ohne Fachchinesisch. Ihr müsst kein IT-Profi sein, um Kaderblick zu verstehen und erfolgreich zu nutzen.
-
----
-
-## Für wen ist Kaderblick gedacht?
-
-Kaderblick richtet sich an alle, die in einem Fußballverein aktiv sind:
-
-- **Spieler** – Termine im Blick behalten, Zu- oder Absagen geben, eigene Statistiken verfolgen
-- **Eltern** – Spieltermine einsehen, An- und Abmeldungen für das Kind verwalten, Fahrgemeinschaften organisieren
-- **Trainer** – Mannschaft verwalten, Aufstellungen planen, Spielberichte führen, Aufgaben verteilen
-- **Vereinsverantwortliche** – Kader pflegen, News veröffentlichen, Umfragen starten, Auswertungen erstellen
+Kaderblick hilft Spielern, Trainern, Eltern und dem gesamten Vereinsleben, alles an einem Ort zu organisieren. Von der Trainingsplanung über Live-Spielereignisse bis hin zu Fahrgemeinschaften und Trikot-Bestellungen.
 
 ---
 
-## Was kann Kaderblick alles?
+## Für wen ist diese Dokumentation?
 
-Hier ist ein Überblick über alle Bereiche der Plattform:
+Diese Dokumentation richtet sich an **alle Nutzer** von Kaderblick:
 
-| Bereich | Das könnt ihr dort machen |
-|---|---|
-| [Anmelden & Registrieren](02-authentifizierung.md) | Konto erstellen, einloggen, Passwort vergessen |
-| [Vereine & Teams](03-vereins-teamverwaltung.md) | Vereinsstruktur, Teams, Altersklassen und Ligen verwalten |
-| [Spieler](04-spieler.md) | Kader pflegen, Positionen und Teamzuordnungen |
-| [Trainer](05-trainer.md) | Trainerprofil, Qualifikationen, Teamzuordnung |
-| [Spiele](06-spielverwaltung.md) | Spiele eintragen, Ergebnisse und Spielereignisse erfassen |
-| [Kalender & Termine](07-kalender-teilnahme.md) | Alle Termine auf einen Blick, Zu- und Absagen |
-| [Aufstellungen](08-formationen.md) | Taktische Aufstellungen grafisch planen und speichern |
-| [Turniere](09-turniere.md) | Turniere anlegen, Spielplan erstellen, Ergebnisse erfassen |
-| [Videos & Spielanalyse](10-video-analyse.md) | Spielvideos verwalten und Spielszenen direkt anspringen |
-| [Nachrichten](11-nachrichten.md) | Direkt mit Teamkollegen oder Gruppen schreiben |
-| [News](12-news.md) | Vereinsnachrichten lesen und veröffentlichen |
-| [Aufgaben](13-aufgaben.md) | Aufgaben verteilen, wiederkehrende Pflichten organisieren |
-| [Umfragen](14-umfragen.md) | Abstimmungen und Umfragen für das Team starten |
-| [Benachrichtigungen](15-benachrichtigungen.md) | Keine wichtige Info mehr verpassen |
-| [Dashboard](16-dashboard.md) | Persönliche Startseite mit den wichtigsten Infos |
-| [Berichte & Auswertungen](17-berichte.md) | Statistiken und Auswertungen erstellen |
-| [Fahrgemeinschaften](18-fahrgemeinschaften.md) | Mitfahrgelegenheiten zu Auswärtsspielen organisieren |
-| [Mein Profil](19-profil.md) | Eigene Daten, Profilbild und Konfektionsgrößen pflegen |
-| [Administration](20-admin.md) | Für Vereinsverantwortliche: Benutzerverwaltung und Einstellungen |
+- **Spielerinnen und Spieler** — Termine checken, zu-/absagen, Aufgaben erledigen, XP sammeln
+- **Eltern** — Überblick behalten, Fahrgemeinschaften organisieren, Nachrichten lesen
+- **Trainerinnen und Trainer** — Spiele planen, Aufstellungen bauen, Statistiken auswerten
+- **Administratoren** — Nutzer und Stammdaten verwalten, Feedback bearbeiten
 
 ---
 
-## Wie komme ich zu Kaderblick?
+## Inhaltsverzeichnis
 
-Kaderblick läuft direkt im Browser – ihr müsst nichts installieren. Ruft einfach die Adresse auf, die euch euer Vereinsverantwortlicher mitgeteilt hat. Die Plattform funktioniert auf **allen Geräten**: Computer, Laptop, Smartphone und Tablet.
+### Einstieg
 
-> 💡 **Tipp:** Ihr könnt Kaderblick auch wie eine App auf eurem Smartphone speichern. Öffnet die Seite im Browser, tippt auf „Zum Startbildschirm hinzufügen" – schon habt ihr ein App-Symbol auf dem Handy!
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [01 - Erste Schritte](01-erste-schritte.md) | Schnellstart | Registrierung, Login, Navigation, erste Einrichtung, PWA-Installation |
+| [02 - Authentifizierung](02-authentifizierung.md) | Login & Sicherheit | E-Mail-Login, Google-Anmeldung, Passwort-Reset, JWT-Token |
+
+### Vereinsstruktur
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [03 - Vereins- & Teamverwaltung](03-vereins-teamverwaltung.md) | Vereine & Teams | Vereins-Profile, Teams, Altersgruppen, Standorte, Ligen |
+| [04 - Spieler](04-spieler.md) | Spieler-Profile | Positionen, Trikotnummern, Team-Zuweisungen, Titel, fussball.de |
+| [05 - Trainer](05-trainer.md) | Trainer-Profile | Lizenzen, Team-Zuweisungen, Vereins-Zugehörigkeiten |
+
+### Spiele & Wettbewerb
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [06 - Spielverwaltung](06-spielverwaltung.md) | Spiele & Ergebnisse | Live-Spiele, Spielereignisse (Tore, Karten, Auswechslungen), Wetter |
+| [08 - Formationen](08-formationen.md) | Aufstellungen | Taktische Formationen auf dem Spielfeld planen |
+| [08b - Taktik-Editor](08b-taktik-editor.md) | Taktikboard | Spielzüge & Laufwege zeichnen, Gegner setzen, mehrere Taktik-Varianten verwalten |
+| [09 - Turniere](09-turniere.md) | Turnierverwaltung | Gruppen, Turnierbaum, Setzplätze, Spielplan |
+| [10 - Video-Analyse](10-video-analyse.md) | Spielvideos | YouTube-Player, Zeitleiste, Schnitt-Modus, Highlight-Clips |
+
+### Termine & Organisation
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [07 - Kalender & Teilnahme](07-kalender-teilnahme.md) | Termine | 4 Kalenderansichten, Termintyp-Filter, Zu-/Absagen, Berechtigungen |
+| [13 - Aufgaben](13-aufgaben.md) | Team-Aufgaben | Wiederkehrende Aufgaben, Rotation, Pro-Spiel-Modus |
+| [18 - Fahrgemeinschaften](18-fahrgemeinschaften.md) | Mitfahren | Fahrer, Plätze, Mitfahrer-Listen |
+
+### Kommunikation
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [11 - Nachrichten](11-nachrichten.md) | Posteingang | Persönliche Nachrichten, Gruppen, Antworten |
+| [12 - News](12-news.md) | Vereinsnachrichten | News-Artikel, Sichtbarkeit (Plattform/Verein/Team) |
+| [14 - Umfragen](14-umfragen.md) | Abstimmungen | 5 Fragetypen, 3-Schritte-Assistent, Auswertungen |
+| [15 - Benachrichtigungen](15-benachrichtigungen.md) | Push & In-App | Glocke, Push-Status, Benachrichtigungs-Typen |
+| [21 - Mein Feedback](21-mein-feedback.md) | Feedback | Eigene Rückmeldungen, Status, Antworten des Teams, Feedback einreichen |
+
+### Auswertung & Personalisierung
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [16 - Dashboard](16-dashboard.md) | Startseite | 5 Widget-Typen, Drag & Drop, Größenanpassung |
+| [17 - Berichte](17-berichte.md) | Statistiken | Bericht-Builder, 12+ Diagrammtypen, 20+ Presets, Export |
+| [19 - Profil](19-profil.md) | Mein Profil | Profilbild, Push-Einstellungen, Passwort, XP, Verknüpfungen |
+
+### Verwaltung
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [20 - Administration](20-admin.md) | Admin-Bereich | Nutzer-Verknüpfungen, Titel & XP, Feedback, Stammdaten, Größen-Guide |
+
+### Entwicklung & Qualitätssicherung
+
+| Kapitel | Thema | Beschreibung |
+|---------|-------|-------------|
+| [22 - Load-Test-Fixtures](22-load-test-fixtures.md) | Testdaten | 25 Vereine, 101 Teams, ~70 000 Datensätze über 3 Jahre · Befehle, Umfang, Technik |
 
 ---
 
-## Ich habe noch keinen Account – was mache ich?
+## Schnellzugriff nach Rolle
 
-Kein Problem! Wie ihr euch registriert und anmeldet, erklärt die Seite [Anmelden & Registrieren](02-authentifizierung.md).
+### Ich bin Spieler/in
+→ [Erste Schritte](01-erste-schritte.md) → [Kalender & Teilnahme](07-kalender-teilnahme.md) → [Aufgaben](13-aufgaben.md) → [Nachrichten](11-nachrichten.md) → [Profil](19-profil.md)
 
-Falls ihr keinen Zugang bekommt, sprecht euren Trainer oder den Vereinsverantwortlichen an. In manchen Vereinen werden Zugänge zentral vergeben.
+### Ich bin Elternteil
+→ [Erste Schritte](01-erste-schritte.md) → [Kalender & Teilnahme](07-kalender-teilnahme.md) → [Fahrgemeinschaften](18-fahrgemeinschaften.md) → [Nachrichten](11-nachrichten.md) → [Profil](19-profil.md)
+
+### Ich bin Trainer/in
+→ [Erste Schritte](01-erste-schritte.md) → [Spielverwaltung](06-spielverwaltung.md) → [Formationen](08-formationen.md) → [Kalender](07-kalender-teilnahme.md) → [Berichte](17-berichte.md) → [Video-Analyse](10-video-analyse.md)
+
+### Ich bin Administrator
+→ [Erste Schritte](01-erste-schritte.md) → [Administration](20-admin.md) → [Vereins- & Teamverwaltung](03-vereins-teamverwaltung.md)
 
 ---
 
-## Etwas funktioniert nicht – was nun?
+## Über Kaderblick
 
-- Schaut zunächst in das entsprechende Kapitel dieser Dokumentation – dort sind häufige Fragen und Probleme beschrieben
-- Nutzt die **Feedback-Funktion** in der App, um ein Problem oder einen Verbesserungswunsch zu melden
-- Wendet euch an euren Vereinsadministrator
+Kaderblick ist eine **Progressive Web App (PWA)** — sie läuft im Browser und kann auf dem Handy wie eine echte App installiert werden. Keine App-Store-Installation nötig.
+
+**Unterstützte Browser:** Chrome, Firefox, Safari, Edge (jeweils aktuelle Version)
+
+**Features auf einen Blick:**
+- 📅 Kalender mit 4 Ansichten und Termintyp-Filtern
+- ⚽ Live-Spielverfolgung mit Ereignis-Tracking
+- 📊 Mächtiger Bericht-Builder mit 12+ Diagrammtypen
+- 🎬 Video-Analyse mit Zeitleiste und Schnitt-Modus
+- 📱 Push-Benachrichtigungen auf allen Geräten
+- 🏆 XP-System und Titel für Motivation
+- 🚗 Fahrgemeinschaften für Auswärtsspiele
+- 🗳️ Umfragen mit 5 verschiedenen Fragetypen
+- 📋 Wiederkehrende Aufgaben mit automatischer Rotation
+- 🖥️ Personalisierbares Dashboard mit Drag & Drop

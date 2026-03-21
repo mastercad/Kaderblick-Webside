@@ -16,7 +16,14 @@ import {
   IconButton,
   Fab,
   Icon,
-  Link
+  Link,
+  Stack,
+  Divider,
+  alpha,
+  useTheme,
+  TextField,
+  Collapse,
+  Tooltip,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -28,15 +35,26 @@ import {
   CalendarToday as CalendarIcon,
   Sync as SyncIcon,
   LocationOn as LocationIcon,
-  ContentCut as ContentCutIcon
+  ContentCut as ContentCutIcon,
+  PlayArrow as LiveIcon,
+  AccessTime as TimeIcon,
+  CheckCircle as CheckCircleIcon,
+  SportsScore as SportsScoreIcon,
+  Timer as TimerIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Save as SaveIcon,
 } from '@mui/icons-material';
 import { 
   fetchGameDetails, 
   fetchGameEvents,
   deleteGameEvent, 
-  syncFussballDe 
+  syncFussballDe,
+  finishGame,
+  updateGameTiming,
 } from '../services/games';
 import { fetchVideos, saveVideo, deleteVideo, Video, YoutubeLink, Camera } from '../services/videos';
+import { getApiErrorMessage } from '../utils/api';
 import VideoModal from '../modals/VideoModal';
 import VideoPlayModal from '../modals/VideoPlayModal';
 import { VideoSegmentModal } from '../modals/VideoSegmentModal';
@@ -54,6 +72,26 @@ import { formatEventTime, formatDateTime } from '../utils/formatter'
 import { UserAvatar } from '../components/UserAvatar';
 import { getAvatarFrameUrl } from '../utils/avatarFrame';
 import { calculateCumulativeOffset } from '../utils/videoTimeline';
+
+/** Helper: format date to "Sa, 15. Mär 2025" style */
+const formatDateNice = (dateString: string) => {
+  const date = new Date(dateString);
+  const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  return `${days[date.getDay()]}, ${date.getDate()}. ${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
+const formatTimeNice = (dateString: string) => {
+  const date = new Date(dateString);
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+};
+
+/** Format video length seconds to mm:ss */
+const formatVideoLength = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 interface GameDetailsProps {
   gameId?: number;
@@ -87,6 +125,19 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
     setVideoEventInitialMinute(seconds);
     setVideoEventFormOpen(true);
   };
+
+  // Handler für Mobile-Steuerung: Video-Position wird direkt übergeben
+  const handleCreateEventFromVideoAtPosition = (videoPositionSeconds: number) => {
+    const gameStartOffset = videoToPlay?.gameStart ?? 0;
+    const cumOffset = videoToPlay ? calculateCumulativeOffset(
+      videoToPlay as any,
+      videos as any
+    ) : 0;
+    const gameTimeSeconds = Math.round(videoPositionSeconds - gameStartOffset + cumOffset);
+    setVideoEventInitialMinute(gameTimeSeconds);
+    setVideoEventFormOpen(true);
+  };
+
     // State für Play-Modal
     const [playVideoModalOpen, setPlayVideoModalOpen] = useState(false);
     const [videoToPlay, setVideoToPlay] = useState<Video | null>(null);
@@ -105,6 +156,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
   const { showToast } = useToast();
   const params = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const theme = useTheme();
   
   // Use URL param if available, otherwise fall back to prop
   const gameId = params.id ? parseInt(params.id, 10) : propGameId;
@@ -134,6 +186,17 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
   const [weatherModalOpen, setWeatherModalOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [videoSegmentModalOpen, setVideoSegmentModalOpen] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [confirmFinishOpen, setConfirmFinishOpen] = useState(false);
+
+  // Timing state
+  const [halfDuration, setHalfDuration] = useState<number>(45);
+  const [halftimeBreakDuration, setHalftimeBreakDuration] = useState<number>(15);
+  const [firstHalfExtraTime, setFirstHalfExtraTime] = useState<string>('');
+  const [secondHalfExtraTime, setSecondHalfExtraTime] = useState<string>('');
+  const [timingSaving, setTimingSaving] = useState(false);
+  const [timingExpanded, setTimingExpanded] = useState(false);
 
   useEffect(() => {
     if (!gameId) {
@@ -208,7 +271,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       await loadGameEvents(); // Reload events so timeline has current data
       showToast('Das Video wurde erfolgreich gespeichert.', 'success');
     } catch (e: any) {
-      setError(e.message || 'Fehler beim Speichern des Videos');
+      showToast(getApiErrorMessage(e), 'error');
     } finally {
       setVideoDialogLoading(false);
     }
@@ -223,7 +286,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       await loadVideos();
       await loadGameEvents(); // Reload events for consistency
     } catch (e: any) {
-      setError(e.message || 'Fehler beim Löschen des Videos');
+      showToast(getApiErrorMessage(e), 'error');
     } finally {
       setVideoDeleteLoading(false);
     }
@@ -240,6 +303,12 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       setHomeScore(result.homeScore);
       setAwayScore(result.awayScore);
       setGameStartDate(result.game?.calendarEvent?.startDate ?? null);
+      setIsFinished(result.game?.isFinished ?? false);
+      // Initialize timing state from game
+      setHalfDuration(result.game?.halfDuration ?? 45);
+      setHalftimeBreakDuration(result.game?.halftimeBreakDuration ?? 15);
+      setFirstHalfExtraTime(result.game?.firstHalfExtraTime != null ? String(result.game.firstHalfExtraTime) : '');
+      setSecondHalfExtraTime(result.game?.secondHalfExtraTime != null ? String(result.game.secondHalfExtraTime) : '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden der Spieldetails');
     } finally {
@@ -263,7 +332,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       });
       setGameEvents(repairedEvents);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Ereignisse');
+      showToast(getApiErrorMessage(err), 'error');
     }
   };
 
@@ -282,7 +351,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       setGameStartDate(result.game?.calendarEvent?.startDate ?? null);
       await loadVideos(); // Reload videos to update event mappings
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Löschen des Ereignisses');
+      showToast(getApiErrorMessage(err), 'error');
     }
   };
 
@@ -294,9 +363,28 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       await syncFussballDe(gameId);
       await loadGameDetails(); // Reload data
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Synchronisieren mit Fussball.de');
+      showToast(getApiErrorMessage(err), 'error');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSaveTiming = async () => {
+    if (!gameId) return;
+    setTimingSaving(true);
+    try {
+      await updateGameTiming(gameId, {
+        halfDuration,
+        halftimeBreakDuration,
+        firstHalfExtraTime: firstHalfExtraTime !== '' ? parseInt(firstHalfExtraTime, 10) : null,
+        secondHalfExtraTime: secondHalfExtraTime !== '' ? parseInt(secondHalfExtraTime, 10) : null,
+      });
+      showToast('Spielzeiten wurden gespeichert.', 'success');
+      await loadGameDetails();
+    } catch (err) {
+      showToast(getApiErrorMessage(err), 'error');
+    } finally {
+      setTimingSaving(false);
     }
   };
 
@@ -313,7 +401,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       setAwayScore(result.awayScore);
       setGameStartDate(result.game?.calendarEvent?.startDate ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Spieldetails');
+      showToast(getApiErrorMessage(err), 'error');
     }
     await loadVideos(); // Reload videos to update event mappings
   };
@@ -338,6 +426,34 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
 
   const canCreateEvents = () => {
     return game?.permissions?.can_create_game_events ?? false;
+  };
+
+  const handleFinishGame = async () => {
+    if (!gameId) return;
+    try {
+      setFinishing(true);
+      const result = await finishGame(gameId);
+      setIsFinished(true);
+      setConfirmFinishOpen(false);
+      if (result.advanced) {
+        const adv = result.advanced;
+        const msg = adv.gameCreated
+          ? `Gewinner weitergeleitet! Nächstes Match: ${adv.homeTeam ?? 'TBD'} vs ${adv.awayTeam ?? 'TBD'} (Spiel erstellt)`
+          : `Gewinner weitergeleitet! Nächstes Match: ${adv.homeTeam ?? 'TBD'} vs ${adv.awayTeam ?? 'TBD'}`;
+        showToast(msg, 'success');
+      } else {
+        showToast('Spiel wurde als beendet markiert.', 'success');
+      }
+      // Reload game details to get updated state
+      await loadGameDetails();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Fehler beim Beenden des Spiels',
+        'error'
+      );
+    } finally {
+      setFinishing(false);
+    }
   };
 
   const canCreateVideos = () => {
@@ -374,78 +490,215 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton 
-          onClick={() => onBack ? onBack() : navigate('/games')} 
-          sx={{ mr: 2 }}
+    <Box sx={{ px: { xs: 1.5, sm: 3 }, py: { xs: 2, sm: 3 }, maxWidth: 960, mx: 'auto' }}>
+      {/* ── Back Navigation ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <IconButton
+          onClick={() => {
+            if (onBack) {
+              onBack();
+            } else if (game?.tournamentId) {
+              navigate(`/tournaments/${game.tournamentId}`);
+            } else {
+              navigate('/games');
+            }
+          }}
+          sx={{ mr: 1 }}
+          size="small"
         >
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4" component="h1">
-          Spieldetails
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          {game?.tournamentId ? 'Zurück zum Turnier' : 'Zurück zur Übersicht'}
         </Typography>
       </Box>
 
-      {/* Game Info Card */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ mb: 2, display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: 2 }}>
-            {/* Linke Box: Teams, Zeit, Location */}
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 1 }}>
-              <Typography variant="h5" component="h2" gutterBottom>
-                <strong>{game.homeTeam.name}</strong> vs <strong>{game.awayTeam.name}</strong>
+      {/* ══════════════════════════════════════════════════
+          SCOREBOARD HERO CARD
+         ══════════════════════════════════════════════════ */}
+      <Card sx={{
+        mb: 3,
+        overflow: 'hidden',
+        border: isGameRunning() ? `2px solid ${theme.palette.success.main}` : '1px solid',
+        borderColor: isGameRunning() ? 'success.main' : 'divider',
+      }}>
+        {/* Live banner */}
+        {isGameRunning() && (
+          <Box sx={{
+            bgcolor: 'success.main',
+            color: 'success.contrastText',
+            px: 2,
+            py: 0.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}>
+            <LiveIcon sx={{ fontSize: 16, animation: 'pulse 1.5s infinite' }} />
+            <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', fontSize: '0.7rem' }}>
+              Live
+            </Typography>
+            <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+          </Box>
+        )}
+
+        <CardContent sx={{ px: { xs: 2, sm: 4 }, py: { xs: 2.5, sm: 3 } }}>
+          {/* Scoreboard: Home - Score - Away */}
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: { xs: 1.5, sm: 3 },
+            mb: 2,
+          }}>
+            {/* Home Team */}
+            <Box sx={{ flex: 1, textAlign: 'center' }}>
+              <Typography sx={{
+                fontWeight: 700,
+                fontSize: { xs: '1rem', sm: '1.3rem' },
+                lineHeight: 1.3,
+                wordBreak: 'break-word',
+              }}>
+                {game.homeTeam.name}
               </Typography>
-              {(game.calendarEvent?.startDate || game.location) && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  {game.calendarEvent?.startDate && (
-                    <>
-                      <CalendarIcon fontSize="small" />
-                      <Typography variant="body2" color="text.secondary">
-                        {formatDateTime(game.calendarEvent.startDate)}
-                        {game.calendarEvent.endDate && ` - ${formatDateTime(game.calendarEvent.endDate).split(' ')[1]}`}
-                      </Typography>
-                    </>
-                  )}
-                  {game.location && (
-                    <Location 
-                      id={game.location.id}
-                      name={game.location.name}
-                      latitude={game.location.latitude}
-                      longitude={game.location.longitude}
-                      address={game.location.address}
-                    />
-                  )}
+            </Box>
+
+            {/* Score */}
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: { xs: 80, sm: 120 },
+              flexShrink: 0,
+            }}>
+              {homeScore !== null && awayScore !== null ? (
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: { xs: 0.75, sm: 1 },
+                  bgcolor: isGameRunning()
+                    ? alpha(theme.palette.success.main, 0.1)
+                    : alpha(theme.palette.primary.main, 0.06),
+                  borderRadius: 2,
+                  px: { xs: 1.5, sm: 2.5 },
+                  py: { xs: 0.75, sm: 1 },
+                }}>
+                  <Typography sx={{
+                    fontWeight: 800,
+                    fontSize: { xs: '1.6rem', sm: '2.2rem' },
+                    lineHeight: 1,
+                    color: isGameRunning() ? 'success.main' : 'text.primary',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {homeScore}
+                  </Typography>
+                  <Typography sx={{
+                    fontWeight: 300,
+                    fontSize: { xs: '1.2rem', sm: '1.6rem' },
+                    color: 'text.secondary',
+                  }}>
+                    :
+                  </Typography>
+                  <Typography sx={{
+                    fontWeight: 800,
+                    fontSize: { xs: '1.6rem', sm: '2.2rem' },
+                    lineHeight: 1,
+                    color: isGameRunning() ? 'success.main' : 'text.primary',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {awayScore}
+                  </Typography>
                 </Box>
+              ) : (
+                <Typography sx={{
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  color: 'text.disabled',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1,
+                }}>
+                  vs
+                </Typography>
               )}
             </Box>
-            {/* Rechte Box: Weather Icon */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 80, pr: 2, pt: 1 }}
-              onClick={() => {
-                openWeatherModal(game.calendarEvent?.id ?? null);
+
+            {/* Away Team */}
+            <Box sx={{ flex: 1, textAlign: 'center' }}>
+              <Typography sx={{
+                fontWeight: 700,
+                fontSize: { xs: '1rem', sm: '1.3rem' },
+                lineHeight: 1.3,
+                wordBreak: 'break-word',
               }}>
-              <span style={{ cursor: 'pointer' }} title="Wetterdetails anzeigen">
-                <WeatherDisplay 
-                  code={game.weatherData?.dailyWeatherData?.weathercode?.[0]} theme={'light'}
-                />
-              </span>
+                {game.awayTeam.name}
+              </Typography>
             </Box>
           </Box>
 
-          <Box sx={{ mb: 2 }}>
-            {homeScore !== null && awayScore !== null ? (
-              <Chip 
-                label={`${homeScore} : ${awayScore}`} 
-                color="primary" 
-                sx={{ fontSize: '1.2rem', p: 1 }}
+          {/* Meta Info Bar */}
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: { xs: 0.75, sm: 1.5 },
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            pt: 2,
+          }}>
+            {/* Date */}
+            {game.calendarEvent?.startDate && (
+              <Chip
+                icon={<CalendarIcon sx={{ fontSize: '0.9rem !important' }} />}
+                label={`${formatDateNice(game.calendarEvent.startDate)}`}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: '0.8rem', height: 30, '& .MuiChip-icon': { ml: 0.5 } }}
               />
-            ) : (
-              <Chip label="Noch kein Ergebnis" color="default" />
             )}
+            {/* Time */}
+            {game.calendarEvent?.startDate && (
+              <Chip
+                icon={<TimeIcon sx={{ fontSize: '0.9rem !important' }} />}
+                label={`${formatTimeNice(game.calendarEvent.startDate)}${game.calendarEvent.endDate ? ` – ${formatTimeNice(game.calendarEvent.endDate)}` : ''} Uhr`}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: '0.8rem', height: 30, '& .MuiChip-icon': { ml: 0.5 } }}
+              />
+            )}
+            {/* Location */}
+            {game.location && (
+              <Box sx={{ display: 'inline-flex', '& a': { fontSize: '0.8rem' }, '& svg': { fontSize: '1rem !important' } }}>
+                <Location
+                  id={game.location.id}
+                  name={game.location.name}
+                  latitude={game.location.latitude}
+                  longitude={game.location.longitude}
+                  address={game.location.address}
+                />
+              </Box>
+            )}
+            {/* Weather */}
+            <Box
+              onClick={() => openWeatherModal(game.calendarEvent?.id ?? null)}
+              sx={{
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                '&:hover': { opacity: 0.7 },
+              }}
+              title="Wetterdetails anzeigen"
+            >
+              <WeatherDisplay
+                code={game.weatherData?.dailyWeatherData?.weathercode?.[0]}
+                theme={'light'}
+                size={30}
+              />
+            </Box>
           </Box>
+
+          {/* Fussball.de Sync */}
           {game.fussballDeUrl && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
               <Button
                 variant="outlined"
                 startIcon={<SyncIcon />}
@@ -457,36 +710,90 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
               </Button>
             </Box>
           )}
+
+          {/* Spiel beenden Button */}
+          {canCreateEvents() && !isFinished && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<SportsScoreIcon />}
+                onClick={() => setConfirmFinishOpen(true)}
+                disabled={finishing}
+                size="small"
+              >
+                {finishing ? 'Wird beendet...' : 'Spiel beenden'}
+              </Button>
+            </Box>
+          )}
+          {isFinished && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mt: 2 }}>
+              <CheckCircleIcon sx={{ fontSize: 18, color: 'success.main' }} />
+              <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>
+                Spiel beendet
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
 
-      {/* Game Events Card */}
-      <Card className="gameevents-mobile-card" sx={{ mb: 3 }}>
-        <CardHeader
-          title="Spielereignisse"
-          action={
-            canCreateEvents() && (
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  setEventToEdit(null);
-                  setEventFormOpen(true);
+      {/* ══════════════════════════════════════════════════
+          GAME EVENTS
+         ══════════════════════════════════════════════════ */}
+      <Card className="gameevents-mobile-card" sx={{ mb: 3, overflow: 'hidden' }}>
+        {/* Section Header */}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: alpha(theme.palette.primary.main, 0.03),
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SoccerIcon sx={{ fontSize: 20, color: 'primary.main' }} />
+            <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+              Spielereignisse
+            </Typography>
+            {gameEvents.length > 0 && (
+              <Chip
+                label={gameEvents.length}
+                size="small"
+                sx={{
+                  height: 22,
+                  minWidth: 22,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: 'primary.main',
                 }}
-                sx={{ ml: 1 }}
-              >
-                Ereignis erfassen
-              </Button>
-            )
-          }
-        />
-        <CardContent>
+              />
+            )}
+          </Box>
+          {canCreateEvents() && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setEventToEdit(null);
+                setEventFormOpen(true);
+              }}
+              sx={{ fontSize: '0.8rem' }}
+            >
+              Erfassen
+            </Button>
+          )}
+        </Box>
+
+        <CardContent sx={{ px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 2 } }}>
           {gameEvents.length > 0 ? (
-            <List>
+            <Stack spacing={0} divider={<Divider sx={{ mx: -1.5 }} />}>
               {gameEvents.map((event) => {
                 const videosForEvent = youtubeLinks[event.id] || [];
-                
+
                 const e = event as any;
                 let playerDisplay = '';
                 let minute = 0;
@@ -522,330 +829,528 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
                 } else if (e.gameEventType?.color) {
                   color = e.gameEventType?.color;
                 }
+
                 return (
-                  <ListItem
+                  <Box
                     key={e.id}
-                    alignItems="flex-start"
-                    sx={{ 
-                      flexDirection: { xs: 'column', md: 'row' },
-                      py: 2,
-                      gap: { xs: 1, md: 0 }
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: { xs: 1, sm: 2 },
+                      py: { xs: 1.25, sm: 1.5 },
+                      '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) },
+                      borderRadius: 1,
+                      px: { xs: 0.5, sm: 1 },
                     }}
-                    secondaryAction={
-                      user && (
-                        <Box sx={{ 
-                          display: 'flex',
-                          position: { xs: 'static', md: 'absolute' },
-                          right: { md: 16 },
-                          top: { md: '50%' },
-                          transform: { md: 'translateY(-50%)' },
-                          mt: { xs: 1, md: 0 }
-                        }}>
-                          <IconButton
-                            edge="end"
-                            onClick={() => {
-                              setEventToEdit(event);
-                              setEventFormOpen(true);
-                            }}
-                            sx={{ mr: 1 }}
-                            size="small"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            edge="end"
-                            onClick={() => {
-                              setEventToDelete(event);
-                            }}
-                            size="small"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Box>
-                      )
-                    }
                   >
-                    <ListItemText
-                      sx={{ 
-                        width: '100%',
-                        m: 0,
-                        pr: { xs: 0, md: user ? 10 : 0 }
-                      }}
-                      primary={
-                        <Box sx={{ 
-                          display: 'flex',
-                          flexDirection: { xs: 'column', md: 'row' },
-                          gap: { xs: 1.5, md: 2 },
-                          alignItems: { xs: 'flex-start', md: 'center' }
+                    {/* Event Icon — separate column on desktop (first) */}
+                    <Box sx={{
+                      display: { xs: 'none', sm: 'flex' },
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      bgcolor: alpha(color || '#999', 0.12),
+                      flexShrink: 0,
+                      mt: 0.25,
+                    }}>
+                      <Box sx={{ color: color || 'text.secondary', display: 'flex', alignItems: 'center', fontSize: '1rem' }}>
+                        {getGameEventIconByCode(icon)}
+                      </Box>
+                    </Box>
+
+                    {/* Icon (mobile) + Minute Badge */}
+                    <Box sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      minWidth: { xs: 44, sm: 56 },
+                      flexShrink: 0,
+                      pt: 0.25,
+                    }}>
+                      {/* Event Icon — on top on mobile only */}
+                      <Box sx={{
+                        display: { xs: 'flex', sm: 'none' },
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        bgcolor: alpha(color || '#999', 0.12),
+                      }}>
+                        <Box sx={{ color: color || 'text.secondary', display: 'flex', alignItems: 'center', fontSize: '0.9rem' }}>
+                          {getGameEventIconByCode(icon)}
+                        </Box>
+                      </Box>
+                      <Chip
+                        label={minute ?? ''}
+                        size="small"
+                        sx={{
+                          bgcolor: 'grey.100',
+                          color: 'text.primary',
+                          fontWeight: 700,
+                          fontSize: { xs: '0.72rem', sm: '0.8rem' },
+                          height: 26,
+                          minWidth: { xs: 44, sm: 56 },
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      />
+                    </Box>
+
+                    {/* Content */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      {/* Event type name */}
+                      <Typography sx={{
+                        fontWeight: 700,
+                        fontSize: { xs: '0.88rem', sm: '0.95rem' },
+                        lineHeight: 1.3,
+                      }}>
+                        {e.type ?? e?.gameEventType?.name ?? 'Unbekannt'}
+                      </Typography>
+
+                      {/* Player */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                        <UserAvatar
+                          icon={e.player?.playerAvatarUrl}
+                          name={playerDisplay || 'Unbekannt'}
+                          avatarSize={22}
+                          fontSize={11}
+                          titleObj={e.player?.titleData && e.player?.titleData.hasTitle ? e.player.titleData : undefined}
+                          level={typeof e.player?.level === 'number' ? e.player.level : undefined}
+                        />
+                      </Box>
+
+                      {/* Description */}
+                      {e.description && (
+                        <Typography variant="body2" sx={{
+                          color: 'text.secondary',
+                          fontStyle: 'italic',
+                          mt: 0.5,
+                          fontSize: { xs: '0.78rem', sm: '0.85rem' },
                         }}>
-                          {/* Zeit und Icon-Zeile */}
-                          <Box sx={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            minWidth: { md: '200px' }
-                          }}>
-                            <Chip 
-                              label={minute ?? ''} 
-                              size="small" 
-                              sx={{ 
-                                bgcolor: 'grey.200', 
-                                color: 'text.primary',
-                                fontWeight: 'bold',
-                                minWidth: '60px'
-                              }} 
-                            />
-                            {e.typeColor && (
-                              <span style={{
-                                display: 'inline-block',
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                background: e.typeColor,
-                                flexShrink: 0
-                              }} />
-                            )}
-                            <span style={{ 
-                              color: color,
-                              display: 'flex',
-                              alignItems: 'center',
-                              fontSize: '1.2rem',
-                              flexShrink: 0
-                            }}>
-                              {getGameEventIconByCode(icon)}
-                            </span>
-                            <Typography 
-                              component="strong" 
-                              sx={{ 
-                                fontWeight: 'bold',
-                                fontSize: { xs: '0.95rem', md: '1rem' }
+                          {e.description}
+                        </Typography>
+                      )}
+
+                      {/* Video Links */}
+                      {Object.keys(videosForEvent).length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+                          {Object.entries(videosForEvent).map((currentVideo) => (
+                            <Link
+                              key={currentVideo[0]}
+                              href={currentVideo[1]}
+                              target="_blank"
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.3,
+                                fontSize: '0.78rem',
+                                textDecoration: 'none',
+                                '&:hover': { textDecoration: 'underline' },
                               }}
                             >
-                              {e.type ?? e?.gameEventType.name ?? 'Unbekannt'}
-                            </Typography>
-                          </Box>
-
-                          {/* Spieler-Zeile */}
-                          <Box sx={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            flex: { md: 1 },
-                            pl: { xs: 0, md: 0 }
-                          }}>
-                            <UserAvatar
-                              icon={e.player?.playerAvatarUrl}
-                              name={playerDisplay || 'Unbekannt'}
-                              avatarSize={26}
-                              fontSize={12}
-                              titleObj={e.player?.titleData && e.player?.titleData.hasTitle ? e.player.titleData : undefined}
-                              level={typeof e.player?.level === 'number' ? e.player.level : undefined}
-                            />
-                          </Box>
-
-                          {/* Beschreibung-Zeile (optional) */}
-                          {e.description && (
-                            <Box sx={{ 
-                              width: { xs: '100%', md: 'auto' },
-                              pl: { xs: 0, md: 0 }
-                            }}>
-                              <Typography 
-                                variant="body2" 
-                                sx={{ 
-                                  color: '#888',
-                                  fontStyle: 'italic',
-                                  fontSize: { xs: '0.85rem', md: '0.9rem' }
-                                }}
-                              >
-                                {e.description}
-                              </Typography>
-                            </Box>
-                          )}
-
-                          {/* Video-Links (optional) */}
-                          {Object.keys(videosForEvent).length > 0 && (
-                            <Box sx={{ 
-                              display: 'flex',
-                              gap: 1.5,
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                              width: { xs: '100%', md: 'auto' },
-                              pl: { xs: 0, md: 1 },
-                              pt: { xs: 0.5, md: 0 }
-                            }}>
-                              {Object.entries(videosForEvent).map((currentVideo) => (
-                                <Box 
-                                  key={currentVideo[0]}
-                                  sx={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 0.5
-                                  }}
-                                >
-                                  <YouTubeIcon fontSize="small" color="error" />
-                                  <Link
-                                    href={currentVideo[1]}
-                                    target="_blank"
-                                    sx={{ 
-                                      fontSize: { xs: '0.85rem', md: '0.9rem' },
-                                      textDecoration: 'none',
-                                      '&:hover': { textDecoration: 'underline' }
-                                    }}
-                                  >
-                                    {mappedCameras[Number(currentVideo[0])]}
-                                  </Link>
-                                </Box>
-                              ))}
-                            </Box>
-                          )}
+                              <YouTubeIcon sx={{ fontSize: 14, color: 'error.main' }} />
+                              {mappedCameras[Number(currentVideo[0])]}
+                            </Link>
+                          ))}
                         </Box>
-                      }
-                    />
-                  </ListItem>
+                      )}
+                    </Box>
+
+                    {/* Actions */}
+                    {canCreateEvents() && (
+                      <Box sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.25,
+                        flexShrink: 0,
+                        opacity: { xs: 1, sm: 0.4 },
+                        transition: 'opacity 0.2s',
+                        '.MuiBox-root:hover > &': { opacity: 1 },
+                        'div:hover > &': { opacity: 1 },
+                      }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setEventToEdit(event);
+                            setEventFormOpen(true);
+                          }}
+                          sx={{ p: 0.5 }}
+                        >
+                          <EditIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => setEventToDelete(event)}
+                          sx={{ p: 0.5 }}
+                        >
+                          <DeleteIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Box>
+                    )}
+                  </Box>
                 );
               })}
-            </List>
+            </Stack>
           ) : (
-            <Typography color="text.secondary">
-              Keine Ereignisse für dieses Spiel.
-            </Typography>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <SoccerIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+              <Typography color="text.secondary" variant="body2">
+                Keine Ereignisse für dieses Spiel.
+              </Typography>
+            </Box>
           )}
         </CardContent>
       </Card>
 
-      {/* Videos Card */}
-      <Card className="gamevideos-mobile-card" sx={{ mb: 3 }}>
-        <CardHeader
-          title="Videos"
-          action={
-            <Box>
-              {videos.length > 0 && (
-                <Button
-                  variant="outlined"
-                  startIcon={<ContentCutIcon />}
-                  size="small"
-                  onClick={() => setVideoSegmentModalOpen(true)}
-                  sx={{ mr: 1 }}
-                >
-                  Schnittliste
-                </Button>
-              )}
-              {canCreateVideos() && (
-                <Button
-                  variant="contained"
-                  startIcon={<VideoIcon />}
-                  size="small"
-                  onClick={handleOpenAddVideo}
-                >
-                  Video hinzufügen
-                </Button>
-              )}
-            </Box>
-          }
-        />
-        <CardContent>
+      {/* ══════════════════════════════════════════════════
+          VIDEOS
+         ══════════════════════════════════════════════════ */}
+      <Card className="gamevideos-mobile-card" sx={{ mb: 3, overflow: 'hidden' }}>
+        {/* Section Header */}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: alpha(theme.palette.primary.main, 0.03),
+          flexWrap: 'wrap',
+          gap: 1,
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <VideoIcon sx={{ fontSize: 20, color: 'primary.main', flexShrink: 0 }} />
+            <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' } }} noWrap>
+              Videos
+            </Typography>
+            {videos.length > 0 && (
+              <Chip
+                label={videos.length}
+                size="small"
+                sx={{
+                  height: 22,
+                  minWidth: 22,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: 'primary.main',
+                }}
+              />
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {videos.length > 0 && (
+              <Button
+                variant="outlined"
+                startIcon={<ContentCutIcon />}
+                size="small"
+                onClick={() => setVideoSegmentModalOpen(true)}
+                sx={{ fontSize: '0.8rem' }}
+              >
+                Schnittliste
+              </Button>
+            )}
+            {canCreateVideos() && (
+              <Button
+                variant="contained"
+                startIcon={<VideoIcon />}
+                size="small"
+                onClick={handleOpenAddVideo}
+                sx={{ fontSize: '0.8rem' }}
+              >
+                Hinzufügen
+              </Button>
+            )}
+          </Box>
+        </Box>
+
+        <CardContent sx={{ px: { xs: 1.5, sm: 3 }, py: { xs: 1, sm: 2 } }}>
           {videos.length > 0 ? (
-            <List>
+            <Stack spacing={0} divider={<Divider sx={{ mx: -1.5 }} />}>
               {videos.map((video) => (
-                <ListItem
+                <Box
                   key={video.id}
                   sx={{
                     display: 'flex',
                     flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'flex-start', sm: 'center' },
                     gap: { xs: 1, sm: 2 },
                     py: 1.5,
+                    px: { xs: 0.5, sm: 1 },
+                    alignItems: { xs: 'stretch', sm: 'flex-start' },
+                    '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) },
+                    borderRadius: 1,
                   }}
-                  disablePadding
                 >
-                  {/* Thumbnail + Info */}
-                  <Box sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 2,
-                    flex: 1,
-                    minWidth: 0,
-                    width: '100%',
-                  }}>
-                    {video.youtubeId && (
-                      <a href={`https://youtu.be/${video.youtubeId}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                        <img
-                          src={`https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg`}
-                          alt="Video Thumbnail"
-                          style={{ width: 120, height: 'auto', borderRadius: 4 }}
-                        />
-                      </a>
-                    )}
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        {video.youtubeId ? (
-                          <a href={`https://youtu.be/${video.youtubeId}`} target="_blank" rel="noopener noreferrer">
-                            <Typography variant="body1" color="primary" fontWeight="bold">{video.name}</Typography>
-                          </a>
-                        ) : video.url ? (
-                          <a href={video.url} target="_blank" rel="noopener noreferrer">
-                            <Typography variant="body1" color="primary" fontWeight="bold">{video.name}</Typography>
-                          </a>
-                        ) : (
-                          <Typography variant="body1">{video.name}</Typography>
-                        )}
+                  {/* Thumbnail */}
+                  {video.youtubeId && (
+                    <Box
+                      sx={{
+                        flexShrink: 0,
+                        width: { xs: '100%', sm: 140 },
+                        maxWidth: { xs: '100%', sm: 140 },
+                        borderRadius: 1.5,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        aspectRatio: '16/9',
+                        '&:hover': { opacity: 0.9 },
+                      }}
+                      onClick={() => handleOpenPlayVideo(video)}
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg`}
+                        alt={video.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          display: 'block',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      {/* Play overlay */}
+                      <Box sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'rgba(0,0,0,0.25)',
+                        transition: 'background-color 0.2s',
+                        '&:hover': { bgcolor: 'rgba(0,0,0,0.4)' },
+                      }}>
+                        <YouTubeIcon sx={{ fontSize: { xs: 44, sm: 32 }, color: '#fff', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Info + Actions row */}
+                  <Box sx={{ display: 'flex', flex: 1, minWidth: 0, gap: 1, alignItems: 'flex-start' }}>
+                    {/* Info */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: { xs: '0.9rem', sm: '0.95rem' },
+                          lineHeight: 1.3,
+                          cursor: 'pointer',
+                          color: 'primary.main',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
+                        onClick={() => handleOpenPlayVideo(video)}
+                      >
+                        {video.name}
+                      </Typography>
+
+                      <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.75 }}>
                         {video.videoType?.name && (
-                          <Chip label={video.videoType.name} size="small" />
+                          <Chip label={video.videoType.name} size="small" sx={{ height: 22, fontSize: '0.72rem' }} />
                         )}
-                        {video.length && (
-                          <Chip label={`${video.length}s`} size="small" />
+                        {video.length != null && video.length > 0 && (
+                          <Chip label={formatVideoLength(video.length)} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.72rem' }} />
+                        )}
+                        {video.camera?.name && (
+                          <Chip label={video.camera.name} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.72rem' }} />
                         )}
                       </Box>
+
                       {video.filePath && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                          Dateipfad: {video.filePath}
+                        <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
+                          {video.filePath}
                         </Typography>
                       )}
                     </Box>
-                  </Box>
 
-                  {/* Action Buttons */}
-                  {user && (
-                    <Box sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      flexShrink: 0,
-                      bgcolor: 'action.hover',
-                      borderRadius: 2,
-                      px: 0.5,
-                      py: 0.25,
-                      alignSelf: { xs: 'flex-end', sm: 'center' },
-                    }}>
-                      <IconButton
-                        color="primary"
-                        aria-label="Abspielen"
-                        onClick={() => handleOpenPlayVideo(video)}
-                        size="small"
-                      >
-                        <YouTubeIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleOpenEditVideo(video)} size="small">
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton color="error" onClick={() => setVideoToDelete(video)} size="small">
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  )}
-                </ListItem>
+                    {/* Actions */}
+                    {user && (
+                      <Box sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.25,
+                        flexShrink: 0,
+                        opacity: { xs: 1, sm: 0.4 },
+                        transition: 'opacity 0.2s',
+                        'div:hover > &': { opacity: 1 },
+                      }}>
+                        <IconButton size="small" onClick={() => handleOpenPlayVideo(video)} sx={{ p: 0.5 }}>
+                          <YouTubeIcon sx={{ fontSize: 18, color: 'error.main' }} />
+                        </IconButton>
+                        {canCreateVideos() && (
+                          <>
+                            <IconButton size="small" onClick={() => handleOpenEditVideo(video)} sx={{ p: 0.5 }}>
+                              <EditIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => setVideoToDelete(video)} sx={{ p: 0.5 }}>
+                              <DeleteIcon sx={{ fontSize: 18, color: 'error.main' }} />
+                            </IconButton>
+                          </>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
               ))}
-            </List>
+            </Stack>
           ) : (
-            <Typography color="text.secondary">
-              Keine Videos für dieses Spiel.
-            </Typography>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <VideoIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+              <Typography color="text.secondary" variant="body2">
+                Keine Videos für dieses Spiel.
+              </Typography>
+            </Box>
           )}
         </CardContent>
       </Card>
 
-      {/* Video Play Modal */}
-      <VideoPlayModal
+      {/* ══════════════════════════════════════════════════
+          SPIELZEITEN
+         ══════════════════════════════════════════════════ */}
+      {(game.permissions?.can_edit_timing || game.halfDuration != null) && (
+        <Card sx={{ mb: 3, overflow: 'hidden' }}>
+          {/* Section Header */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              px: { xs: 2, sm: 3 },
+              py: 1.5,
+              borderBottom: timingExpanded ? '1px solid' : 'none',
+              borderColor: 'divider',
+              bgcolor: alpha(theme.palette.primary.main, 0.03),
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+            onClick={() => setTimingExpanded((v) => !v)}
+            data-testid="timing-section-header"
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TimerIcon sx={{ fontSize: 20, color: 'primary.main' }} />
+              <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+                Spielzeiten
+              </Typography>
+              <Tooltip title="Halbzeitdauer, Pause und Nachspielzeiten für die Video-Timeline">
+                <Chip
+                  label={`${game.halfDuration ?? 45} min`}
+                  size="small"
+                  sx={{
+                    height: 22,
+                    fontWeight: 600,
+                    fontSize: '0.75rem',
+                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    color: 'primary.main',
+                  }}
+                />
+              </Tooltip>
+            </Box>
+            <IconButton size="small" sx={{ p: 0.5 }}>
+              {timingExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+
+          <Collapse in={timingExpanded}>
+            <CardContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 } }}>
+              {game.permissions?.can_edit_timing ? (
+                <Box
+                  component="form"
+                  onSubmit={(e) => { e.preventDefault(); handleSaveTiming(); }}
+                  data-testid="timing-edit-form"
+                >
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr 1fr' },
+                      gap: 2,
+                      mb: 2,
+                    }}
+                  >
+                    <TextField
+                      label="Halbzeitdauer (Min)"
+                      type="number"
+                      value={halfDuration}
+                      onChange={(e) => setHalfDuration(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      inputProps={{ min: 1, max: 90, 'data-testid': 'input-halfDuration' }}
+                      size="small"
+                      fullWidth
+                      helperText="z.B. 45 (Erwachsene)"
+                    />
+                    <TextField
+                      label="Halbzeitpause (Min)"
+                      type="number"
+                      value={halftimeBreakDuration}
+                      onChange={(e) => setHalftimeBreakDuration(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                      inputProps={{ min: 0, max: 60, 'data-testid': 'input-halftimeBreakDuration' }}
+                      size="small"
+                      fullWidth
+                      helperText="z.B. 15"
+                    />
+                    <TextField
+                      label="Nachspielzeit HZ1 (Min)"
+                      type="number"
+                      value={firstHalfExtraTime}
+                      onChange={(e) => setFirstHalfExtraTime(e.target.value)}
+                      inputProps={{ min: 0, max: 30, 'data-testid': 'input-firstHalfExtraTime' }}
+                      size="small"
+                      fullWidth
+                      helperText="leer = nicht erfasst"
+                    />
+                    <TextField
+                      label="Nachspielzeit HZ2 (Min)"
+                      type="number"
+                      value={secondHalfExtraTime}
+                      onChange={(e) => setSecondHalfExtraTime(e.target.value)}
+                      inputProps={{ min: 0, max: 30, 'data-testid': 'input-secondHalfExtraTime' }}
+                      size="small"
+                      fullWidth
+                      helperText="leer = nicht erfasst"
+                    />
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      startIcon={<SaveIcon />}
+                      size="small"
+                      disabled={timingSaving}
+                      data-testid="btn-save-timing"
+                    >
+                      {timingSaving ? 'Speichern…' : 'Speichern'}
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Halbzeitdauer</Typography>
+                    <Typography variant="body2" fontWeight={600}>{game.halfDuration ?? 45} min</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Halbzeitpause</Typography>
+                    <Typography variant="body2" fontWeight={600}>{game.halftimeBreakDuration ?? 15} min</Typography>
+                  </Box>
+                  {game.firstHalfExtraTime != null && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">Nachspielzeit HZ1</Typography>
+                      <Typography variant="body2" fontWeight={600}>{game.firstHalfExtraTime} min</Typography>
+                    </Box>
+                  )}
+                  {game.secondHalfExtraTime != null && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">Nachspielzeit HZ2</Typography>
+                      <Typography variant="body2" fontWeight={600}>{game.secondHalfExtraTime} min</Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </CardContent>
+          </Collapse>
+        </Card>
+      )}
+
+      {/* Video Play Modal */}      <VideoPlayModal
         ref={videoPlayerRef}
         open={playVideoModalOpen}
         onClose={handleClosePlayVideo}
@@ -864,6 +1369,8 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
         onEventUpdated={handleEventUpdated}
         allVideos={videos}
         youtubeLinks={youtubeLinks}
+        onCreateEventAtPosition={handleCreateEventFromVideoAtPosition}
+        canCreateEvents={canCreateEvents()}
       >
         {canCreateEvents() && (
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
@@ -924,8 +1431,13 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
       {canCreateEvents() && (
         <Fab
           color="primary"
-          aria-label="add event"
-          sx={{ position: 'fixed', bottom: 16, right: 16 }}
+          aria-label="Ereignis erfassen"
+          sx={{
+            position: 'fixed',
+            bottom: { xs: 16, sm: 24 },
+            right: { xs: 16, sm: 24 },
+            zIndex: 10,
+          }}
           onClick={() => setEventFormOpen(true)}
         >
           <AddIcon />
@@ -941,6 +1453,17 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
         message={`Soll das Ereignis "${eventToDelete?.gameEventType?.name || eventToDelete?.type || 'Unbekannt'}" wirklich gelöscht werden?`}
         confirmText="Löschen"
         confirmColor="error"
+      />
+
+      {/* Confirmation Modal for Finishing Game */}
+      <ConfirmationModal
+        open={confirmFinishOpen}
+        onClose={() => setConfirmFinishOpen(false)}
+        onConfirm={handleFinishGame}
+        title="Spiel beenden"
+        message="Soll das Spiel als beendet markiert werden? Falls es ein Turnierspiel ist, wird der Gewinner automatisch in die nächste Runde weitergeleitet."
+        confirmText="Spiel beenden"
+        confirmColor="success"
       />
 
       {/* Game Event Modal außerhalb für andere Fälle (z.B. FAB) */}

@@ -1,65 +1,200 @@
 # Dashboard
 
-Das Dashboard ist eure persönliche Startseite in Kaderblick. Sobald ihr euch einloggt, landet ihr hier und seht auf einen Blick das Wichtigste: anstehende Termine, offene Aufgaben, aktuelle News und mehr.
+Das Dashboard ist eure persönliche Startseite in Kaderblick. Hier seht ihr auf einen Blick, was gerade wichtig ist — kommende Termine, aktuelle Neuigkeiten, neue Nachrichten und mehr. Jeder kann sich das Dashboard **frei einrichten**.
 
 ---
 
-## Was zeigt das Dashboard?
+## Das Dashboard öffnen
 
-Das Dashboard besteht aus einzelnen **Kacheln** (sog. Widgets). Jede Kachel zeigt einen anderen Bereich. Welche Kacheln ihr seht, könnt ihr selbst festlegen – so passt das Dashboard zu euch.
-
-Mögliche Kacheln:
-
-| Kachel | Was zeigt sie? |
-|---|---|
-| 📅 Nächste Termine | Eure kommenden Spiele und Trainings |
-| 📋 Offene Aufgaben | Aufgaben, die noch erledigt werden müssen |
-| 📰 Aktuelle News | Die neuesten Beiträge aus dem Verein |
-| 🔔 Benachrichtigungen | Neue Nachrichten und Hinweise |
-| 📊 Berichte | Selbst erstellte Statistik-Auswertungen |
+Klickt auf **„Dashboard"** im Hauptmenü oder auf das **Home-Symbol**. Ihr landet auf eurer personalisierten Übersicht. Oben steht **„Dashboard – [euer Vorname]"**, damit ihr wisst, dass es eure eigene Ansicht ist.
 
 ---
 
-## Das Dashboard anpassen
+## Widgets — die Bausteine eures Dashboards
 
-Jeder hat sein eigenes Dashboard-Layout. Ihr könnt selbst bestimmen, welche Kacheln angezeigt werden und in welcher Reihenfolge.
+Das Dashboard besteht aus **Widgets** — kleine Info-Karten, die jeweils einen bestimmten Bereich abdecken. Jedes Widget ist eine eigenständige Karte mit einer Kopfzeile (Titel + Aktionsbuttons) und dem eigentlichen Inhalt darunter.
 
-### Kachel hinzufügen:
-1. Auf das **„+"**-Symbol oder **„Widget hinzufügen"** klicken
-2. Aus der Liste die gewünschte Kachel auswählen
-3. Die Kachel erscheint sofort auf eurem Dashboard
+### Verfügbare Widget-Typen
 
-### Kachel entfernen:
-1. Auf das **„x"** oder das Einstellungs-Symbol der Kachel klicken
-2. **„Entfernen"** bestätigen
-
-### Reihenfolge ändern:
-Kacheln lassen sich per Drag & Drop (anklicken, halten, verschieben) in die gewünschte Position bringen.
+Es gibt **fünf verschiedene Widget-Typen**:
 
 ---
 
-## Berichts-Kacheln
+#### 📅 Nächste Termine (Upcoming Events)
 
-Besonders nützlich sind die Berichts-Kacheln: Ihr könnt selbst erstellte Berichte (z. B. „Tore pro Spieler") direkt auf dem Dashboard anzeigen lassen, damit ihr immer aktuelle Zahlen im Blick habt.
+Zeigt eure **kommenden Kalender-Termine** als übersichtliche Liste:
 
-Wie ihr Berichte erstellt, erklärt die Seite [Berichte](17-berichte.md).
+- Jeder Termin hat einen **farbigen Rand** links (Farbe = Termintyp-Farbe, z. B. Grün für Training, Blau für Spiel)
+- **Kalender-Symbol** + **Terminname** + **Typ-Badge** (z. B. „Training", „Ligaspiel")
+- **Datum und Uhrzeit**
+- **Standort-Symbol** + **Ort** (falls eingetragen)
+
+Sind keine Termine geplant, steht dort: „Keine anstehenden Termine".
+
+---
+
+#### 📰 Neuigkeiten (News)
+
+Zeigt die **neuesten News** als kompakte Karten:
+
+- **Titel** und **Datum** der Nachricht
+- **Vorschau** des Inhalts (maximal 3 Zeilen, dann abgeschnitten)
+- Klickt auf eine News-Karte → es öffnet sich ein **Detail-Dialog** mit dem vollständigen Text
+
+Stehen keine News bereit: „Keine News vorhanden."
+
+---
+
+#### 💬 Nachrichten (Messages)
+
+Zeigt eure **letzten Nachrichten** auf einen Blick:
+
+- **Betreff** der Nachricht
+- **Absender**
+- **Datum**
+
+Schneller Check, ob euch jemand geschrieben hat, ohne erst den Posteingang zu öffnen.
+
+Keine Nachrichten? „Keine Nachrichten vorhanden."
+
+---
+
+#### 🗓️ Kalender (Calendar)
+
+Ein **Mini-Kalender** mit Monats-, Wochen-, Tages- und Listenansicht direkt auf dem Dashboard:
+
+- Basiert auf dem gleichen Kalender wie die Kalender-Seite (deutsche Wochennamen, Montag als Wochenstart)
+- Termine werden als **farbige Blöcke** dargestellt (Farbe = Termintyp-Farbe)
+- Klickt auf einen Termin → es öffnet sich ein **Termin-Detail-Dialog** mit allen Informationen
+- Ihr könnt zwischen den Monaten navigieren
+
+Ideal, um den **Monatsüberblick** immer auf der Startseite zu haben.
+
+---
+
+#### 📊 Bericht (Report)
+
+Das mächtigste Widget: Zeigt einen **gespeicherten Bericht als Diagramm** direkt auf dem Dashboard.
+
+- Beim Hinzufügen wählt ihr aus einer Liste eurer gespeicherten Berichte (und Vorlagen, mit „[Vorlage]"-Badge markiert)
+- Das Diagramm wird dann **live** auf dem Dashboard gerendert — in voller Qualität
+- Unterstützt alle Diagrammtypen: **Balken**, **Linien**, **Flächen**, **Kreis** (Pie), **Donut**, **Radar**, **Polarfläche**, **Bubble**, **Scatter**, **Boxplot**, **Heatmap** und mehr
+- Perfekt für Trainer, die z. B. die **Torstatistik** oder **Trainingsbeteiligung** immer im Blick haben wollen
+
+> 💡 Ihr braucht dafür erst einen gespeicherten Bericht. Wie ihr Berichte erstellt, erfahrt ihr in [17-berichte.md](17-berichte.md).
+
+---
+
+## Widgets hinzufügen
+
+1. Klickt oben auf den **„Widget hinzufügen"**-Button
+2. Es öffnet sich ein Auswahl-Dialog mit den **fünf Widget-Typen** — jeweils mit Symbol und Beschreibung:
+   - 📅 Nächste Termine
+   - 📰 News
+   - 💬 Nachrichten
+   - 🗓️ Kalender
+   - 📊 Bericht
+3. Wählt den gewünschten Typ
+4. Bei **Bericht**: Es öffnet sich ein zweiter Dialog, in dem ihr den **konkreten Bericht** auswählt (Häkchen setzen). Vorlagen sind mit „[Vorlage]" markiert.
+5. Das Widget erscheint auf eurem Dashboard
+
+Ihr könnt **beliebig viele Widgets** des gleichen Typs hinzufügen — z. B. mehrere Bericht-Widgets für verschiedene Statistiken.
+
+---
+
+## Widgets anordnen (Drag & Drop)
+
+Ihr könnt die **Reihenfolge** der Widgets frei verändern:
+
+1. Sucht das **Verschieben-Symbol** (≡ drei horizontale Linien) oben links am Widget
+2. **Klickt und haltet** (oder auf dem Handy: **länger drücken**, ca. 200ms)
+3. **Zieht** das Widget an die gewünschte Position
+4. Während ihr zieht:
+   - Das Widget wird leicht **gedreht** und schwebt mit einem Schatten über den anderen Widgets
+   - An der ursprünglichen Position zeigt ein **gestrichelter Rahmen**, wo das Widget her kommt
+5. **Loslassen** — die anderen Widgets rutschen automatisch zur Seite
+
+Das funktioniert wie das Verschieben von Apps auf eurem Handy-Homescreen. Die neue Reihenfolge wird automatisch gespeichert.
+
+> 💡 Auf Touch-Geräten (Handy/Tablet) müsst ihr etwas länger drücken, bevor der Drag startet — das verhindert versehentliches Verschieben beim Scrollen.
+
+---
+
+## Widgets in der Größe anpassen
+
+Jedes Widget hat eine einstellbare **Breite**. Klickt auf das **Zahnrad-Symbol** (⚙️) am Widget → es öffnet sich ein Einstellungs-Dialog:
+
+| Option | Breite | Beschreibung |
+|--------|--------|-------------|
+| **Schmal** | 25% (3 von 12 Spalten) | Kompakt — passt 4 Widgets nebeneinander |
+| **Normal** | 33% (4 von 12 Spalten) | Standard-Breite — 3 Widgets pro Zeile |
+| **Halbe Breite** | 50% (6 von 12 Spalten) | 2 Widgets pro Zeile |
+| **Groß** | 66% (8 von 12 Spalten) | Zwei Drittel der Zeile |
+| **Volle Breite** | 100% (12 von 12 Spalten) | Nimmt die gesamte Zeile ein |
+
+So könnt ihr wichtige Widgets (z. B. Kalender oder Bericht) **groß** darstellen und kleinere Infos (z. B. Nachrichten) **kompakt** halten.
+
+> 💡 Auf dem Handy werden alle Widgets automatisch auf **volle Breite** umgestellt, da der Bildschirm nicht genug Platz für mehrere Spalten hat.
+
+---
+
+## Widget-Aktionen
+
+Jedes Widget hat in der Kopfzeile drei **Aktionsbuttons**:
+
+| Button | Symbol | Funktion |
+|--------|--------|----------|
+| **Aktualisieren** | 🔄 | Lädt die Daten des Widgets neu (z. B. neueste Termine abrufen) |
+| **Einstellungen** | ⚙️ | Öffnet den Einstellungs-Dialog (Breite anpassen, bei Report-Widgets: Bericht wechseln) |
+| **Entfernen** | ❌ | Entfernt das Widget vom Dashboard (mit Bestätigungs-Dialog) |
+
+> ⚠️ Beim Entfernen eines Widgets gehen keine Daten verloren. Die Termine, News, Nachrichten oder Berichte bleiben natürlich erhalten — nur das Widget auf dem Dashboard wird entfernt. Ihr könnt es jederzeit wieder hinzufügen.
+
+---
+
+## Tipps für ein gutes Dashboard
+
+### Empfohlene Einrichtung für Spieler
+- **Nächste Termine** (Halbe Breite) — was steht an?
+- **Nachrichten** (Halbe Breite) — hat jemand geschrieben?
+- **News** (Volle Breite) — Vereinsnachrichten
+
+### Empfohlene Einrichtung für Trainer
+- **Nächste Termine** (Halbe Breite) — kommende Spiele/Trainings
+- **Kalender** (Halbe Breite) — Monatsübersicht
+- **Bericht: Torjäger** (Normal) — Torstatistik des Teams
+- **Bericht: Trainingsbeteiligung** (Normal) — Wer kommt regelmäßig?
+- **News** (Normal) — Aktuelle Nachrichten
+
+### Empfohlene Einrichtung für Eltern
+- **Nächste Termine** (Volle Breite) — wann muss mein Kind wo sein?
+- **News** (Halbe Breite) — Vereinsnachrichten
+- **Nachrichten** (Halbe Breite) — Kommunikation mit dem Trainer
+
+### Allgemeine Tipps
+- **Weniger ist mehr:** Startet mit 3–4 Widgets und erweitert bei Bedarf
+- **Kalender in voller Breite** auf dem Handy — besonders bei vielen Terminen übersichtlicher
+- **Bericht-Widgets** für Statistiken, die ihr regelmäßig checkt
+- Reihenfolge so anpassen, dass das **Wichtigste oben** steht
 
 ---
 
 ## Häufige Fragen
 
-**Mein Dashboard ist leer – was tun?**
-→ Klickt auf **„Widget hinzufügen"** und wählt die gewünschten Kacheln aus. Beim ersten Login kann das Dashboard noch leer sein.
+### Sehen alle dasselbe Dashboard?
+Nein! Jeder Nutzer hat sein **eigenes Dashboard** mit eigenen Widgets. Eure Einrichtung beeinflusst niemand anderen.
 
-**Werden meine Einstellungen gespeichert?**
-→ Ja, euer persönliches Dashboard-Layout wird gespeichert und erscheint bei jedem Login genauso, wie ihr es eingerichtet habt.
+### Bleiben meine Widgets gespeichert?
+Ja — Position, Größe, Einstellungen und Reihenfolge werden gespeichert und sind beim nächsten Login wieder da.
 
-**Kann der Trainer das Dashboard für alle voreinstellen?**
-→ Nein, das Dashboard ist pro Person individuell. Jeder richtet es selbst ein.
+### Kann ich mehrere Bericht-Widgets haben?
+Ja! Ihr könnt so viele Bericht-Widgets hinzufügen wie ihr wollt — z. B. eins für Torstatistik und eins für Trainingsbeteiligung. Jedes zeigt ein anderes Diagramm.
 
----
+### Warum ist ein Widget leer?
+Das Widget hat aktuell keine Daten — z. B. „Keine anstehenden Termine" oder „Keine News vorhanden". Sobald neue Daten da sind, werden sie automatisch angezeigt.
 
-## Konzept
+### Kann ich das Dashboard auf den Standard zurücksetzen?
+Entfernt einfach alle Widgets und fügt die gewünschten neu hinzu. Es gibt keinen „Reset"-Button, aber die Neueinrichtung geht in einer Minute.
 
-Jeder Benutzer besitzt sein eigenes Dashboard-Layout. Er kann wählen, welche Widgets angezeigt werden und in welcher Reihenfolge. So erhält ein Trainer andere Informationen als ein Spieler oder ein Vereinsadministrator.
-
+### Funktioniert Drag & Drop auch auf dem Handy?
+Ja! Auf Touch-Geräten tippt länger auf das Verschieben-Symbol, haltet und zieht. Das Widget folgt eurem Finger.

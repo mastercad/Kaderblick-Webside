@@ -2,7 +2,6 @@
 
 namespace App\Tests\Unit\Service;
 
-use ApiPlatform\Metadata\UrlGeneratorInterface;
 use App\Entity\User;
 use App\Service\UserVerificationService;
 use DateTime;
@@ -13,15 +12,14 @@ use Symfony\Component\Mailer\MailerInterface;
 
 class UserVerificationServiceTest extends TestCase
 {
-    private UrlGeneratorInterface&MockObject $urlGenerator;
+    private string $frontendUrl = 'https://example.com';
     private MailerInterface&MockObject $mailer;
     private UserVerificationService $service;
 
     protected function setUp(): void
     {
-        $this->urlGenerator = $this->createMock(UrlGeneratorInterface::class);
         $this->mailer = $this->createMock(MailerInterface::class);
-        $this->service = new UserVerificationService($this->urlGenerator, $this->mailer);
+        $this->service = new UserVerificationService($this->frontendUrl, $this->mailer);
     }
 
     public function testCreateVerificationTokenGeneratesValidToken(): void
@@ -104,17 +102,7 @@ class UserVerificationServiceTest extends TestCase
         $user->setEmail('test@example.com');
         $user->setVerificationToken('test-token-123');
 
-        $expectedUrl = 'https://example.com/api/verify-email/test-token-123';
-
-        $this->urlGenerator
-            ->expects($this->once())
-            ->method('generate')
-            ->with(
-                'api_verify_email',
-                ['token' => 'test-token-123'],
-                UrlGeneratorInterface::ABS_URL
-            )
-            ->willReturn($expectedUrl);
+        $expectedUrl = 'https://example.com/verify-email/test-token-123';
 
         $this->mailer
             ->expects($this->once())
@@ -134,10 +122,6 @@ class UserVerificationServiceTest extends TestCase
         $user = new User();
         $user->setEmail('recipient@example.com');
         $user->setVerificationToken('test-token-123');
-
-        $this->urlGenerator
-            ->method('generate')
-            ->willReturn('https://example.com/verify');
 
         $this->mailer
             ->expects($this->once())
@@ -159,10 +143,6 @@ class UserVerificationServiceTest extends TestCase
         $user->setEmail('test@example.com');
         $user->setVerificationToken('test-token-123');
 
-        $this->urlGenerator
-            ->method('generate')
-            ->willReturn('https://example.com/verify');
-
         $this->mailer
             ->expects($this->once())
             ->method('send')
@@ -181,10 +161,6 @@ class UserVerificationServiceTest extends TestCase
         $user->setEmail('test@example.com');
         $user->setVerificationToken('test-token-123');
 
-        $this->urlGenerator
-            ->method('generate')
-            ->willReturn('https://example.com/verify');
-
         $this->mailer
             ->expects($this->once())
             ->method('send')
@@ -202,10 +178,6 @@ class UserVerificationServiceTest extends TestCase
         $user = new User();
         $user->setEmail('test@example.com');
         $user->setVerificationToken('test-token-123');
-
-        $this->urlGenerator
-            ->method('generate')
-            ->willReturn('https://example.com/verify');
 
         $this->mailer
             ->expects($this->once())
@@ -226,10 +198,6 @@ class UserVerificationServiceTest extends TestCase
         $user = new User();
         $user->setEmail('test@example.com');
         $user->setVerificationToken('test-token-123');
-
-        $this->urlGenerator
-            ->method('generate')
-            ->willReturn('https://example.com/verify');
 
         $this->mailer
             ->expects($this->once())

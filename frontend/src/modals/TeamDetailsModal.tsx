@@ -26,7 +26,7 @@ const TeamDetailsModal: React.FC<TeamDetailsModalProps> = ({ teamDetailOpen, tea
     // Initialdaten laden
     useEffect(() => {
         if (teamDetailOpen) {
-            apiJson<{ team: Team }>(`/api/teams/${teamId}`)
+            apiJson<{ team: Team }>(`/api/teams/${teamId}/details`)
             .then(data => {
                 setTeam(data.team);
             })

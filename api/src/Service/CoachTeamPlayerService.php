@@ -7,6 +7,7 @@ use App\Entity\Team;
 use App\Entity\User;
 use DateTime;
 use DateTimeInterface;
+use Throwable;
 
 class CoachTeamPlayerService
 {
@@ -41,7 +42,7 @@ class CoachTeamPlayerService
     /**
      * Ermittelt alle Spieler eines Teams, die aktuell aktiv sind.
      *
-     * @return list<array{player: array{id: int|null, name: string}, shirtNumber: int|null}>
+     * @return list<array{player: array{id: int|null, name: string}, shirtNumber: int|null, position?: string|null, alternativePositions?: string[]}>
      */
     public function collectTeamPlayers(Team $team): array
     {
@@ -50,14 +51,95 @@ class CoachTeamPlayerService
         foreach ($team->getPlayerTeamAssignments() as $assignment) {
             if ($this->isCurrentAssignment($assignment->getStartDate(), $assignment->getEndDate())) {
                 $player = $assignment->getPlayer();
+                $mainPos = null;
+                $altPositions = [];
+                try {
+                    $mainPos = $player->getMainPosition()->getShortName()
+                        ?? $player->getMainPosition()->getName();
+                } catch (Throwable) {
+                    $mainPos = null;
+                }
+                try {
+                    foreach ($player->getAlternativePositions() as $pos) {
+                        $altPositions[] = $pos->getShortName() ?? $pos->getName();
+                    }
+                } catch (Throwable) {
+                    $altPositions = [];
+                }
                 $players[] = [
                     'player' => ['id' => $player->getId(), 'name' => $player->getFullName()],
-                    'shirtNumber' => $assignment->getShirtNumber()
+                    'shirtNumber' => $assignment->getShirtNumber(),
+                    'position' => $mainPos,
+                    'alternativePositions' => $altPositions,
                 ];
             }
         }
 
         return $players;
+    }
+
+    /**
+     * Ermittelt alle Teams, denen ein User als Spieler aktuell zugeordnet ist.
+     *
+     * @return array<Team>
+     */
+    public function collectPlayerTeams(User $user): array
+    {
+        $teams = [];
+
+        foreach ($user->getUserRelations() as $relation) {
+            $player = $relation->getPlayer();
+            if ($player) {
+                foreach ($player->getPlayerTeamAssignments() as $assignment) {
+                    if ($this->isCurrentAssignment($assignment->getStartDate(), $assignment->getEndDate())) {
+                        $team = $assignment->getTeam();
+                        if (!isset($teams[$team->getId()])) {
+                            $teams[$team->getId()] = $team;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $teams;
+    }
+
+    /**
+     * Ermittelt das Standard-Team des Users anhand der ältesten aktiven Zuordnung
+     * (Spieler- oder Trainer-Zuordnung). Gibt null zurück wenn keine aktive Zuordnung vorhanden.
+     */
+    public function resolveDefaultTeamId(User $user): ?int
+    {
+        $defaultTeamId = null;
+        $oldestStart = null;
+
+        foreach ($user->getUserRelations() as $relation) {
+            if ($player = $relation->getPlayer()) {
+                foreach ($player->getPlayerTeamAssignments() as $pta) {
+                    if ($this->isCurrentAssignment($pta->getStartDate(), $pta->getEndDate())) {
+                        $start = $pta->getStartDate();
+                        if ($start && (null === $oldestStart || $start < $oldestStart)) {
+                            $oldestStart = $start;
+                            $defaultTeamId = $pta->getTeam()->getId();
+                        }
+                    }
+                }
+            }
+
+            if ($coach = $relation->getCoach()) {
+                foreach ($coach->getCoachTeamAssignments() as $cta) {
+                    if ($this->isCurrentAssignment($cta->getStartDate(), $cta->getEndDate())) {
+                        $start = $cta->getStartDate();
+                        if ($start && (null === $oldestStart || $start < $oldestStart)) {
+                            $oldestStart = $start;
+                            $defaultTeamId = $cta->getTeam()->getId();
+                        }
+                    }
+                }
+            }
+        }
+
+        return $defaultTeamId;
     }
 
     /**
@@ -122,15 +204,18 @@ class CoachTeamPlayerService
     {
         $now = new DateTime();
 
-        // Wenn kein Startdatum gesetzt ist, als aktiv betrachten
+        // Enddatum prüfen: wenn gesetzt und in der Vergangenheit → immer inaktiv
+        if ($endDate && $endDate < $now) {
+            return false;
+        }
+
+        // Kein Startdatum gesetzt → aktiv solange Enddatum nicht abgelaufen (bereits geprüft)
         if (!$startDate) {
             return true;
         }
 
-        // Zuordnung ist aktiv wenn:
-        // - Startdatum <= heute
-        // - und (kein Enddatum gesetzt ODER Enddatum >= heute)
-        return $startDate <= $now && (!$endDate || $endDate >= $now);
+        // Startdatum muss <= heute sein
+        return $startDate <= $now;
     }
 
     /**

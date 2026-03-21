@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* ─── Reset & Base ─── */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 9.5pt;
+            color: #2d2d2d;
+            line-height: 1.45;
+            background: #fff;
+            padding: 0 2mm;
+        }
+
+        @page {
+            margin: 16mm 16mm 22mm 16mm;
+            size: A4 landscape;
+        }
+
+        /* ══════════════════════════
+           ACCENT BAR
+           ══════════════════════════ */
+        .accent-bar {
+            position: fixed;
+            top: -16mm;
+            left: -16mm;
+            right: -16mm;
+            background: linear-gradient(90deg, #016405, #02a808);
+            height: 6px;
+        }
+
+        /* ══════════════════════════
+           HEADER
+           ══════════════════════════ */
+        .header {
+            display: table;
+            width: 100%;
+            margin: 14px 0 12px 0;
+        }
+        .header-left {
+            display: table-cell;
+            vertical-align: middle;
+            width: 50%;
+        }
+        .header-right {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: right;
+            width: 50%;
+        }
+        .header-logo {
+            display: table-cell;
+            vertical-align: middle;
+            padding-right: 12px;
+            width: 56px;
+        }
+        .header-logo img {
+            width: 44px;
+            height: 44px;
+        }
+        .header-text {
+            display: table-cell;
+            vertical-align: middle;
+        }
+        .header-title {
+            font-size: 17pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            line-height: 1.15;
+            letter-spacing: -0.2px;
+        }
+        .header-subtitle {
+            font-size: 9pt;
+            color: #666;
+            margin-top: 2px;
+        }
+        .header-meta {
+            font-size: 8pt;
+            color: #888;
+            line-height: 1.6;
+        }
+        .team-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #016405;
+            font-size: 8.5pt;
+            font-weight: bold;
+            padding: 4px 14px;
+            border-radius: 14px;
+            letter-spacing: 0.2px;
+            border: 1px solid #c5e0c5;
+            margin-bottom: 4px;
+        }
+
+        /* ══════════════════════════
+           DIVIDER
+           ══════════════════════════ */
+        .divider {
+            border: none;
+            border-top: 1.5px solid #e0e0e0;
+            margin: 8px 0 10px 0;
+        }
+
+        /* ══════════════════════════
+           SECTION TITLES
+           ══════════════════════════ */
+        .section-title {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #016405;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin: 0 0 6px 0;
+            padding-left: 2px;
+        }
+
+        /* ══════════════════════════
+           SUMMARY CARDS
+           ══════════════════════════ */
+        .summary-grid {
+            display: table;
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 6px 0;
+            margin-bottom: 12px;
+        }
+        .summary-cell {
+            display: table-cell;
+            width: 20%;
+            vertical-align: top;
+            padding: 8px 10px;
+            background: #f8fdf8;
+            border: 1px solid #d4e8d4;
+            border-radius: 5px;
+        }
+        .summary-label {
+            font-size: 7.5pt;
+            font-weight: bold;
+            color: #016405;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #d4e8d4;
+            padding-bottom: 3px;
+        }
+        .summary-row {
+            display: table;
+            width: 100%;
+            margin-top: 2px;
+        }
+        .summary-size {
+            display: table-cell;
+            font-size: 8pt;
+            font-weight: bold;
+            color: #333;
+            width: 50%;
+        }
+        .summary-count {
+            display: table-cell;
+            font-size: 8pt;
+            color: #555;
+            text-align: right;
+            width: 50%;
+        }
+        .summary-count-badge {
+            display: inline-block;
+            background: #016405;
+            color: #fff;
+            font-size: 7.5pt;
+            font-weight: bold;
+            padding: 1px 6px;
+            border-radius: 8px;
+            min-width: 20px;
+            text-align: center;
+        }
+        .summary-nodata {
+            font-size: 7.5pt;
+            color: #aaa;
+            font-style: italic;
+        }
+
+        /* ══════════════════════════
+           PLAYER TABLE
+           ══════════════════════════ */
+        table.player-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+            font-size: 8.5pt;
+        }
+        table.player-table thead tr {
+            background: linear-gradient(135deg, #016405 0%, #02a808 100%);
+            color: #fff;
+        }
+        table.player-table thead th {
+            padding: 7px 10px;
+            text-align: left;
+            font-size: 8pt;
+            font-weight: bold;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        table.player-table thead th.center {
+            text-align: center;
+        }
+        table.player-table tbody tr:nth-child(even) {
+            background: #f7fdf7;
+        }
+        table.player-table tbody tr:nth-child(odd) {
+            background: #ffffff;
+        }
+        table.player-table tbody tr:hover {
+            background: #edf7ed;
+        }
+        table.player-table tbody td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #e8e8e8;
+            color: #2d2d2d;
+            vertical-align: middle;
+        }
+        table.player-table tbody td.center {
+            text-align: center;
+        }
+        table.player-table tbody td.name {
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        table.player-table tbody td.number {
+            color: #888;
+            font-size: 8pt;
+            width: 30px;
+        }
+        .size-value {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #1b5e20;
+            font-size: 8pt;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 5px;
+            border: 1px solid #c8e6c9;
+        }
+        .size-missing {
+            color: #bbb;
+            font-style: italic;
+            font-size: 8pt;
+        }
+        .size-warn {
+            display: inline-block;
+            background: #fff8e1;
+            color: #e65100;
+            font-size: 8pt;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 5px;
+            border: 1px solid #ffe0b2;
+        }
+
+        /* ══════════════════════════
+           MISSING PLAYERS HINT
+           ══════════════════════════ */
+        .warning-box {
+            background: #fff8e1;
+            border: 1px solid #ffe0b2;
+            border-radius: 5px;
+            padding: 7px 12px;
+            margin-bottom: 10px;
+            font-size: 8pt;
+            color: #bf6000;
+        }
+        .warning-box strong {
+            color: #e65100;
+        }
+
+        /* ══════════════════════════
+           FOOTER
+           ══════════════════════════ */
+        .footer {
+            position: fixed;
+            bottom: -22mm;
+            left: -16mm;
+            right: -16mm;
+            height: 22mm;
+            background: #f5f9f5;
+            border-top: 1.5px solid #d5e8d5;
+            display: table;
+            width: 100%;
+            padding: 0 16mm;
+        }
+        .footer-left {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 7.5pt;
+            color: #888;
+        }
+        .footer-right {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: right;
+            font-size: 7.5pt;
+            color: #aaa;
+        }
+        .footer-brand {
+            font-weight: bold;
+            color: #016405;
+        }
+
+        /* ══════════════════════════
+           STATS BAR
+           ══════════════════════════ */
+        .stats-bar {
+            display: table;
+            width: 100%;
+            background: #f0f8f0;
+            border: 1px solid #d0e8d0;
+            border-radius: 5px;
+            padding: 6px 12px;
+            margin-bottom: 10px;
+        }
+        .stats-item {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 8pt;
+            color: #444;
+            padding: 0 8px;
+            text-align: center;
+            border-right: 1px solid #d0e8d0;
+        }
+        .stats-item:last-child {
+            border-right: none;
+        }
+        .stats-item strong {
+            font-size: 11pt;
+            color: #016405;
+            display: block;
+            line-height: 1.2;
+        }
+    </style>
+</head>
+<body>
+
+    {# ─── Accent bar ─── #}
+    <div class="accent-bar"></div>
+
+    {# ─── Header ─── #}
+    <div class="header">
+        <div class="header-left">
+            <table style="border-collapse:collapse;">
+                <tr>
+                    {% if logoBase64 %}
+                    <td class="header-logo">
+                        <img src="{{ logoBase64 }}" alt="Logo">
+                    </td>
+                    {% endif %}
+                    <td class="header-text">
+                        <div class="header-title">Bestellübersicht Ausrüstung</div>
+                        <div class="header-subtitle">Kleidergrößen &amp; Schuhgrößen der Spieler</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div class="header-right">
+            <div class="team-badge">{{ teamName }}</div>
+            <div class="header-meta">
+                Erstellt: {{ generatedAt }} Uhr<br>
+                Spieleranzahl: <strong>{{ totalPlayers }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <hr class="divider">
+
+    {# ─── Stats bar ─── #}
+    <div class="stats-bar">
+        {% set shirtCount = summaries.shirt|length > 0 ? summaries.shirt|reduce((carry, v) => carry + v, 0) : 0 %}
+        {% set missingShirt = totalPlayers - shirtCount %}
+        {% set shortsCount = summaries.shorts|length > 0 ? summaries.shorts|reduce((carry, v) => carry + v, 0) : 0 %}
+        {% set missingShorts = totalPlayers - shortsCount %}
+        {% set shoeCount = summaries.shoes|length > 0 ? summaries.shoes|reduce((carry, v) => carry + v, 0) : 0 %}
+        {% set missingShoes = totalPlayers - shoeCount %}
+
+        <div class="stats-item">
+            <strong>{{ totalPlayers }}</strong>
+            Spieler gesamt
+        </div>
+        <div class="stats-item">
+            <strong>{{ shirtCount }}</strong>
+            mit Trikotgröße
+        </div>
+        <div class="stats-item">
+            <strong>{{ shortsCount }}</strong>
+            mit Shortsgröße
+        </div>
+        <div class="stats-item">
+            <strong>{{ shoeCount }}</strong>
+            mit Schuhgröße
+        </div>
+        {% if missingShirt > 0 or missingShorts > 0 or missingShoes > 0 %}
+        <div class="stats-item" style="color:#e65100;">
+            <strong style="color:#e65100;">{{ missingShirt + missingShorts + missingShoes }}</strong>
+            fehlende Angaben
+        </div>
+        {% endif %}
+    </div>
+
+    {# ─── Warning if incomplete data ─── #}
+    {% if missingAny|length > 0 %}
+    <div class="warning-box">
+        <strong>(!)</strong> <strong>{{ missingAny|length }} Spieler</strong> haben unvollständige Größenangaben (markiert mit „–").
+        Bitte vervollständige die fehlenden Daten im Spielerprofil.
+    </div>
+    {% endif %}
+
+    {# ─── Summary Cards ─── #}
+    <div class="section-title">Zusammenfassung nach Größen</div>
+    <div class="summary-grid">
+        <div class="summary-cell">
+            <div class="summary-label">Trikot</div>
+            {% for size, count in summaries.shirt %}
+            <div class="summary-row">
+                <div class="summary-size">{{ size }}</div>
+                <div class="summary-count"><span class="summary-count-badge">{{ count }}</span></div>
+            </div>
+            {% else %}
+            <div class="summary-nodata">Keine Daten</div>
+            {% endfor %}
+        </div>
+        <div class="summary-cell">
+            <div class="summary-label">Shorts</div>
+            {% for size, count in summaries.shorts %}
+            <div class="summary-row">
+                <div class="summary-size">{{ size }}</div>
+                <div class="summary-count"><span class="summary-count-badge">{{ count }}</span></div>
+            </div>
+            {% else %}
+            <div class="summary-nodata">Keine Daten</div>
+            {% endfor %}
+        </div>
+        <div class="summary-cell">
+            <div class="summary-label">Jacke</div>
+            {% for size, count in summaries.jacket %}
+            <div class="summary-row">
+                <div class="summary-size">{{ size }}</div>
+                <div class="summary-count"><span class="summary-count-badge">{{ count }}</span></div>
+            </div>
+            {% else %}
+            <div class="summary-nodata">Keine Daten</div>
+            {% endfor %}
+        </div>
+        <div class="summary-cell">
+            <div class="summary-label">Socken</div>
+            {% for size, count in summaries.socks %}
+            <div class="summary-row">
+                <div class="summary-size">{{ size }}</div>
+                <div class="summary-count"><span class="summary-count-badge">{{ count }}</span></div>
+            </div>
+            {% else %}
+            <div class="summary-nodata">Keine Daten</div>
+            {% endfor %}
+        </div>
+        <div class="summary-cell">
+            <div class="summary-label">Schuhe</div>
+            {% for size, count in summaries.shoes %}
+            <div class="summary-row">
+                <div class="summary-size">{{ size }}</div>
+                <div class="summary-count"><span class="summary-count-badge">{{ count }}</span></div>
+            </div>
+            {% else %}
+            <div class="summary-nodata">Keine Daten</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <hr class="divider">
+
+    {# ─── Player Table ─── #}
+    <div class="section-title">Einzelübersicht Spieler</div>
+    <table class="player-table">
+        <thead>
+            <tr>
+                <th style="width:22px;">#</th>
+                <th>Name</th>
+                <th class="center">Trikot</th>
+                <th class="center">Shorts</th>
+                <th class="center">Jacke</th>
+                <th class="center">Socken</th>
+                <th class="center">Schuhgröße</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i, player in players %}
+            <tr>
+                <td class="number center">{{ i + 1 }}</td>
+                <td class="name">{{ player.name ?: '–' }}</td>
+                <td class="center">
+                    {% if player.shirt_size %}
+                        <span class="size-value">{{ player.shirt_size }}</span>
+                    {% else %}
+                        <span class="size-missing">–</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if player.shorts_size %}
+                        <span class="size-value">{{ player.shorts_size }}</span>
+                    {% else %}
+                        <span class="size-missing">–</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if player.jacket_size %}
+                        <span class="size-value">{{ player.jacket_size }}</span>
+                    {% else %}
+                        <span class="size-missing">–</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if player.socks_size %}
+                        <span class="size-value">{{ player.socks_size }}</span>
+                    {% else %}
+                        <span class="size-missing">–</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if player.shoe_size %}
+                        <span class="size-value">{{ player.shoe_size }}</span>
+                    {% else %}
+                        <span class="size-missing">–</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# ─── Footer ─── #}
+    <div class="footer">
+        <div class="footer-left">
+            <span class="footer-brand">KADERBLICK</span> &mdash; Bestellübersicht {{ teamName }}
+        </div>
+        <div class="footer-right">
+            Erstellt am {{ generatedAt }} Uhr &nbsp;|&nbsp; Vertraulich – nur für interne Vereinsnutzung
+        </div>
+    </div>
+
+</body>
+</html>

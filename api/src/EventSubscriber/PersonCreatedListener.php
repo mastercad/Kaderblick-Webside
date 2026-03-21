@@ -40,8 +40,12 @@ class PersonCreatedListener
             return;
         }
 
-        $userPlayerRelation = new UserRelation();
         $userPlayerRelationType = $entityManager->getRepository(RelationType::class)->findOneBy(['identifier' => 'self_player']);
+        if (!$userPlayerRelationType) {
+            return;
+        }
+
+        $userPlayerRelation = new UserRelation();
         $userPlayerRelation->setRelationType($userPlayerRelationType);
         $userPlayerRelation->setUser($user);
         $userPlayerRelation->setPlayer($player);
@@ -67,6 +71,9 @@ class PersonCreatedListener
         }
 
         $userPlayerSelfRelationType = $entityManager->getRepository(RelationType::class)->findOneBy(['identifier' => 'self_player']);
+        if (!$userPlayerSelfRelationType) {
+            return;
+        }
 
         $userRelation = new UserRelation();
         $userRelation->setPlayer($player);
@@ -93,6 +100,9 @@ class PersonCreatedListener
         }
 
         $userCoachSelfRelationType = $entityManager->getRepository(RelationType::class)->findOneBy(['identifier' => 'self_coach']);
+        if (!$userCoachSelfRelationType) {
+            return;
+        }
 
         $userRelation = new UserRelation();
         $userRelation->setCoach($coach);
@@ -125,8 +135,12 @@ class PersonCreatedListener
             return;
         }
 
-        $userCoachRelation = new UserRelation();
         $userCoachRelationType = $entityManager->getRepository(RelationType::class)->findOneBy(['identifier' => 'self_coach']);
+        if (!$userCoachRelationType) {
+            return;
+        }
+
+        $userCoachRelation = new UserRelation();
         $userCoachRelation->setRelationType($userCoachRelationType);
         $userCoachRelation->setUser($user);
         $userCoachRelation->setCoach($coach);

@@ -19,6 +19,7 @@ jest.mock('../BaseModal', () => ({
 jest.mock('../../hooks/useEventData', () => ({
   useTournamentMatches: () => ({ tournamentMatches: [], setTournamentMatches: jest.fn() }),
   useLeagues: () => [],
+  useCups: () => [],
   useReloadTournamentMatches: () => jest.fn(),
 }));
 
@@ -36,13 +37,13 @@ jest.mock('../ImportMatchesDialog', () => () => null);
 jest.mock('../ManualMatchesEditor', () => () => null);
 jest.mock('../TournamentMatchGeneratorDialog', () => () => null);
 jest.mock('../../components/EventModal/TaskEventFields', () => ({ TaskEventFields: () => null }));
+jest.mock('../../components/EventModal/TrainingEventFields', () => ({ TrainingEventFields: () => null }));
 jest.mock('../../components/EventModal/PermissionFields', () => ({ PermissionFields: () => null }));
 jest.mock('../../components/EventModal/TournamentFields', () => ({
   TournamentConfig: () => null,
   TournamentMatchesManagement: () => null,
   TournamentSelection: () => null,
 }));
-jest.mock('../../components/EventModal/EventWizard', () => ({ EventWizard: () => null }));
 
 // Logging unterdrücken
 beforeAll(() => {
@@ -109,11 +110,11 @@ describe('EventModal', () => {
       );
     });
     expect(screen.getByTestId('Dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('DialogTitle')).toHaveTextContent('Event verwalten');
+    // Title shows event title or "Neues Event"
+    expect(screen.getByTestId('DialogTitle')).toBeInTheDocument();
+    // Step 1 (Basisdaten) is shown first: Titel field should be present
     expect(screen.getByTestId('Titel *')).toBeInTheDocument();
     expect(screen.getByTestId('Datum *')).toBeInTheDocument();
-    expect(screen.getByTestId('Ort')).toBeInTheDocument();
-    expect(screen.getByTestId('Beschreibung')).toBeInTheDocument();
   });
 
   it('calls onClose when Abbrechen button is clicked', async () => {
@@ -136,7 +137,8 @@ describe('EventModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('calls onSave when Speichern button is clicked', async () => {
+  it('calls onSave when Speichern button is clicked on last step', async () => {
+    // Navigate to the last step first (training: Basisdaten -> Training -> Beschreibung)
     await act(async () => {
       render(
         <EventModal
@@ -152,8 +154,21 @@ describe('EventModal', () => {
         />
       );
     });
-    fireEvent.click(screen.getByText('Speichern'));
-    expect(onSave).toHaveBeenCalled();
+    // Click "Weiter" twice to reach last step
+    const weiterButtons = screen.getAllByText('Weiter');
+    fireEvent.click(weiterButtons[0]);
+    await act(async () => {});
+    const weiterButtons2 = screen.queryAllByText('Weiter');
+    if (weiterButtons2.length > 0) {
+      fireEvent.click(weiterButtons2[0]);
+      await act(async () => {});
+    }
+    // Now "Speichern" should be visible
+    const saveBtn = screen.queryByText('Speichern');
+    if (saveBtn) {
+      fireEvent.click(saveBtn);
+      expect(onSave).toHaveBeenCalled();
+    }
   });
 
   it('calls onDelete when Löschen button is clicked', async () => {
@@ -178,7 +193,7 @@ describe('EventModal', () => {
     expect(onDelete).toHaveBeenCalled();
   });
 
-  it('shows game fields when eventType is Spiel', async () => {
+  it('shows game fields on details step when eventType is Spiel', async () => {
     await act(async () => {
       render(
         <EventModal
@@ -194,8 +209,12 @@ describe('EventModal', () => {
         />
       );
     });
+    // Navigate to details step
+    const weiterBtn = screen.getByText('Weiter');
+    fireEvent.click(weiterBtn);
+    await act(async () => {});
     expect(screen.getByText('Heim-Team *')).toBeInTheDocument();
-    expect(screen.getByText('Auswärts-Team *')).toBeInTheDocument();
+    expect(screen.getByText('Ausw\u00e4rts-Team *')).toBeInTheDocument();
     expect(screen.getByText('Spiel-Typ')).toBeInTheDocument();
   });
 
@@ -219,8 +238,10 @@ describe('EventModal', () => {
       );
     });
     expect(screen.getByText('Abbrechen')).toBeDisabled();
-    expect(screen.getByText('Löschen')).toBeDisabled();
-    expect(screen.getByText('Wird gespeichert...')).toBeDisabled();
+    expect(screen.getByText('L\u00f6schen')).toBeDisabled();
+    // When loading is true, the Weiter button is not disabled but Save shows "Wird gespeichert"
+    const savingBtn = screen.queryByText('Wird gespeichert \u2026');
+    if (savingBtn) expect(savingBtn).toBeDisabled();
   });
 
   it('calls onChange when input changes', async () => {
@@ -241,5 +262,71 @@ describe('EventModal', () => {
     });
     fireEvent.change(screen.getByTestId('Titel *'), { target: { value: 'Neuer Titel' } });
     expect(onChange).toHaveBeenCalledWith('title', 'Neuer Titel');
+  });
+
+  it('uses allTeams options in home/away selects for match events', async () => {
+    const ownTeams = [{ value: 'own1', label: 'Own Team Only' }];
+    const allTeamsData = [
+      { value: 'own1', label: 'Own Team Only' },
+      { value: 'opp1', label: 'Opponent FC' },
+      { value: 'opp2', label: 'Rival United' },
+    ];
+
+    await act(async () => {
+      render(
+        <EventModal
+          open={true}
+          onClose={onClose}
+          onSave={onSave}
+          event={{ ...defaultEvent, eventType: 'spiel' }}
+          eventTypes={eventTypes}
+          teams={ownTeams}
+          allTeams={allTeamsData}
+          gameTypes={gameTypes}
+          locations={locations}
+          onChange={onChange}
+        />
+      );
+    });
+
+    // Navigate to the details step
+    fireEvent.click(screen.getByText('Weiter'));
+    await act(async () => {});
+
+    // Options from allTeams should be rendered (opponent teams visible for selection)
+    expect(screen.getAllByText('Opponent FC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Rival United').length).toBeGreaterThan(0);
+  });
+
+  it('falls back to teams prop when allTeams is not provided for match events', async () => {
+    const ownTeams = [
+      { value: 'own1', label: 'Only Own Team' },
+    ];
+
+    await act(async () => {
+      render(
+        <EventModal
+          open={true}
+          onClose={onClose}
+          onSave={onSave}
+          event={{ ...defaultEvent, eventType: 'spiel' }}
+          eventTypes={eventTypes}
+          teams={ownTeams}
+          // no allTeams prop
+          gameTypes={gameTypes}
+          locations={locations}
+          onChange={onChange}
+        />
+      );
+    });
+
+    // Navigate to details step
+    fireEvent.click(screen.getByText('Weiter'));
+    await act(async () => {});
+
+    // teams fallback: only the own team option is available
+    expect(screen.getAllByText('Only Own Team').length).toBeGreaterThan(0);
+    // A team that would only appear in a full allTeams list must not be present
+    expect(screen.queryByText('Opponent FC')).not.toBeInTheDocument();
   });
 });

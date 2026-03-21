@@ -1,21 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import SchoolIcon from '@mui/icons-material/School';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import CoachDetailsModal from '../modals/CoachDetailsModal';
 import CoachDeleteConfirmationModal from '../modals/CoachDeleteConfirmationModal';
 import CoachEditModal from '../modals/CoachEditModal';
@@ -24,196 +12,181 @@ import { CoachClubAssignment } from '../types/coachClubAssignment';
 import { CoachTeamAssignment } from '../types/coachTeamAssignment';
 import { CoachLicenseAssignment } from '../types/coachLicenseAssignment';
 import { CoachNationalityAssignment } from '../types/coachNationalityAssignment';
+import { Team } from '../types/team';
+
+const ALL_TEAMS = '__all__';
+
+interface PaginatedCoachesResponse {
+  coaches: Coach[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 const Coaches = () => {
   const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(ALL_TEAMS);
   const [coachId, setCoachId] = useState<number | null>(null);
   const [coachDetailsModalOpen, setCoachDetailsModalOpen] = useState(false);
   const [coachEditModalOpen, setCoachEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteCoach, setDeleteCoach] = useState<Coach | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadCoaches = async () => {
+  // Debounce search input
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(0);
+    }, 350);
+  }, []);
+
+  // Load teams once (for filter dropdown)
+  useEffect(() => {
+    apiJson<{ teams: Team[] }>('/api/teams/list').then(res => {
+      const loadedTeams = res?.teams || [];
+      setTeams(loadedTeams);
+      if (loadedTeams.length === 1) {
+        setSelectedTeamId(String(loadedTeams[0].id));
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Fetch paginated coaches whenever page, rowsPerPage, search, or teamId changes
+  const loadCoaches = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiJson<{ coaches: Coach[] }>('/api/coaches');
-      setCoaches(res.coaches);
-    } catch (e) {
+      const params = new URLSearchParams({
+        page: String(page + 1),
+        limit: String(rowsPerPage),
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (selectedTeamId !== ALL_TEAMS) params.set('teamId', selectedTeamId);
+
+      const res = await apiJson<PaginatedCoachesResponse>(`/api/coaches?${params}`);
+      setCoaches(res?.coaches || []);
+      setTotalCount(res?.total || 0);
+    } catch {
       setError('Fehler beim Laden der Trainer.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, rowsPerPage, debouncedSearch, selectedTeamId]);
 
-  useEffect(() => {
-    loadCoaches();
-  }, []);
+  useEffect(() => { loadCoaches(); }, [loadCoaches]);
 
-  const handleDelete = async (coachId: number) => {
+  // Reset page when team filter changes
+  useEffect(() => { setPage(0); }, [selectedTeamId]);
+
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/coaches/${coachId}`, { method: 'DELETE' });
-      setCoaches(coaches => coaches.filter(c => c.id !== coachId));
+      await apiJson(`/api/coaches/${id}`, { method: 'DELETE' });
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen des Trainers.');
+      setSnackbar({ open: true, message: 'Trainer gelöscht', severity: 'success' });
+      loadCoaches();
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen des Trainers.', severity: 'error' });
     }
   };
 
-  return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Trainer
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCoachId(null); setCoachEditModalOpen(true) }}>
-          Neuen Trainer erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Verein</TableCell>
-                <TableCell>Teams</TableCell>
-                <TableCell>Licenses</TableCell>
-                <TableCell>Nationalities</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {coaches.map((coach, idx) => (
-                <TableRow key={coach.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setCoachId(coach.id);
-                      setCoachDetailsModalOpen(true);
-                    }}
-                  >
-                    {coach.firstName || ''} {coach.lastName || ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setCoachId(coach.id);
-                      setCoachDetailsModalOpen(true);
-                    }}
-                  >
-                    {coach.clubAssignments.length > 0
-                      ? coach.clubAssignments.map((coachClubAssignment: CoachClubAssignment) => (
-                          <div key={coachClubAssignment.id}>{coachClubAssignment.club.name}</div>
-                        ))
-                      : ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setCoachId(coach.id);
-                      setCoachDetailsModalOpen(true);
-                    }}
-                  >
-                    {coach.teamAssignments.length > 0
-                      ? coach.teamAssignments.map((coachTeamAssignment: CoachTeamAssignment) => (
-                          <div key={coachTeamAssignment.id}>
-                            {coachTeamAssignment.team.name}
-                            {coachTeamAssignment.team.type?.name ? ` (${coachTeamAssignment.team.type?.name})` : ''}
-                          </div>
-                        ))
-                      : ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setCoachId(coach.id);
-                      setCoachDetailsModalOpen(true);
-                    }}
-                  >
-                    {coach.licenseAssignments.length > 0
-                      ? coach.licenseAssignments.map((coachLicenseAssignment: CoachLicenseAssignment) => (
-                          <div key={coachLicenseAssignment.id}>{coachLicenseAssignment.license.name}</div>
-                        ))
-                      : ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setCoachId(coach.id);
-                      setCoachDetailsModalOpen(true);
-                    }}
-                  >
-                    {coach.nationalityAssignments.length > 0
-                      ? coach.nationalityAssignments.map((coachNationalityAssignment: CoachNationalityAssignment) => (
-                          <div key={coachNationalityAssignment.id}>{coachNationalityAssignment.nationality.name}</div>
-                        ))
-                      : ''}
-                  </TableCell>
-                  <TableCell>
-                    { coach.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setCoachId(coach.id);
-                          setCoachEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Formation löschen"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { coach.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeleteCoach(coach);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Formation löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+  const columns: AdminTableColumn<Coach>[] = [
+    { header: 'Name', render: c => `${c.firstName || ''} ${c.lastName || ''}`.trim() },
+    { header: 'Verein', render: c => c.clubAssignments?.map((a: CoachClubAssignment) => a.club.name).join(', ') || '' },
+    { header: 'Teams', render: c => c.teamAssignments?.length > 0
+      ? c.teamAssignments.map((a: CoachTeamAssignment) => (
+          <Typography key={a.id} variant="body2" component="div" sx={{ lineHeight: 1.5 }}>
+            {a.team.name}{a.team.type?.name ? ` (${a.team.type.name})` : ''}
+          </Typography>
+        ))
+      : ''
+    },
+    { header: 'Lizenzen', render: c => c.licenseAssignments?.map((a: CoachLicenseAssignment) => a.license.name).join(', ') || '' },
+    { header: 'Nationalitäten', render: c => c.nationalityAssignments?.map((a: CoachNationalityAssignment) => a.nationality.name).join(', ') || '' },
+  ];
+
+  const teamFilter = teams.length > 1 ? (
+    <Stack direction="row" alignItems="center" spacing={2}>
+      <FilterListIcon color="action" fontSize="small" />
+      <FormControl size="small" sx={{ minWidth: 250 }}>
+        <InputLabel id="coach-team-filter-label">Team filtern</InputLabel>
+        <Select
+          labelId="coach-team-filter-label"
+          value={selectedTeamId}
+          label="Team filtern"
+          onChange={e => setSelectedTeamId(e.target.value)}
+        >
+          <MenuItem value={ALL_TEAMS}>Alle Teams</MenuItem>
+          {teams.map(t => (
+            <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      {selectedTeamId !== ALL_TEAMS && (
+        <Chip label={`${totalCount} Trainer`} size="small" color="primary" variant="outlined" />
       )}
-      <CoachDetailsModal
-        open={coachDetailsModalOpen}
-        loadCoaches={() => loadCoaches()}
-        coachId={coachId}
-        onClose={() => setCoachDetailsModalOpen(false)}
-      />
-      <CoachEditModal
-        openCoachEditModal={coachEditModalOpen}
-        coachId={coachId}
-        onCoachEditModalClose={() => setCoachEditModalOpen(false)}
-        onCoachSaved={(savedCoach) => {
-          setCoachEditModalOpen(false);
-          loadCoaches();
-        }}
-      />
-      <CoachDeleteConfirmationModal
-        open={deleteModalOpen}
-        coachName={deleteCoach?.firstName + " " + deleteCoach?.lastName}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={async () => handleDelete(deleteCoach!.id) }
-      />
-    </Box>
+    </Stack>
+  ) : teams.length === 1 ? (
+    <Stack direction="row" alignItems="center" spacing={1}>
+      <FilterListIcon color="action" fontSize="small" />
+      <Chip label={teams[0].name} size="small" color="primary" />
+      <Chip label={`${totalCount} Trainer`} size="small" color="primary" variant="outlined" />
+    </Stack>
+  ) : null;
+
+  return (
+    <AdminPageLayout
+      icon={<SchoolIcon />}
+      title="Trainer"
+      itemCount={totalCount}
+      loading={loading}
+      error={error}
+      createLabel="Neuer Trainer"
+      onCreate={() => { setCoachId(null); setCoachEditModalOpen(true); }}
+      search={search}
+      onSearchChange={handleSearchChange}
+      searchPlaceholder="Trainer suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+      filterControls={teamFilter}
+    >
+      {coaches.length === 0 && !loading ? (
+        <AdminEmptyState icon={<SchoolIcon />} title="Keine Trainer vorhanden" createLabel="Neuer Trainer" onCreate={() => { setCoachId(null); setCoachEditModalOpen(true); }} />
+      ) : (
+        <AdminTable columns={columns} data={coaches} getKey={c => c.id}
+          serverPagination={{
+            page,
+            rowsPerPage,
+            totalCount,
+            onPageChange: setPage,
+            onRowsPerPageChange: setRowsPerPage,
+          }}
+          onRowClick={c => { setCoachId(c.id); setCoachDetailsModalOpen(true); }}
+          renderActions={c => (
+            <AdminActions
+              onDetails={() => { setCoachId(c.id); setCoachDetailsModalOpen(true); }}
+              onEdit={c.permissions?.canEdit ? () => { setCoachId(c.id); setCoachEditModalOpen(true); } : undefined}
+              onDelete={c.permissions?.canDelete ? () => { setDeleteCoach(c); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
+        />
+      )}
+
+      <CoachDetailsModal open={coachDetailsModalOpen} loadCoaches={() => loadCoaches()} coachId={coachId} onClose={() => setCoachDetailsModalOpen(false)} />
+      <CoachEditModal openCoachEditModal={coachEditModalOpen} coachId={coachId} onCoachEditModalClose={() => setCoachEditModalOpen(false)} onCoachSaved={() => { setCoachEditModalOpen(false); loadCoaches(); }} />
+      <CoachDeleteConfirmationModal open={deleteModalOpen} coachName={deleteCoach ? `${deleteCoach.firstName} ${deleteCoach.lastName}` : ''} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deleteCoach!.id)} />
+    </AdminPageLayout>
   );
 };
 

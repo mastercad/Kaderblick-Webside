@@ -14,6 +14,8 @@ export interface Location {
 export interface GameType {
   id: number;
   name: string;
+  /** Dauer einer Halbzeit in Minuten (z.B. 20, 30, 45). Fehlt → Fallback 45. */
+  halfDuration?: number;
 }
 
 export interface CalendarEventType {
@@ -44,6 +46,16 @@ export interface Game {
     hourlyWeatherData?: Record<string, any>;
   };
   fussballDeUrl?: string;
+  isFinished?: boolean;
+  tournamentId?: number | null;
+  /** Dauer einer Halbzeit in Minuten (Default: 45). Überschreibt gameType.halfDuration. */
+  halfDuration?: number;
+  /** Dauer der Halbzeitpause in Minuten (Default: 15). */
+  halftimeBreakDuration?: number;
+  /** Nachspielzeit der 1. Halbzeit in Minuten (null = nicht erfasst). */
+  firstHalfExtraTime?: number | null;
+  /** Nachspielzeit der 2. Halbzeit in Minuten (null = nicht erfasst). */
+  secondHalfExtraTime?: number | null;
   permissions?: {
     can_create_videos?: boolean;
     can_view_videos?: boolean;
@@ -53,6 +65,7 @@ export interface Game {
     can_view_game_events?: boolean;
     can_edit_game_events?: boolean;
     can_delete_game_events?: boolean;
+    can_edit_timing?: boolean;
   };
 }
 

@@ -12,7 +12,7 @@ import { getAvatarFrameUrl } from '../utils/avatarFrame';
 interface UserProps {
   icon: React.ReactNode | string; // Avatar-URL oder Icon-Komponente
   name: string;
-  titleObj?: { hasTitle?: boolean; avatarFrame?: string; displayTitle?: string; allTitles?: { [key: number]: string } };
+  titleObj?: { hasTitle?: boolean; avatarFrame?: string; displayTitle?: { displayName?: string } | string | null; allTitles?: { [key: number]: string } };
   xp?: number;
   avatarSize?: number; // px
   fontSize?: number; // px
@@ -27,10 +27,14 @@ export const UserAvatar: React.FC<UserProps> = ({ icon, name, avatarSize = 48, f
   const iconInnerSize = Math.round(avatarSize * 0.6);
   let avatarContent: React.ReactNode;
   // Determine title for tooltip (if available)
-  const userTitle = titleObj && titleObj.hasTitle ? titleObj.displayTitle : undefined;
+  const displayTitleRaw = titleObj?.hasTitle ? titleObj.displayTitle : undefined;
+  const userTitle = displayTitleRaw
+    ? (typeof displayTitleRaw === 'string' ? displayTitleRaw : displayTitleRaw.displayName)
+    : undefined;
   if (typeof icon === "string") {
     if (icon && icon.trim() !== "") {
-      avatarContent = <Avatar src={`${BACKEND_URL}/uploads/avatar/${icon}`} alt="Avatar" sx={{ width: avatarSize, height: avatarSize }} />;
+      const src = icon.startsWith('http') ? icon : `${BACKEND_URL}/uploads/avatar/${icon}`;
+      avatarContent = <Avatar src={src} alt="Avatar" sx={{ width: avatarSize, height: avatarSize }} />;
     } else {
       avatarContent = <Avatar sx={{ width: avatarSize, height: avatarSize }}><FaUserAlt size={iconInnerSize} /></Avatar>;
     }

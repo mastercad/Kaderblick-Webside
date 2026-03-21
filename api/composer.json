@@ -19,8 +19,6 @@
         "lexik/jwt-authentication-bundle": "^3.1",
         "symfony/console": "^7.2",
         "symfony/flex": "^2.7",
-        "api-platform/doctrine-orm": "*",
-        "api-platform/symfony": "*",
         "nelmio/cors-bundle": "^2.5",
         "phpdocumentor/reflection-docblock": "^5.6",
         "symfony/asset": "^7.2",
@@ -34,10 +32,11 @@
         "symfony/runtime": "^7.2",
         "symfony/dotenv": "^7.2",
         "symfony/yaml": "^7.2",
-        "symfony/http-kernel": "^6.4",
+        "symfony/framework-bundle": "^7.2",
+        "symfony/http-kernel": "^7.2",
         "symfony/http-foundation": "^7.2",
-        "symfony/dependency-injection": "^6.4",
-        "symfony/config": "^6.4",
+        "symfony/dependency-injection": "^7.2",
+        "symfony/config": "^7.2",
         "symfony/mailer": "^7.2",
         "symfony/messenger": "^7.2",
         "symfony/doctrine-messenger": "^7.2",
@@ -52,7 +51,10 @@
         "symfony/dom-crawler": "^7.3",
         "knpuniversity/oauth2-client-bundle": "^2.18",
         "league/oauth2-google": "^4.0",
-        "beberlei/doctrineextensions": "^1.5"
+        "beberlei/doctrineextensions": "^1.5",
+        "dompdf/dompdf": "^3.1",
+        "doctrine/doctrine-fixtures-bundle": "^4.3",
+        "symfony/uid": "^7.4"
     },
     "autoload": {
         "psr-4": {
@@ -81,7 +83,6 @@
         "symfony/maker-bundle": "^1.63",
         "symfony/stopwatch": "^7.2",
         "symfony/web-profiler-bundle": "^7.2",
-        "doctrine/doctrine-fixtures-bundle": "^4.1",
         "fakerphp/faker": "^1.24",
         "phpunit/phpunit": "^12.2",
         "symfony/browser-kit": "^7.3",

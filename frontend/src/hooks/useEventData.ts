@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../utils/api';
 import { fetchLeagues } from '../services/leagues';
+import { fetchCups } from '../services/cups';
 import { SelectOption } from '../types/event';
 
 /**
@@ -45,6 +46,23 @@ export const useLeagues = (open: boolean) => {
   }, [open]);
 
   return leagues;
+};
+
+/**
+ * Hook to manage cups loading
+ */
+export const useCups = (open: boolean) => {
+  const [cups, setCups] = useState<SelectOption[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      fetchCups().then(cups => {
+        setCups(cups.map(cup => ({ value: String(cup.id), label: cup.name })));
+      });
+    }
+  }, [open]);
+
+  return cups;
 };
 
 /**

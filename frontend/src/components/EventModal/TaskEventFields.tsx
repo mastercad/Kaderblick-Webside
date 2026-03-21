@@ -1,8 +1,10 @@
 import React from 'react';
+import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
+import Typography from '@mui/material/Typography';
 import { EventData, User } from '../../types/event';
 import { getUserLabel } from '../../utils/eventHelpers';
 
@@ -31,6 +33,18 @@ const TaskEventFieldsComponent: React.FC<TaskEventFieldsProps> = ({
         getOptionLabel={getUserLabel}
         value={users.filter(u => (formData.taskRotationUsers || []).includes(u.id.toString()))}
         onChange={(_, val) => handleChange('taskRotationUsers', val.map(v => v.id.toString()))}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box>
+              <Typography variant="body2">
+                {option.fullName || `${option.firstName} ${option.lastName}`}
+              </Typography>
+              {option.context && (
+                <Typography variant="caption" color="text.secondary">{option.context}</Typography>
+              )}
+            </Box>
+          </Box>
+        )}
         renderInput={params => <TextField {...params} label="Benutzer-Rotation" margin="normal" />}
         sx={{ mt: 2, mb: 2 }}
       />

@@ -9,6 +9,7 @@ use App\Entity\TournamentTeam;
 use App\Entity\User;
 use App\Security\Voter\TournamentVoter;
 use App\Service\TournamentMatchGameService;
+use App\Service\TournamentPdfService;
 use App\Service\TournamentPlanGenerator;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,7 +26,8 @@ class TournamentController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private TournamentPlanGenerator $planGenerator,
-        private TournamentMatchGameService $matchGameService
+        private TournamentMatchGameService $matchGameService,
+        private TournamentPdfService $pdfService,
     ) {
     }
 
@@ -392,5 +394,41 @@ class TournamentController extends AbstractController
         }, $created);
 
         return new JsonResponse($data, Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}/pdf', name: 'pdf', methods: ['GET'])]
+    public function pdf(Tournament $tournament): Response
+    {
+        $this->denyAccessUnlessGranted(TournamentVoter::VIEW, $tournament);
+
+        // Resolve user team IDs from authenticated user
+        $userTeamIds = [];
+        /** @var User|null $currentUser */
+        $currentUser = $this->getUser();
+        if ($currentUser instanceof User) {
+            foreach ($currentUser->getUserRelations() as $rel) {
+                if ($rel->getPlayer() instanceof \App\Entity\Player) {
+                    foreach ($rel->getPlayer()->getPlayerTeamAssignments() as $assignment) {
+                        $teamId = $assignment->getTeam()->getId();
+                        $userTeamIds[$teamId] = $teamId;
+                    }
+                }
+                if ($rel->getCoach() instanceof \App\Entity\Coach) {
+                    foreach ($rel->getCoach()->getCoachTeamAssignments() as $assignment) {
+                        $teamId = $assignment->getTeam()->getId();
+                        $userTeamIds[$teamId] = $teamId;
+                    }
+                }
+            }
+        }
+
+        $pdfContent = $this->pdfService->generatePdf($tournament, array_values($userTeamIds));
+
+        $filename = 'Turnierplan_' . preg_replace('/[^a-zA-Z0-9_\-]/', '_', $tournament->getName()) . '.pdf';
+
+        return new Response($pdfContent, Response::HTTP_OK, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $filename . '"',
+        ]);
     }
 }

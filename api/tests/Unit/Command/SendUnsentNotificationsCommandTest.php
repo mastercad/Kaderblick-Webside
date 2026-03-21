@@ -6,6 +6,7 @@ use App\Command\SendUnsentNotificationsCommand;
 use App\Entity\Notification;
 use App\Entity\User;
 use App\Repository\NotificationRepository;
+use App\Service\HeartbeatService;
 use App\Service\PushNotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Exception;
@@ -22,6 +23,7 @@ class SendUnsentNotificationsCommandTest extends TestCase
     private NotificationRepository&MockObject $repo;
     private PushNotificationService&MockObject $pushService;
     private LoggerInterface&MockObject $logger;
+    private HeartbeatService&MockObject $heartbeatService;
     private CommandTester $commandTester;
 
     protected function setUp(): void
@@ -30,16 +32,18 @@ class SendUnsentNotificationsCommandTest extends TestCase
         $this->repo = $this->createMock(NotificationRepository::class);
         $this->pushService = $this->createMock(PushNotificationService::class);
         $this->logger = $this->createMock(LoggerInterface::class);
+        $this->heartbeatService = $this->createMock(HeartbeatService::class);
 
         $command = new SendUnsentNotificationsCommand(
             $this->em,
             $this->repo,
             $this->pushService,
-            $this->logger
+            $this->logger,
+            $this->heartbeatService,
         );
 
         $application = new Application();
-        $application->add($command);
+        $application->addCommand($command);
 
         $this->commandTester = new CommandTester($application->find('app:notifications:send-unsent'));
     }

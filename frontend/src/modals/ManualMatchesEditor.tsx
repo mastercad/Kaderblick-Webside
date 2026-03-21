@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiRequest } from '../utils/api';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -219,10 +220,9 @@ export default function ManualMatchesEditor({
     }
 
     try {
-      const res = await fetch(`/api/tournaments/${tournamentId}/generate-plan`, { 
+      const res = await apiRequest(`/api/tournaments/${tournamentId}/generate-plan`, { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ matches: payload, createGames: false }) 
+        body: { matches: payload, createGames: false }, 
       });
       if (!res.ok) {
         const txt = await res.text();

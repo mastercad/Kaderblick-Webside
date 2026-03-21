@@ -1,211 +1,230 @@
-import React, { useEffect, useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import PersonIcon from '@mui/icons-material/Person';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
 import { apiJson } from '../utils/api';
+import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import PlayerDetailsModal from '../modals/PlayerDetailsModal';
 import PlayerDeleteConfirmationModal from '../modals/PlayerDeleteConfirmationModal';
 import PlayerEditModal from '../modals/PlayerEditModal';
 import { Player } from '../types/player';
 import { PlayerClubAssignment } from '../types/playerClubAssignment';
 import { PlayerTeamAssignment } from '../types/playerTeamAssignment';
-{/*import { PlayerLicenseAssignment } from '../types/playerLicenseAssignment';*/}
 import { PlayerNationalityAssignment } from '../types/playerNationalityAssignment';
+import { Team } from '../types/team';
+
+const ALL_TEAMS = '__all__';
+
+interface PaginatedPlayersResponse {
+  players: Player[];
+  total: number;
+  page: number;
+  limit: number;
+  availableSeasons?: number[];
+  selectedSeason?: number;
+}
 
 const Players = () => {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(ALL_TEAMS);
+  const [selectedSeason, setSelectedSeason] = useState<number>(() => {
+    const today = new Date();
+    return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+  });
+  const [availableSeasons, setAvailableSeasons] = useState<number[]>(() => {
+    const today = new Date();
+    const defaultY = today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+    return Array.from({ length: defaultY - 2020 }, (_, i) => 2021 + i);
+  });
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerDetailsModalOpen, setPlayerDetailsModalOpen] = useState(false);
   const [playerEditModalOpen, setPlayerEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
+  const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadPlayers = async () => {
+  // Debounce search input
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(0); // reset to first page on new search
+    }, 350);
+  }, []);
+
+  // Load teams once (for filter dropdown)
+  useEffect(() => {
+    apiJson<{ teams: Team[] }>('/api/teams/list').then(res => {
+      const loadedTeams = res?.teams || [];
+      setTeams(loadedTeams);
+      if (loadedTeams.length === 1) {
+        setSelectedTeamId(String(loadedTeams[0].id));
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Fetch paginated players whenever page, rowsPerPage, search, or teamId changes
+  const loadPlayers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiJson<{ players: Player[] }>('/api/players');
-      setPlayers(res.players);
-    } catch (e) {
+      const params = new URLSearchParams({
+        page: String(page + 1), // backend is 1-based
+        limit: String(rowsPerPage),
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (selectedTeamId !== ALL_TEAMS) params.set('teamId', selectedTeamId);
+      params.set('season', String(selectedSeason));
+
+      const res = await apiJson<PaginatedPlayersResponse>(`/api/players?${params}`);
+      setPlayers(res?.players || []);
+      setTotalCount(res?.total || 0);
+      if (res?.availableSeasons?.length) setAvailableSeasons(res.availableSeasons);
+    } catch {
       setError('Fehler beim Laden der Spieler.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, rowsPerPage, debouncedSearch, selectedTeamId, selectedSeason]);
 
-  useEffect(() => {
-    loadPlayers();
-  }, []);
+  useEffect(() => { loadPlayers(); }, [loadPlayers]);
 
-  const handleDelete = async (playerId: number) => {
+  // Reset page when team or season filter changes
+  useEffect(() => { setPage(0); }, [selectedTeamId]);
+  useEffect(() => { setPage(0); }, [selectedSeason]);
+
+  const handleDelete = async (id: number) => {
     try {
-      await apiJson(`/api/players/${playerId}`, { method: 'DELETE' });
-      setPlayers(players => players.filter(p => p.id !== playerId));
+      await apiJson(`/api/players/${id}`, { method: 'DELETE' });
       setDeleteModalOpen(false);
-    } catch (e) {
-      alert('Fehler beim Löschen des Spielers.');
+      setSnackbar({ open: true, message: 'Spieler gelöscht', severity: 'success' });
+      loadPlayers(); // reload current page
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Löschen des Spielers.', severity: 'error' });
     }
   };
 
-  return (
-    <Box sx={{mx: 'auto', p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">
-          Spieler
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setPlayerId(null); setPlayerEditModalOpen(true) }}>
-          Neuen Spieler erstellen
-        </Button>
-      </Stack>
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Verein</TableCell>
-                <TableCell>Teams</TableCell>
-{/*                <TableCell>Licenses</TableCell>  */}
-                <TableCell>Nationalities</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {players.map((player, idx) => (
-                <TableRow key={player.id}
-                  sx={{
-                    backgroundColor: idx % 2 === 0 ? 'background.paper' : 'grey.100'
-                  }}
-                >
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setPlayerId(player.id);
-                      setPlayerDetailsModalOpen(true);
-                    }}
-                  >
-                    {player.firstName || ''} {player.lastName || ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setPlayerId(player.id);
-                      setPlayerDetailsModalOpen(true);
-                    }}
-                  >
-                    {player.clubAssignments.map((playerClubAssignment: PlayerClubAssignment) => playerClubAssignment.club.name).join(', ') || ''}
-                  </TableCell>
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setPlayerId(player.id);
-                      setPlayerDetailsModalOpen(true);
-                    }}
-                  >
-                    {player.teamAssignments.length > 0
-                      ? player.teamAssignments.map((playerTeamAssignment: PlayerTeamAssignment) => (
-                          <div key={playerTeamAssignment.id}>
-                            {playerTeamAssignment.team.name} ({playerTeamAssignment.shirtNumber}) - {playerTeamAssignment.team.ageGroup.name}
-                            {playerTeamAssignment.type?.name ? ` (${playerTeamAssignment.type?.name})` : ''}
-                          </div>
-                        ))
-                      : ''
-                    }
-                  </TableCell>
-{/*
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setPlayerId(player.id);
-                      setPlayerDetailsModalOpen(true);
-                    }}
-                  >
-                    {player.licenseAssignments.map((playerLicenseAssignment: PlayerLicenseAssignment) => playerLicenseAssignment.license.name).join(', ') || ''}
-                  </TableCell>
-*/}
-                  <TableCell sx={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setPlayerId(player.id);
-                      setPlayerDetailsModalOpen(true);
-                    }}
-                  >
-                    {player.nationalityAssignments.map((playerNationalityAssignment: PlayerNationalityAssignment) => playerNationalityAssignment.nationality.name).join(', ') || ''}
-                  </TableCell>
+  const columns: AdminTableColumn<Player>[] = [
+    { header: 'Name', render: p => `${p.firstName || ''} ${p.lastName || ''}`.trim() },
+    { header: 'Verein', render: p => p.clubAssignments?.map((a: PlayerClubAssignment) => a.club.name).join(', ') || '' },
+    { header: 'Teams', render: p => p.teamAssignments?.length > 0
+      ? p.teamAssignments.map((a: PlayerTeamAssignment) => (
+          <Typography key={a.id} variant="body2" component="div" sx={{ lineHeight: 1.5 }}>
+            {a.team.name} ({a.shirtNumber}) - {a.team.ageGroup?.name || ''}
+            {a.type?.name ? ` (${a.type.name})` : ''}
+          </Typography>
+        ))
+      : ''
+    },
+    { header: 'Nationalitäten', render: p => p.nationalityAssignments?.map((a: PlayerNationalityAssignment) => a.nationality.name).join(', ') || '' },
+  ];
 
-                  <TableCell>
-                    { player.permissions?.canEdit && (
-                      <IconButton color="primary"
-                        size="small"
-                        onClick={() => {
-                          setPlayerId(player.id);
-                          setPlayerEditModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Formation löschen"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
-                    { player.permissions?.canDelete && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          setDeletePlayer(player);
-                          setDeleteModalOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                        aria-label="Formation löschen"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
+  const filterControls = (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      alignItems={{ xs: 'stretch', sm: 'center' }}
+      spacing={{ xs: 1.5, sm: 2 }}
+    >
+      {/* Season selector */}
+      <FormControl size="small" sx={{ width: { xs: '100%', sm: 200 } }}>
+        <InputLabel id="players-season-label">Saison</InputLabel>
+        <Select
+          labelId="players-season-label"
+          label="Saison"
+          value={selectedSeason}
+          onChange={e => { setSelectedSeason(e.target.value as number); setPage(0); }}
+        >
+          {availableSeasons.map(y => (
+            <MenuItem key={y} value={y}>{y}/{String(y + 1).slice(2)}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {/* Team selector */}
+      {teams.length > 1 && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }}>
+          <FilterListIcon color="action" fontSize="small" sx={{ display: { xs: 'none', sm: 'block' } }} />
+          <FormControl size="small" sx={{ width: { xs: '100%', sm: 250 } }}>
+            <InputLabel id="team-filter-label">Team filtern</InputLabel>
+            <Select
+              labelId="team-filter-label"
+              value={selectedTeamId}
+              label="Team filtern"
+              onChange={e => setSelectedTeamId(e.target.value)}
+            >
+              <MenuItem value={ALL_TEAMS}>Alle Teams</MenuItem>
+              {teams.map(t => (
+                <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
               ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            </Select>
+          </FormControl>
+          {selectedTeamId !== ALL_TEAMS && (
+            <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
+          )}
+        </Stack>
       )}
-      <PlayerDetailsModal
-        open={playerDetailsModalOpen}
-        loadPlayeres={() => loadPlayers()}
-        playerId={playerId}
-        onClose={() => setPlayerDetailsModalOpen(false)}
-      />
-      <PlayerEditModal
-        openPlayerEditModal={playerEditModalOpen}
-        playerId={playerId}
-        onPlayerEditModalClose={() => setPlayerEditModalOpen(false)}
-        onPlayerSaved={(savedPlayer) => {
-          setPlayerEditModalOpen(false);
-          loadPlayers();
-        }}
-      />
-      <PlayerDeleteConfirmationModal
-        open={deleteModalOpen}
-        playerName={deletePlayer?.firstName + " " + deletePlayer?.lastName}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={async () => handleDelete(deletePlayer!.id) }
-      />
-    </Box>
+      {teams.length === 1 && (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <FilterListIcon color="action" fontSize="small" />
+          <Chip label={teams[0].name} size="small" color="primary" />
+          <Chip label={`${totalCount} Spieler`} size="small" color="primary" variant="outlined" />
+        </Stack>
+      )}
+    </Stack>
+  );
+
+  return (
+    <AdminPageLayout
+      icon={<PersonIcon />}
+      title="Spieler"
+      itemCount={totalCount}
+      loading={loading}
+      error={error}
+      createLabel="Neuer Spieler"
+      onCreate={() => { setPlayerId(null); setPlayerEditModalOpen(true); }}
+      search={search}
+      onSearchChange={handleSearchChange}
+      searchPlaceholder="Spieler suchen..."
+      snackbar={snackbar}
+      onSnackbarClose={() => setSnackbar(s => ({ ...s, open: false }))}
+      filterControls={filterControls}
+    >
+      {players.length === 0 && !loading ? (
+        <AdminEmptyState icon={<PersonIcon />} title="Keine Spieler vorhanden" createLabel="Neuer Spieler" onCreate={() => { setPlayerId(null); setPlayerEditModalOpen(true); }} />
+      ) : (
+        <AdminTable columns={columns} data={players} getKey={p => p.id}
+          serverPagination={{
+            page,
+            rowsPerPage,
+            totalCount,
+            onPageChange: setPage,
+            onRowsPerPageChange: setRowsPerPage,
+          }}
+          onRowClick={p => { setPlayerId(p.id); setPlayerDetailsModalOpen(true); }}
+          renderActions={p => (
+            <AdminActions
+              onDetails={() => { setPlayerId(p.id); setPlayerDetailsModalOpen(true); }}
+              onEdit={p.permissions?.canEdit ? () => { setPlayerId(p.id); setPlayerEditModalOpen(true); } : undefined}
+              onDelete={p.permissions?.canDelete ? () => { setDeletePlayer(p); setDeleteModalOpen(true); } : undefined}
+            />
+          )}
+        />
+      )}
+
+      <PlayerDetailsModal open={playerDetailsModalOpen} loadPlayeres={() => loadPlayers()} playerId={playerId} onClose={() => setPlayerDetailsModalOpen(false)} />
+      <PlayerEditModal openPlayerEditModal={playerEditModalOpen} playerId={playerId} onPlayerEditModalClose={() => setPlayerEditModalOpen(false)} onPlayerSaved={() => { setPlayerEditModalOpen(false); loadPlayers(); }} />
+      <PlayerDeleteConfirmationModal open={deleteModalOpen} playerName={deletePlayer ? `${deletePlayer.firstName} ${deletePlayer.lastName}` : ''} onClose={() => setDeleteModalOpen(false)} onConfirm={async () => handleDelete(deletePlayer!.id)} />
+    </AdminPageLayout>
   );
 };
 

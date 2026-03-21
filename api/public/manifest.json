@@ -1,10 +1,10 @@
 {
-    "name": "Kaderblick",
-    "short_name": "Kaderblick App",
+    "name": "Kaderblick Fußballverein",
+    "short_name": "Kaderblick",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#3367D6",
+    "background_color": "#4e4e4e",
+    "theme_color": "#018606",
     "icons": [
       {
         "src": "/images/icon.png",

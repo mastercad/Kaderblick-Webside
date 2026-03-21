@@ -3,6 +3,8 @@
 namespace App\Tests\Unit\Controller;
 
 use App\Controller\Api\GamesController;
+use App\Service\CoachTeamPlayerService;
+use App\Service\TournamentAdvancementService;
 use App\Service\VideoTimelineService;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -16,8 +18,10 @@ class GamesControllerTest extends TestCase
     {
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $videoTimelineService = $this->createMock(VideoTimelineService::class);
+        $advancementService = $this->createMock(TournamentAdvancementService::class);
+        $coachTeamPlayerService = $this->createMock(CoachTeamPlayerService::class);
 
-        $controller = new GamesController($entityManager, $videoTimelineService);
+        $controller = new GamesController($entityManager, $videoTimelineService, $advancementService, $coachTeamPlayerService);
 
         $this->assertInstanceOf(GamesController::class, $controller);
     }

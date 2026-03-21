@@ -223,6 +223,7 @@
 @supports (-webkit-touch-callout: none) {
   .ios-viewport-fix {
     height: 100vh;
+    height: 100dvh;
     height: -webkit-fill-available;
   }
 }

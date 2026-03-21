@@ -21,11 +21,11 @@ class Player
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
-    #[Groups(['player:read', 'player:write', 'team:read', 'goal:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
+    #[Groups(['player:read', 'player:write', 'team:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
     /** @phpstan-ignore-next-line Property is set by Doctrine and never written in code */
     private ?int $id = null;
 
-    #[Groups(['player:read', 'player:write', 'team:read', 'goal:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
+    #[Groups(['player:read', 'player:write', 'team:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
     #[ORM\Column(type: 'string', length: 100)]
     #[Assert\NotBlank(message: 'Der Vorname darf nicht leer sein.')]
     #[Assert\Length(
@@ -36,7 +36,7 @@ class Player
     )]
     private string $firstName;
 
-    #[Groups(['player:read', 'player:write', 'team:read', 'goal:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
+    #[Groups(['player:read', 'player:write', 'team:read', 'player_team_assignment:read', 'player_club_assignment:read', 'club:read', 'game_event:read'])]
     #[ORM\Column(type: 'string', length: 100)]
     #[Assert\NotBlank(message: 'Der Nachname darf nicht leer sein.')]
     #[Assert\Length(
@@ -111,16 +111,6 @@ class Player
     )]
     private Collection $alternativePositions;
 
-    /** @var Collection<int, Goal> */
-    #[Groups(['player:read'])]
-    #[ORM\OneToMany(targetEntity: Goal::class, mappedBy: 'scorer')]
-    private Collection $goals;
-
-    /** @var Collection<int, Goal> */
-    #[Groups(['player:read'])]
-    #[ORM\OneToMany(targetEntity: Goal::class, mappedBy: 'assistBy')]
-    private Collection $assistsProvided;
-
     /** @var Collection<int, GameEvent> */
     #[Groups(['player:read'])]
     #[ORM\OneToMany(targetEntity: GameEvent::class, mappedBy: 'player')]
@@ -164,10 +154,8 @@ class Player
 
     public function __construct()
     {
-        $this->goals = new ArrayCollection();
         $this->userRelations = new ArrayCollection();
         $this->gameEvents = new ArrayCollection();
-        $this->assistsProvided = new ArrayCollection();
         $this->alternativePositions = new ArrayCollection();
         $this->playerTeamAssignments = new ArrayCollection();
         $this->playerClubAssignments = new ArrayCollection();
@@ -269,54 +257,6 @@ class Player
         if ($this->playerClubAssignments->removeElement($playerClubAssignment)) {
             if ($playerClubAssignment->getPlayer() === $this) {
                 $playerClubAssignment->setPlayer(null);
-            }
-        }
-
-        return $this;
-    }
-
-    public function addGoalScored(Goal $goal): self
-    {
-        if (!$this->goals->contains($goal)) {
-            $this->goals->add($goal);
-            $goal->setScorer($this);
-        }
-
-        return $this;
-    }
-
-    public function removeGoal(Goal $goal): self
-    {
-        if ($this->goals->removeElement($goal)) {
-            if ($goal->getScorer() === $this) {
-                $goal->setScorer(null);
-            }
-        }
-
-        return $this;
-    }
-
-    /** @return Collection<int, Goal> */
-    public function getAssistsProvided(): Collection
-    {
-        return $this->assistsProvided;
-    }
-
-    public function addAssistProvided(Goal $goal): self
-    {
-        if (!$this->assistsProvided->contains($goal)) {
-            $this->assistsProvided->add($goal);
-            $goal->setAssistBy($this);
-        }
-
-        return $this;
-    }
-
-    public function removeAssistProvided(Goal $goal): self
-    {
-        if ($this->assistsProvided->removeElement($goal)) {
-            if ($goal->getAssistBy() === $this) {
-                $goal->setAssistBy(null);
             }
         }
 

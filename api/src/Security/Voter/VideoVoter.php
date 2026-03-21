@@ -2,6 +2,7 @@
 
 namespace App\Security\Voter;
 
+use App\Entity\Game;
 use App\Entity\Team;
 use App\Entity\User;
 use App\Entity\Video;
@@ -9,8 +10,7 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
 /**
- * @template-extends Voter<string, Video>
- * @template-extends Voter<string, Team>
+ * @template-extends Voter<string, Video|Team|Game>
  */
 final class VideoVoter extends Voter
 {
@@ -24,7 +24,8 @@ final class VideoVoter extends Voter
         return (
             in_array($attribute, [self::CREATE, self::EDIT, self::VIEW, self::DELETE])
                 && $subject instanceof Video)
-            || (self::CREATE === $attribute && $subject instanceof Team)
+            || (self::CREATE === $attribute && ($subject instanceof Team || $subject instanceof Game))
+            || (self::VIEW === $attribute && $subject instanceof Game)
         ;
     }
 
@@ -37,10 +38,27 @@ final class VideoVoter extends Voter
             return false;
         }
 
+        if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
+            return true;
+        }
+
         switch ($attribute) {
             case self::CREATE:
-                if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
-                    return true;
+                foreach ($user->getUserRelations() as $userRelation) {
+                    if ($userRelation->getCoach()) {
+                        foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
+                            if ($subject instanceof Game) {
+                                if (
+                                    $assignment->getTeam() === $subject->getHomeTeam()
+                                    || $assignment->getTeam() === $subject->getAwayTeam()
+                                ) {
+                                    return true;
+                                }
+                            } elseif ($assignment->getTeam() === $subject) {
+                                return true;
+                            }
+                        }
+                    }
                 }
 
                 if (
@@ -53,7 +71,14 @@ final class VideoVoter extends Voter
                 foreach ($user->getUserRelations() as $userRelation) {
                     if ($userRelation->getPlayer()) {
                         foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
+                            if ($subject instanceof Game) {
+                                if (
+                                    $assignment->getTeam() === $subject->getHomeTeam()
+                                    || $assignment->getTeam() === $subject->getAwayTeam()
+                                ) {
+                                    return true;
+                                }
+                            } elseif ($assignment->getTeam() === $subject) {
                                 return true;
                             }
                         }
@@ -61,45 +86,59 @@ final class VideoVoter extends Voter
 
                     if ($userRelation->getCoach()) {
                         foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
-                            if ($assignment->getTeam() === $subject) {
+                            if ($subject instanceof Game) {
+                                if (
+                                    $assignment->getTeam() === $subject->getHomeTeam()
+                                    || $assignment->getTeam() === $subject->getAwayTeam()
+                                ) {
+                                    return true;
+                                }
+                            } elseif ($assignment->getTeam() === $subject) {
                                 return true;
                             }
                         }
                     }
                 }
 
-                // hier ist subject team, nicht video!
                 break;
             case self::DELETE:
             case self::EDIT:
-                if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
-                    return true;
-                }
-
-                if (!in_array('ROLE_ADMIN', $user->getRoles())) {
-                    return false;
-                }
-
-                foreach ($user->getUserRelations() as $userRelation) {
-                    if ($userRelation->getPlayer()) {
-                        foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                            /** @var Video $subject */
-                            if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
-                                return true;
+                /* @var Video $subject */
+                // ROLE_ADMIN or ROLE_SUPPORTER must be a team member
+                if (in_array('ROLE_ADMIN', $user->getRoles()) || in_array('ROLE_SUPPORTER', $user->getRoles())) {
+                    foreach ($user->getUserRelations() as $userRelation) {
+                        if ($userRelation->getPlayer()) {
+                            foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
+                                if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
+                                    return true;
+                                }
+                                if ($assignment->getTeam() === $subject->getGame()->getAwayTeam()) {
+                                    return true;
+                                }
                             }
-                            if ($assignment->getTeam() === $subject->getGame()->getAwayTeam()) {
-                                return true;
+                        }
+
+                        if ($userRelation->getCoach()) {
+                            foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
+                                if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
+                                    return true;
+                                }
+                                if ($assignment->getTeam() === $subject->getGame()->getAwayTeam()) {
+                                    return true;
+                                }
                             }
                         }
                     }
+                }
 
+                // Coach of the game's teams (even without ROLE_ADMIN/ROLE_SUPPORTER)
+                foreach ($user->getUserRelations() as $userRelation) {
                     if ($userRelation->getCoach()) {
                         foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
-                            /** @var Video $subject */
-                            if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
-                                return true;
-                            }
-                            if ($assignment->getTeam() === $subject->getGame()->getAwayTeam()) {
+                            if (
+                                $assignment->getTeam() === $subject->getGame()->getHomeTeam()
+                                || $assignment->getTeam() === $subject->getGame()->getAwayTeam()
+                            ) {
                                 return true;
                             }
                         }
@@ -107,14 +146,38 @@ final class VideoVoter extends Voter
                 }
                 break;
             case self::VIEW:
-                if (in_array('ROLE_SUPERADMIN', $user->getRoles())) {
-                    return true;
+                if ($subject instanceof Game) {
+                    // Videos für ein Spiel dürfen nur Teammitglieder sehen
+                    foreach ($user->getUserRelations() as $userRelation) {
+                        if ($userRelation->getPlayer()) {
+                            foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
+                                if (
+                                    $assignment->getTeam() === $subject->getHomeTeam()
+                                    || $assignment->getTeam() === $subject->getAwayTeam()
+                                ) {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        if ($userRelation->getCoach()) {
+                            foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
+                                if (
+                                    $assignment->getTeam() === $subject->getHomeTeam()
+                                    || $assignment->getTeam() === $subject->getAwayTeam()
+                                ) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+
+                    return false;
                 }
 
                 foreach ($user->getUserRelations() as $userRelation) {
                     if ($userRelation->getPlayer()) {
                         foreach ($userRelation->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                            /** @var Video $subject */
                             if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
                                 return true;
                             }
@@ -126,7 +189,6 @@ final class VideoVoter extends Voter
 
                     if ($userRelation->getCoach()) {
                         foreach ($userRelation->getCoach()->getCoachTeamAssignments() as $assignment) {
-                            /** @var Video $subject */
                             if ($assignment->getTeam() === $subject->getGame()->getHomeTeam()) {
                                 return true;
                             }

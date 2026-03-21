@@ -22,6 +22,7 @@ services:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
         bind:
+            $projectDir: '%kernel.project_dir%'
             $vapidPublicKey: '%env(resolve:VAPID_PUBLIC_KEY)%'
             $vapidPrivateKey: '%env(resolve:VAPID_PRIVATE_KEY)%'
             $githubToken: '%env(resolve:GITHUB_TOKEN)%'
@@ -30,10 +31,18 @@ services:
             $weatherApiUrl: '%env(resolve:WEATHER_API_URL)%'
             $frontendUrl: '%env(resolve:FRONTEND_URL)%'
             $mailerFrom: '%env(resolve:MAILER_FROM)%'
+            $adminAlertEmail: '%env(resolve:ADMIN_ALERT_EMAIL)%'
+
+    App\Security\Json401EntryPoint:
+        public: true
+
+    lexik_jwt_authentication.extractor.authorization_header_extractor:
+        class: App\Security\JwtTokenExtractor
 
     # Monolog channel bindings for custom loggers
     Psr\Log\LoggerInterface $xpProcessingLogger: '@monolog.logger.xp_processing'
     Psr\Log\LoggerInterface $cronLogger: '@monolog.logger.cron'
+    Psr\Log\LoggerInterface $securityLogger: '@monolog.logger.security'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name
@@ -42,6 +51,7 @@ services:
         exclude:
             - '../src/DependencyInjection/'
             - '../src/Kernel.php'
+            - '../src/Security/JwtTokenExtractor.php'
     
     # Configure DataFixtures as services with autowiring
     App\DataFixtures\:

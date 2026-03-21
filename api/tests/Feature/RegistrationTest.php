@@ -81,7 +81,7 @@ class RegistrationTest extends WebTestCase
                 // For TemplatedEmail, verify the context contains the verification URL
                 $context = $email->getContext();
                 $this->assertArrayHasKey('signedUrl', $context);
-                $this->assertStringContainsString('/api/verify-email/', $context['signedUrl']);
+                $this->assertStringContainsString('/verify-email/', $context['signedUrl']);
 
                 return true;
             }));
@@ -305,10 +305,10 @@ class RegistrationTest extends WebTestCase
                 $signedUrl = $context['signedUrl'];
 
                 // Verify the URL pattern exists
-                $this->assertStringContainsString('/api/verify-email/', $signedUrl);
+                $this->assertStringContainsString('/verify-email/', $signedUrl);
 
                 // Extract the token from the URL
-                preg_match('#/api/verify-email/([a-f0-9]{64})#', $signedUrl, $matches);
+                preg_match('#/verify-email/([a-f0-9]{64})#', $signedUrl, $matches);
                 $this->assertNotEmpty($matches, 'Verification URL with token should be in email');
                 $verificationToken = $matches[1];
 

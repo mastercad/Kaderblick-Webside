@@ -1,5 +1,6 @@
 import { apiJson } from '../utils/api';
-import type { Report, ReportBuilderData } from '../types/reports';
+import type { ReportBuilderData } from '../types/reports';
+import type { Report } from '../modals/ReportBuilder/types';
 
 export interface ReportDefinition {
   id: number;
@@ -18,26 +19,32 @@ export async function fetchReportDefinitions(): Promise<{ templates: any[], user
 
 export async function saveReport(report: Report): Promise<Report> {
   if (report.id) {
-    await apiJson(`/api/report/definition/${report.id}`, {
+    const putResponse = await apiJson(`/api/report/definition/${report.id}`, {
       method: 'PUT',
-      body: JSON.stringify({
+      body: {
         name: report.name,
         description: report.description,
         config: report.config,
-      }),
+        isTemplate: report.isTemplate ?? false,
+      },
     });
-    return report;
+    return { ...report, id: putResponse?.id ?? report.id };
   } else {
     const response = await apiJson('/api/report/definition', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         name: report.name,
         description: report.description,
         config: report.config,
-      }),
+        isTemplate: report.isTemplate ?? false,
+      },
     });
     return { ...report, id: response.id };
   }
+}
+
+export async function fetchReportById(id: number): Promise<Report> {
+  return apiJson(`/api/report/definition/${id}`);
 }
 
 export async function deleteReport(id: number): Promise<void> {
@@ -61,6 +68,42 @@ export async function fetchReportBuilderData(): Promise<ReportBuilderData> {
   return apiJson('/api/report/builder-data');
 }
 
+export interface ReportPreset {
+  key: string;
+  label: string;
+  config: Record<string, unknown>;
+}
+
+/** Lightweight – only returns the preset list (no fields/dates/etc.) */
+export async function fetchReportPresets(): Promise<{ presets: ReportPreset[] }> {
+  return apiJson('/api/report/presets');
+}
+
+export interface ContextOption { id: number; name?: string; fullName?: string }
+
+/** Search players by name for the report builder filter autocomplete. */
+export async function searchReportPlayers(q: string): Promise<Array<{ id: number; fullName: string; firstName: string; lastName: string }>> {
+  if (q.trim().length < 2) return [];
+  return apiJson(`/api/report/player-search?q=${encodeURIComponent(q.trim())}`);
+}
+
+/** Resolve a single player by ID (used to restore saved player filters). */
+export async function fetchPlayerById(id: number): Promise<{ id: number; fullName: string } | null> {
+  try {
+    return await apiJson(`/api/players/${id}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Lightweight – only returns teams and players for the context-selection modal. */
+export async function fetchReportContextData(): Promise<{
+  teams: ContextOption[];
+  players: ContextOption[];
+}> {
+  return apiJson('/api/report/context-data');
+}
+
 export async function previewReport(report: Report): Promise<{ preview?: string; error?: string }> {
   // Verwendet den bestehenden /reports/preview Endpunkt (für Web-Interface)
   const formData = new FormData();
@@ -70,11 +113,15 @@ export async function previewReport(report: Report): Promise<{ preview?: string;
   formData.append('config[xField]', report.config.xField);
   formData.append('config[yField]', report.config.yField);
   
-  report.config.groupBy.forEach((field, index) => {
-    formData.append(`config[groupBy][${index}]`, field);
-  });
-  
-  Object.entries(report.config.filters).forEach(([key, value]) => {
+  if (Array.isArray(report.config.groupBy)) {
+    (report.config.groupBy as unknown as string[]).forEach((field, index) => {
+      formData.append(`config[groupBy][${index}]`, field);
+    });
+  } else if (report.config.groupBy) {
+    formData.append('config[groupBy]', report.config.groupBy);
+  }
+
+  Object.entries(report.config.filters ?? {}).forEach(([key, value]) => {
     if (value) {
       formData.append(`config[filters][${key}]`, value.toString());
     }

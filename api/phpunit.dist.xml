@@ -8,6 +8,10 @@
          failOnWarning="false"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
+         testdox="false"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
 >
     <php>
         <ini name="display_errors" value="1" />
@@ -30,6 +34,12 @@
         <include>
             <directory>src</directory>
         </include>
+
+        <exclude>
+            <directory>src/DataFixtures</directory>
+            <directory>src/Repository</directory>
+            <directory>src/Entity</directory>
+        </exclude>
 
         <deprecationTrigger>
             <method>Doctrine\Deprecations\Deprecation::trigger</method>

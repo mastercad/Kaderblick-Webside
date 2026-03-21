@@ -5,10 +5,13 @@ namespace App\Controller;
 use App\Entity\Game;
 use App\Entity\GameEvent;
 use App\Entity\Player;
+use App\Event\GameEventCreatedEvent;
+use App\Event\GameEventUpdatedEvent;
 use App\Repository\GameEventRepository;
 use App\Repository\GameEventTypeRepository;
 use App\Repository\PlayerRepository;
 use App\Repository\SubstitutionReasonRepository;
+use App\Security\Voter\GameEventVoter;
 use App\Security\Voter\GameVoter;
 use App\Service\FussballDeCrawlerService;
 use App\Service\GameDetailsSyncService;
@@ -17,6 +20,7 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -60,10 +64,11 @@ class GameEventsController extends AbstractController
         EntityManagerInterface $em,
         PlayerRepository $playerRepo,
         GameEventTypeRepository $eventTypeRepo,
-        SubstitutionReasonRepository $substitutionReasonRepo
+        SubstitutionReasonRepository $substitutionReasonRepo,
+        EventDispatcherInterface $dispatcher,
     ): JsonResponse {
-        // Require ROLE_ADMIN to add game events
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
+        // Nur Teammitglieder mit ROLE_ADMIN/ROLE_SUPPORTER oder Trainer dürfen Spielereignisse anlegen
+        $this->denyAccessUnlessGranted(GameEventVoter::CREATE, $game);
 
         $data = json_decode($request->getContent(), true);
         if (!$data) {
@@ -117,6 +122,12 @@ class GameEventsController extends AbstractController
         }
         $em->persist($event);
         $em->flush();
+
+        /** @var \App\Entity\User $currentUser */
+        $currentUser = $this->getUser();
+        if (null !== $currentUser) {
+            $dispatcher->dispatch(new GameEventCreatedEvent($currentUser, $event));
+        }
 
         return $this->json(['success' => true]);
     }
@@ -177,13 +188,17 @@ class GameEventsController extends AbstractController
         GameEventRepository $eventRepo,
         PlayerRepository $playerRepo,
         GameEventTypeRepository $eventTypeRepo,
-        SubstitutionReasonRepository $substitutionReasonRepo
+        SubstitutionReasonRepository $substitutionReasonRepo,
+        EventDispatcherInterface $dispatcher,
     ): JsonResponse {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
         $event = $eventRepo->find($eventId);
         if (!$event || $event->getGame()->getId() !== $gameId) {
             return $this->json(['error' => 'Event not found'], 404);
         }
+
+        // Nur Teammitglieder mit ROLE_ADMIN/ROLE_SUPPORTER oder Trainer dürfen Spielereignisse bearbeiten
+        $this->denyAccessUnlessGranted(GameEventVoter::EDIT, $event);
+
         $data = json_decode($request->getContent(), true);
         if (!$data) {
             return $this->json(['error' => 'Invalid data'], 400);
@@ -215,6 +230,12 @@ class GameEventsController extends AbstractController
         }
         $em->flush();
 
+        /** @var \App\Entity\User $currentUser */
+        $currentUser = $this->getUser();
+        if (null !== $currentUser) {
+            $dispatcher->dispatch(new GameEventUpdatedEvent($currentUser, $event));
+        }
+
         return $this->json(['success' => true]);
     }
 
@@ -225,11 +246,14 @@ class GameEventsController extends AbstractController
         EntityManagerInterface $em,
         GameEventRepository $eventRepo
     ): JsonResponse {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
         $event = $eventRepo->find($eventId);
         if (!$event || $event->getGame()->getId() !== $gameId) {
             return $this->json(['error' => 'Event not found'], 404);
         }
+
+        // Nur Teammitglieder mit ROLE_ADMIN/ROLE_SUPPORTER oder Trainer dürfen Spielereignisse löschen
+        $this->denyAccessUnlessGranted(GameEventVoter::DELETE, $event);
+
         $em->remove($event);
         $em->flush();
 

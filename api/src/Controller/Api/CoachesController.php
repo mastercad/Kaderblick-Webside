@@ -24,8 +24,10 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route(path: '/api/coaches', name: 'api_coaches_')]
+#[IsGranted('IS_AUTHENTICATED')]
 class CoachesController extends AbstractController
 {
     public function __construct(private EntityManagerInterface $entityManager)
@@ -33,12 +35,47 @@ class CoachesController extends AbstractController
     }
 
     #[Route('', name: 'list', methods: ['GET'])]
-    public function list(): JsonResponse
+    public function list(Request $request): JsonResponse
     {
-        $coaches = $this->entityManager->getRepository(Coach::class)->findAll();
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 25)));
+        $search = trim((string) $request->query->get('search', ''));
+        $teamId = $request->query->get('teamId');
 
-        // Filtere Trainer basierend auf VIEW-Berechtigung
-        $coaches = array_filter($coaches, fn ($coach) => $this->isGranted(CoachVoter::VIEW, $coach));
+        $repo = $this->entityManager->getRepository(Coach::class);
+        $qb = $repo->createQueryBuilder('c');
+
+        // Filter by team
+        if ($teamId) {
+            $qb->innerJoin('c.coachTeamAssignments', 'cta')
+               ->andWhere('cta.team = :teamId')
+               ->setParameter('teamId', (int) $teamId);
+        }
+
+        // Filter by search (firstName / lastName)
+        if ('' !== $search) {
+            $qb->andWhere('LOWER(c.firstName) LIKE :search OR LOWER(c.lastName) LIKE :search')
+               ->setParameter('search', '%' . strtolower($search) . '%');
+        }
+
+        // Count total matching results
+        $countQb = clone $qb;
+        $countQb->select('COUNT(DISTINCT c.id)');
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+
+        // Fetch paginated results
+        $offset = ($page - 1) * $limit;
+        $qb->select('c')
+           ->groupBy('c.id')
+           ->orderBy('c.lastName', 'ASC')
+           ->addOrderBy('c.firstName', 'ASC')
+           ->setFirstResult($offset)
+           ->setMaxResults($limit);
+
+        $coaches = $qb->getQuery()->getResult();
+
+        // Permissions: VIEW always true for logged-in users, CREATE/EDIT/DELETE require ROLE_ADMIN
+        $isAdmin = $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_SUPERADMIN');
 
         return $this->json([
             'coaches' => array_map(fn ($coach) => [
@@ -46,11 +83,11 @@ class CoachesController extends AbstractController
                 'firstName' => $coach->getFirstName(),
                 'lastName' => $coach->getLastName(),
                 'email' => $coach->getEmail(),
-                'birthdate' => $coach->getBirthdate(),
+                'birthdate' => $coach->getBirthdate()?->format('Y-m-d'),
                 'clubAssignments' => $coach->getCoachClubAssignments()->map(fn (CoachClubAssignment $coachClubAssignment) => [
                     'id' => $coachClubAssignment->getId(),
-                    'startDate' => $coachClubAssignment->getStartDate(),
-                    'endDate' => $coachClubAssignment->getEndDate(),
+                    'startDate' => $coachClubAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachClubAssignment->getEndDate()?->format('Y-m-d'),
                     'club' => [
                         'id' => $coachClubAssignment->getClub()->getId(),
                         'name' => $coachClubAssignment->getClub()->getName(),
@@ -58,8 +95,8 @@ class CoachesController extends AbstractController
                 ])->toArray(),
                 'teamAssignments' => $coach->getCoachTeamAssignments()->map(fn (CoachTeamAssignment $coachTeamAssignment) => [
                     'id' => $coachTeamAssignment->getId(),
-                    'startDate' => $coachTeamAssignment->getStartDate(),
-                    'endDate' => $coachTeamAssignment->getEndDate(),
+                    'startDate' => $coachTeamAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachTeamAssignment->getEndDate()?->format('Y-m-d'),
                     'team' => [
                         'id' => $coachTeamAssignment->getTeam()->getId(),
                         'name' => $coachTeamAssignment->getTeam()->getName(),
@@ -80,8 +117,8 @@ class CoachesController extends AbstractController
                 'licenseAssignments' => $coach->getCoachLicenseAssignments()->map(fn (CoachLicenseAssignment $coachLicenseAssignment) => [
                     'id' => $coachLicenseAssignment->getLicense()->getId(),
                     'name' => $coachLicenseAssignment->getLicense()->getName(),
-                    'startDate' => $coachLicenseAssignment->getStartDate(),
-                    'endDate' => $coachLicenseAssignment->getEndDate(),
+                    'startDate' => $coachLicenseAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachLicenseAssignment->getEndDate()?->format('Y-m-d'),
                     'license' => [
                         'id' => $coachLicenseAssignment->getLicense()->getId(),
                         'name' => $coachLicenseAssignment->getLicense()->getName()
@@ -89,20 +126,23 @@ class CoachesController extends AbstractController
                 ])->toArray(),
                 'nationalityAssignments' => $coach->getCoachNationalityAssignments()->map(fn (CoachNationalityAssignment $coachNationalityAssignment) => [
                     'id' => $coachNationalityAssignment->getId(),
-                    'startDate' => $coachNationalityAssignment->getStartDate(),
-                    'endDate' => $coachNationalityAssignment->getEndDate(),
+                    'startDate' => $coachNationalityAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachNationalityAssignment->getEndDate()?->format('Y-m-d'),
                     'nationality' => [
                         'id' => $coachNationalityAssignment->getNationality()->getId(),
                         'name' => $coachNationalityAssignment->getNationality()->getName(),
                     ]
                 ])->toArray(),
                 'permissions' => [
-                    'canEdit' => $this->isGranted(CoachVoter::EDIT, $coach),
-                    'canDelete' => $this->isGranted(CoachVoter::DELETE, $coach),
-                    'canView' => $this->isGranted(CoachVoter::VIEW, $coach),
-                    'canCreate' => $this->isGranted(CoachVoter::CREATE, $coach)
+                    'canEdit' => $isAdmin,
+                    'canDelete' => $isAdmin,
+                    'canView' => true,
+                    'canCreate' => $isAdmin,
                 ]
-            ], $coaches)
+            ], $coaches),
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
         ]);
     }
 
@@ -119,11 +159,11 @@ class CoachesController extends AbstractController
                 'firstName' => $coach->getFirstName(),
                 'lastName' => $coach->getLastName(),
                 'email' => $coach->getEmail(),
-                'birthdate' => $coach->getBirthdate(),
+                'birthdate' => $coach->getBirthdate()?->format('Y-m-d'),
                 'clubAssignments' => $coach->getCoachClubAssignments()->map(fn (CoachClubAssignment $coachClubAssignment) => [
                     'id' => $coachClubAssignment->getId(),
-                    'startDate' => $coachClubAssignment->getStartDate(),
-                    'endDate' => $coachClubAssignment->getEndDate(),
+                    'startDate' => $coachClubAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachClubAssignment->getEndDate()?->format('Y-m-d'),
                     'club' => [
                         'id' => $coachClubAssignment->getClub()->getId(),
                         'name' => $coachClubAssignment->getClub()->getName(),
@@ -131,8 +171,8 @@ class CoachesController extends AbstractController
                 ])->toArray(),
                 'teamAssignments' => $coach->getCoachTeamAssignments()->map(fn (CoachTeamAssignment $coachTeamAssignment) => [
                     'id' => $coachTeamAssignment->getId(),
-                    'startDate' => $coachTeamAssignment->getStartDate(),
-                    'endDate' => $coachTeamAssignment->getEndDate(),
+                    'startDate' => $coachTeamAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachTeamAssignment->getEndDate()?->format('Y-m-d'),
                     'team' => [
                         'id' => $coachTeamAssignment->getTeam()->getId(),
                         'name' => $coachTeamAssignment->getTeam()->getName(),
@@ -153,8 +193,8 @@ class CoachesController extends AbstractController
                 'licenseAssignments' => $coach->getCoachLicenseAssignments()->map(fn (CoachLicenseAssignment $coachLicenseAssignment) => [
                     'id' => $coachLicenseAssignment->getId(),
                     'name' => $coachLicenseAssignment->getLicense()->getName(),
-                    'startDate' => $coachLicenseAssignment->getStartDate(),
-                    'endDate' => $coachLicenseAssignment->getEndDate(),
+                    'startDate' => $coachLicenseAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachLicenseAssignment->getEndDate()?->format('Y-m-d'),
                     'license' => [
                         'id' => $coachLicenseAssignment->getLicense()->getId(),
                         'name' => $coachLicenseAssignment->getLicense()->getName()
@@ -162,8 +202,8 @@ class CoachesController extends AbstractController
                 ])->toArray(),
                 'nationalityAssignments' => $coach->getCoachNationalityAssignments()->map(fn (CoachNationalityAssignment $coachNationalityAssignment) => [
                     'id' => $coachNationalityAssignment->getId(),
-                    'startDate' => $coachNationalityAssignment->getStartDate(),
-                    'endDate' => $coachNationalityAssignment->getEndDate(),
+                    'startDate' => $coachNationalityAssignment->getStartDate()?->format('Y-m-d'),
+                    'endDate' => $coachNationalityAssignment->getEndDate()?->format('Y-m-d'),
                     'nationality' => [
                         'id' => $coachNationalityAssignment->getNationality()->getId(),
                         'name' => $coachNationalityAssignment->getNationality()->getName(),

@@ -12,10 +12,15 @@ interface User {
   shoeSize?: number;
   shirtSize?: string;
   pantsSize?: string;
+  socksSize?: string;
+  jacketSize?: string;
   isCoach?: boolean;
   isPlayer?: boolean;
+  needsRegistrationContext?: boolean;
   roles: { [key: string]: string };
   avatarFile?: string;
+  googleAvatarUrl?: string;
+  useGoogleAvatar?: boolean;
   title?: {
     hasTitle: boolean;
     displayTitle: string;
@@ -42,6 +47,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
   isSuperAdmin: boolean;
+  isAdmin: boolean;
   login: (credentials: { email: string; password: string }) => Promise<void>;
   loginWithGoogle: (data: AuthData) => void;
   logout: () => void;
@@ -56,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAuthenticated = Boolean(user);
   const isSuperAdmin = Boolean(user?.roles && Object.values(user.roles).includes('ROLE_SUPERADMIN'));
+  const isAdmin = Boolean(user?.roles && (Object.values(user.roles).includes('ROLE_ADMIN') || Object.values(user.roles).includes('ROLE_SUPERADMIN')));
 
   const checkAuthStatus = async () => {
     setIsLoading(true);
@@ -121,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated, 
       isLoading,
       isSuperAdmin,
+      isAdmin,
       login, 
       logout, 
       loginWithGoogle,

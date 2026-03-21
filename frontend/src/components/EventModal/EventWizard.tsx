@@ -41,6 +41,7 @@ interface EventWizardProps {
   teams: SelectOption[];
   gameTypes: SelectOption[];
   leagues: SelectOption[];
+  cups: SelectOption[];
   tournaments: SelectOption[];
   users: User[];
   tournamentMatches: any[];
@@ -67,6 +68,7 @@ export const EventWizard: React.FC<EventWizardProps> = ({
   teams,
   gameTypes,
   leagues,
+  cups,
   tournaments,
   users,
   tournamentMatches,
@@ -317,6 +319,7 @@ export const EventWizard: React.FC<EventWizardProps> = ({
             teams={teams}
             gameTypes={gameTypes}
             leagues={leagues}
+            cups={cups}
             tournaments={tournaments}
             users={users}
             isMatchEvent={isMatchEvent}

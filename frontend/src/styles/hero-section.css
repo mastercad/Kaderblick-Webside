@@ -1,6 +1,7 @@
 .hero-section {
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   scroll-snap-align: start;
   background-size: cover;
   background-position: center center;
@@ -11,6 +12,14 @@
   position: relative;
   top: 0;
   left: 0;
+}
+
+/* Mobile: background-attachment: fixed funktioniert auf iOS nicht,
+   scroll stattdessen verwenden */
+@media (max-width: 960px) {
+  .hero-section {
+    background-attachment: scroll;
+  }
 }
 
 .hero-outer {
@@ -114,6 +123,19 @@
   }
 }
 
+@media (max-width: 960px) {
+  .hero-outer {
+    justify-content: center;
+    align-items: center;
+    padding-right: 0;
+  }
+
+  .hero-content {
+    align-items: center;
+    text-align: center;
+  }
+}
+
 @media (max-width: 600px) {
   .hero-outer {
     justify-content: center;
@@ -157,9 +179,10 @@
     padding-right: 0;
   }
   
-  /* Scroll Indikator in Mobile */
+  /* Scroll Indikator in Mobile – über dem Footer positionieren */
   .hero-scroll-indicator {
-    bottom: 2rem;
+    bottom: 3.5rem;
+    z-index: 25;
   }
   
   .hero-scroll-text {

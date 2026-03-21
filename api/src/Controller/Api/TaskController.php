@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Entity\Task;
 use App\Entity\TaskAssignment;
 use App\Entity\User;
+use App\Event\TaskCompletedEvent;
 use App\Repository\TaskAssignmentRepository;
 use App\Repository\TaskRepository;
 use App\Repository\UserRepository;
@@ -15,6 +16,7 @@ use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,7 +31,7 @@ class TaskController extends AbstractController
     {
         $tasks = $taskRepository->findAll();
 
-        $tasks = array_filter($tasks, fn ($task) => $this->isGranted(TaskVoter::VIEW, $task));
+        $tasks = array_values(array_filter($tasks, fn ($task) => $this->isGranted(TaskVoter::VIEW, $task)));
 
         return $this->json([
             'tasks' => array_map(fn ($task) => [
@@ -39,6 +41,13 @@ class TaskController extends AbstractController
                 'isRecurring' => $task->isRecurring(),
                 'recurrenceMode' => $task->getRecurrenceMode(),
                 'recurrenceRule' => $task->getRecurrenceRule(),
+                'createdBy' => [
+                    'id' => $task->getCreatedBy()->getId(),
+                    'firstName' => $task->getCreatedBy()->getFirstName(),
+                    'lastName' => $task->getCreatedBy()->getLastName(),
+                    'fullName' => $task->getCreatedBy()->getFullName(),
+                ],
+                'createdAt' => $task->getCreatedAt()->format('Y-m-d H:i:s'),
                 'rotationUsers' => array_map(fn ($user) => [
                     'id' => $user->getId(),
                     'firstName' => $user->getFirstName(),
@@ -46,7 +55,22 @@ class TaskController extends AbstractController
                     'fullName' => $user->getFullName(),
                 ], $task->getRotationUsers()->toArray()),
                 'rotationCount' => $task->getRotationCount(),
-            ], $tasks)
+                'assignments' => array_map(fn ($a) => [
+                    'id' => $a->getId(),
+                    'user' => [
+                        'id' => $a->getUser()->getId(),
+                        'firstName' => $a->getUser()->getFirstName(),
+                        'lastName' => $a->getUser()->getLastName(),
+                        'fullName' => $a->getUser()->getFullName(),
+                    ],
+                    'assignedDate' => $a->getAssignedDate()->format('Y-m-d'),
+                    'status' => $a->getStatus(),
+                    'substituteUser' => $a->getSubstituteUser() ? [
+                        'id' => $a->getSubstituteUser()->getId(),
+                        'fullName' => $a->getSubstituteUser()->getFullName(),
+                    ] : null,
+                ], $task->getAssignments()->toArray()),
+            ], $tasks),
         ]);
     }
 
@@ -163,11 +187,14 @@ class TaskController extends AbstractController
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
-    public function delete(Task $task, CalendarEventService $calendarEventService): JsonResponse
+    public function delete(Task $task, CalendarEventService $calendarEventService, EntityManagerInterface $em): JsonResponse
     {
         $this->denyAccessUnlessGranted(TaskVoter::DELETE, $task);
 
         $calendarEventService->deleteCalendarEventsForTask($task);
+
+        $em->remove($task);
+        $em->flush();
 
         return new JsonResponse(['message' => 'Task deleted successfully with all Dependencies'], Response::HTTP_OK);
     }
@@ -178,7 +205,8 @@ class TaskController extends AbstractController
         Request $request,
         TaskAssignmentRepository $assignmentRepo,
         EntityManagerInterface $em,
-        SerializerInterface $serializer
+        SerializerInterface $serializer,
+        EventDispatcherInterface $dispatcher
     ): JsonResponse {
         $assignment = $assignmentRepo->find($assignmentId);
         if (!$assignment) {
@@ -192,6 +220,14 @@ class TaskController extends AbstractController
             $assignment->setAssignedDate(new DateTimeImmutable($data['assignedDate']));
         }
         $em->flush();
+
+        if (isset($data['status']) && 'erledigt' === $data['status']) {
+            $assignedUser = $assignment->getUser();
+            if ($assignedUser instanceof User) {
+                $dispatcher->dispatch(new TaskCompletedEvent($assignedUser, $assignment->getTask()));
+            }
+        }
+
         $json = $serializer->serialize($assignment, 'json', ['groups' => ['assignment:read']]);
 
         return JsonResponse::fromJsonString($json, Response::HTTP_OK);

@@ -22,7 +22,7 @@ export const SelectReportModal: React.FC<SelectReportModalProps> = ({
     open={open}
     onClose={onClose}
     maxWidth="lg"
-    title="Report auswählen"
+    title="Auswertung auswählen"
     actions={
       <>
         <Button onClick={onClose} variant="outlined" color="secondary">Abbrechen</Button>

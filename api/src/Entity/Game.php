@@ -61,11 +61,6 @@ class Game
     )]
     private GameType $gameType;
 
-    /** @var Collection<int, Goal> */
-    #[Groups(['game:read', 'game:write'])]
-    #[ORM\OneToMany(targetEntity: Goal::class, mappedBy: 'game')]
-    private Collection $goals;
-
     /** @var Collection<int, GameEvent> */
     #[Groups(['game:read', 'game:write'])]
     #[ORM\OneToMany(targetEntity: GameEvent::class, mappedBy: 'game')]
@@ -97,6 +92,10 @@ class Game
     #[ORM\JoinColumn(name: 'league_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?League $league = null;
 
+    #[ORM\ManyToOne(targetEntity: Cup::class)]
+    #[ORM\JoinColumn(name: 'cup_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?Cup $cup = null;
+
     #[Groups(['game:read', 'game:write'])]
     #[ORM\OneToOne(targetEntity: CalendarEvent::class, inversedBy: 'game', cascade: ['persist', 'remove'])]
     #[ORM\JoinColumn(name: 'calendar_event_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
@@ -115,6 +114,36 @@ class Game
     private ?string $fussballDeUrl = null;
 
     /**
+     * Reguläre Halbzeitdauer in Minuten (z.B. 45 bei Erwachsenen, 30/35 bei Jugend).
+     */
+    #[Groups(['game:read', 'game:write'])]
+    #[ORM\Column(type: 'smallint', options: ['default' => 45])]
+    private int $halfDuration = 45;
+
+    /**
+     * Nachspielzeit der 1. Halbzeit in Minuten (nullable = nicht erfasst).
+     */
+    #[Groups(['game:read', 'game:write'])]
+    #[ORM\Column(type: 'smallint', nullable: true)]
+    private ?int $firstHalfExtraTime = null;
+
+    /**
+     * Nachspielzeit der 2. Halbzeit in Minuten (nullable = nicht erfasst).
+     */
+    #[Groups(['game:read', 'game:write'])]
+    #[ORM\Column(type: 'smallint', nullable: true)]
+    private ?int $secondHalfExtraTime = null;
+
+    /**
+     * Dauer der Halbzeitpause in Minuten.
+     * Wird für die Video-Timeline-Berechnung benötigt, da die Pause nicht in den
+     * Video-Aufnahmen enthalten ist, aber in den absoluten Event-Timestamps schon.
+     */
+    #[Groups(['game:read', 'game:write'])]
+    #[ORM\Column(type: 'smallint', options: ['default' => 15])]
+    private int $halftimeBreakDuration = 15;
+
+    /**
      * @var Collection<int, Video>
      */
     #[ORM\OneToMany(targetEntity: Video::class, mappedBy: 'game', orphanRemoval: true)]
@@ -122,7 +151,6 @@ class Game
 
     public function __construct()
     {
-        $this->goals = new ArrayCollection();
         $this->gameEvents = new ArrayCollection();
         $this->substitutions = new ArrayCollection();
         $this->videos = new ArrayCollection();
@@ -238,34 +266,6 @@ class Game
             // set the owning side to null (unless already changed)
             if ($gameEvent->getGame() === $this) {
                 $gameEvent->setGame(null);
-            }
-        }
-
-        return $this;
-    }
-
-    /** @return Collection<int, Goal> */
-    public function getGoals(): Collection
-    {
-        return $this->goals;
-    }
-
-    public function addGoal(Goal $goal): self
-    {
-        if (!$this->goals->contains($goal)) {
-            $this->goals[] = $goal;
-            $goal->setGame($this);
-        }
-
-        return $this;
-    }
-
-    public function removeGoal(Goal $goal): self
-    {
-        if ($this->goals->removeElement($goal)) {
-            // set the owning side to null (unless already changed)
-            if ($goal->getGame() === $this) {
-                $goal->setGame(null);
             }
         }
 
@@ -402,7 +402,75 @@ class Game
         return $this;
     }
 
-    public function __toString()
+    public function getCup(): ?Cup
+    {
+        return $this->cup;
+    }
+
+    public function setCup(?Cup $cup): self
+    {
+        $this->cup = $cup;
+
+        return $this;
+    }
+
+    public function getHalfDuration(): int
+    {
+        return $this->halfDuration;
+    }
+
+    public function setHalfDuration(int $halfDuration): self
+    {
+        $this->halfDuration = $halfDuration;
+
+        return $this;
+    }
+
+    public function getFirstHalfExtraTime(): ?int
+    {
+        return $this->firstHalfExtraTime;
+    }
+
+    public function setFirstHalfExtraTime(?int $firstHalfExtraTime): self
+    {
+        $this->firstHalfExtraTime = $firstHalfExtraTime;
+
+        return $this;
+    }
+
+    public function getSecondHalfExtraTime(): ?int
+    {
+        return $this->secondHalfExtraTime;
+    }
+
+    public function setSecondHalfExtraTime(?int $secondHalfExtraTime): self
+    {
+        $this->secondHalfExtraTime = $secondHalfExtraTime;
+
+        return $this;
+    }
+
+    public function getHalftimeBreakDuration(): int
+    {
+        return $this->halftimeBreakDuration;
+    }
+
+    public function setHalftimeBreakDuration(int $halftimeBreakDuration): self
+    {
+        $this->halftimeBreakDuration = $halftimeBreakDuration;
+
+        return $this;
+    }
+
+    /**
+     * Gibt die tatsächliche Dauer der 1. Halbzeit inkl. Nachspielzeit in Sekunden zurück.
+     */
+    public function getFirstHalfTotalSeconds(): int
+    {
+        return ($this->halfDuration + ($this->firstHalfExtraTime ?? 0)) * 60;
+    }
+
+    public function __toString(): string
     {
         return $this->getHomeTeam()?->getName() . ' : ' . $this->getAwayTeam()?->getName();
     }

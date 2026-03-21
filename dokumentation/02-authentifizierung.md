@@ -1,98 +1,127 @@
 # Anmelden & Registrieren
 
-Alles rund um euren Account: Wie ihr euch registriert, anmeldet, euer Passwort zurücksetzen könnt und was zu tun ist, wenn etwas nicht klappt.
+Euer Konto ist der Schlüssel zu Kaderblick. Hier erfahrt ihr, wie ihr euch registriert, anmeldet, euer Passwort zurücksetzen könnt und was ihr tun könnt, wenn etwas nicht klappt.
 
 ---
 
 ## Neu hier? So registriert ihr euch
 
-1. Öffnet Kaderblick und klickt oben rechts auf **„Registrieren"** (oder „Anmelden" → dann auf den Registrieren-Link)
-2. Gebt euren **vollständigen Namen** ein (Vor- und Nachname)
-3. Tragt eine **gültige E-Mail-Adresse** ein – an diese Adresse wird eine Bestätigungsmail geschickt
-4. Wählt ein **sicheres Passwort** (mindestens 8 Zeichen, am besten eine Mischung aus Buchstaben, Zahlen und Sonderzeichen)
-5. Klickt auf **„Registrieren"**
+1. Kaderblick im Browser öffnen
+2. Oben rechts auf **„Registrieren"** klicken
+3. Folgende Daten eingeben:
+   - **Vorname** und **Nachname**
+   - **E-Mail-Adresse** — an diese wird die Bestätigungsmail geschickt
+   - **Passwort** — mindestens 8 Zeichen, am besten eine Mischung aus Buchstaben, Zahlen und Sonderzeichen
+4. Auf **„Registrieren"** klicken
 
-Danach erhaltet ihr eine E-Mail mit einem **Bestätigungslink**. Klickt diesen an – euer Konto ist erst danach aktiv!
+### Bestätigungsmail
 
-> ⚠️ **Wichtig:** Ohne E-Mail-Bestätigung könnt ihr euch nicht anmelden. Schaut auch im Spam-Ordner nach, falls die Mail nicht ankommt.
+Nach der Registrierung bekommt ihr eine **E-Mail mit einem Bestätigungslink**. Klickt den Link in der Mail an — erst dann wird euer Konto freigeschaltet.
+
+> ⚠️ **Die Mail kommt nicht?**
+> - Schaut im **Spam- oder Junk-Ordner** nach
+> - Wartet 2–3 Minuten — manchmal braucht die Zustellung etwas
+> - Fragt euren Vereinsadministrator — der kann euer Konto auch manuell aktivieren
+
+### Nach der Bestätigung
+
+Sobald der Link angeklickt ist, könnt ihr euch sofort anmelden. Je nach Vereinseinstellung kann es sein, dass ein Administrator euer Konto zusätzlich **freischalten** muss — in dem Fall seht ihr nach dem Login eine entsprechende Meldung.
 
 ---
 
 ## Einloggen
 
-1. Klickt auf **„Anmelden"**
-2. Gebt eure E-Mail-Adresse und euer Passwort ein
-3. Klickt auf **„Einloggen"**
+1. Auf **„Anmelden"** klicken
+2. E-Mail-Adresse und Passwort eingeben
+3. Auf **„Einloggen"** klicken
 
-Nach dem Login landet ihr direkt auf eurem persönlichen Dashboard.
+Nach dem Login landet ihr direkt auf eurem [Dashboard](16-dashboard.md).
 
-> 💡 **Tipp:** Wenn ihr Kaderblick auf dem Smartphone als App gespeichert habt, bleibt ihr meistens automatisch eingeloggt und müsst nicht jedes Mal erneut euer Passwort eingeben.
+### Eingeloggt bleiben
+
+Kaderblick merkt sich eure Anmeldung. Solange ihr euch nicht aktiv abmeldet, bleibt ihr eingeloggt — auch wenn ihr den Browser schließt und später wiederkommt. Besonders praktisch auf dem eigenen Handy oder Laptop.
+
+> 💡 **Auf fremden Geräten** (Schulcomputer, öffentlicher PC): Meldet euch nach der Nutzung über das Profil-Menü oben rechts ab, damit niemand anders auf euer Konto zugreifen kann.
 
 ---
 
-## Mit Google einloggen
+## Mit Google anmelden
 
-Falls euer Verein die Google-Anmeldung aktiviert hat, könnt ihr euch mit eurem bestehenden Google-Konto anmelden – ganz ohne separates Passwort:
+Falls euer Verein die Google-Anmeldung aktiviert hat, geht's noch schneller:
 
 1. Auf **„Mit Google anmelden"** klicken
 2. Euer Google-Konto auswählen (ihr werdet kurz zu Google weitergeleitet)
-3. Bestätigung geben
-4. Fertig – ihr seid eingeloggt!
+3. Bestätigen — fertig!
 
-Bei der ersten Anmeldung mit Google wird automatisch ein Kaderblick-Konto für euch angelegt.
+**Beim ersten Mal** wird automatisch ein Kaderblick-Konto für euch angelegt. Ihr braucht kein separates Passwort und keinen Bestätigungslink.
+
+**Beim nächsten Mal** reicht ein Klick auf „Mit Google anmelden" und ihr seid sofort drin.
+
+> 💡 Praktisch für alle, die schon ein Gmail- oder Google-Konto haben — ein Passwort weniger merken!
 
 ---
 
 ## Passwort vergessen?
 
-Kein Problem! So setzt ihr ein neues Passwort:
+Kein Stress — passiert jedem:
 
-1. Auf der Loginseite auf **„Passwort vergessen?"** klicken
+1. Auf der Anmeldeseite auf **„Passwort vergessen?"** klicken
 2. Eure E-Mail-Adresse eingeben
 3. Auf **„Link anfordern"** klicken
-4. Ihr erhaltet eine E-Mail mit einem Link – klickt ihn an
-5. Gebt euer neues Passwort ein und bestätigt es
-6. Fertig! Meldet euch nun mit dem neuen Passwort an
+4. E-Mail öffnen und auf den Link klicken
+5. Neues Passwort eingeben und bestätigen
 
-> ⚠️ **Achtung:** Der Link in der E-Mail ist nur eine begrenzte Zeit gültig. Setzt das neue Passwort zeitnah, nachdem ihr die Mail erhalten habt.
+Das neue Passwort gilt sofort. Meldet euch damit an.
+
+> ⚠️ Der Link in der E-Mail ist nur **begrenzt gültig**. Setzt das Passwort am besten direkt, wenn die Mail ankommt.
 
 ---
 
 ## E-Mail-Adresse ändern
 
-Wenn ihr eure hinterlegte E-Mail-Adresse ändern möchtet:
+Wenn sich eure E-Mail-Adresse geändert hat:
 
-1. Geht in euer **Profil** (oben rechts auf euren Namen oder das Benutzer-Symbol klicken)
-2. Die neue E-Mail-Adresse eintragen
+1. Auf euer **Profilbild** oben rechts klicken → **„Profil"**
+2. Im Feld „E-Mail" die **neue Adresse** eintragen
 3. Speichern
-4. Ihr erhaltet eine Bestätigungsmail an die **neue Adresse** – erst nach Bestätigung wird die neue Adresse übernommen
+4. Ihr bekommt eine Bestätigungsmail an die **neue** Adresse — klickt den Link darin
 
-Bis zur Bestätigung bleibt die alte E-Mail-Adresse aktiv.
-
----
-
-## Eingeloggt bleiben oder abmelden
-
-Kaderblick speichert eure Anmeldung, sodass ihr nicht bei jedem Besuch erneut einloggen müsst. Wenn ihr auf einem **öffentlichen Computer oder einem Gerät, das andere nutzen**, unterwegs seid, meldet euch nach der Nutzung über das Profil-Menü ab.
+Bis ihr den Link bestätigt habt, bleibt die alte Adresse aktiv. Erst nach der Bestätigung wird umgestellt.
 
 ---
 
-## Mein Konto ist gesperrt – was nun?
+## Abmelden
 
-Falls euer Konto gesperrt oder noch nicht freigegeben wurde, seht ihr nach dem Login eine entsprechende Meldung. In diesem Fall wendet euch an euren **Vereinsadministrator** oder euren Trainer – die können euren Account freischalten.
+1. Oben rechts auf euer **Profilbild** klicken
+2. **„Abmelden"** wählen
+
+Danach seid ihr ausgeloggt und seht wieder die Anmeldeseite.
+
+---
+
+## Konto gesperrt?
+
+Falls nach dem Login eine Meldung erscheint, dass euer Konto **gesperrt** oder **noch nicht freigeschaltet** ist:
+
+- Sprecht euren **Trainer** oder **Vereinsadministrator** an
+- Der Administrator kann euer Konto im Admin-Bereich aktivieren
+- Häufig wurde einfach noch nicht auf den Bestätigungslink geklickt — prüft eure Mails!
 
 ---
 
 ## Häufige Fragen
 
-**Ich habe mich registriert, aber bekomme keine Bestätigungsmail.**
-→ Schaut im Spam-Ordner nach. Falls die Mail wirklich nicht da ist, wendet euch an euren Vereinsadministrator.
+### Ich habe mich registriert, aber bekomme keine Bestätigungsmail.
+Schaut im Spam-Ordner nach. Falls die Mail auch dort nicht ist, bittet euren Administrator, das Konto manuell zu aktivieren.
 
-**Kann ich dieselbe E-Mail-Adresse für mehrere Kinder nutzen?**
-→ Nein, jeder Account braucht eine eigene E-Mail-Adresse. Für jedes Familienmitglied solltet ihr also eine eigene Adresse verwenden.
+### Kann ich dieselbe E-Mail-Adresse für mich und mein Kind nutzen?
+Nein — jeder Account braucht eine **eigene E-Mail-Adresse**. Das gilt auch innerhalb einer Familie: Für Mama, Papa und Kind bitte jeweils eine separate Adresse verwenden.
 
-**Ich benutze dieselbe E-Mail-Adresse wie mein Kind – was passiert dann?**
-→ Das geht nicht. Jede E-Mail-Adresse kann nur einmal in Kaderblick verwendet werden.
+### Kann ich meinen Account löschen?
+Das kann nur euer Vereinsadministrator. Sprecht ihn an — er kann euer Konto deaktivieren.
 
-**Kann ich meinen Account löschen?**
-→ Wendet euch dafür an euren Vereinsadministrator.
+### Muss ich mich jedes Mal neu anmelden?
+Normalerweise nicht. Kaderblick hält eure Sitzung aufrecht, solange ihr eingeloggt bleibt. Falls ihr euch doch neu anmelden müsst, prüft ob ihr Cookies/Browserdaten gelöscht habt — das beendet die Sitzung.
+
+### Ich nutze „Mit Google anmelden", sehe aber nicht meine Daten.
+Bei der ersten Google-Anmeldung wird ein neues Konto angelegt. Falls ihr **vorher schon** ein Konto mit Passwort hattet, existieren jetzt möglicherweise zwei Konten. Wendet euch an den Administrator, der kann die Konten zusammenführen.

@@ -53,6 +53,24 @@ export default function VideoModal({ open, onClose, onSave, videoTypes, cameras,
     e.preventDefault();
     // Länge in Sekunden konvertieren (verschiedene Formate unterstützen)
     let newForm = { ...form };
+
+    // Startzeit konvertieren (gleiche Formate wie Länge)
+    if (form.gameStart) {
+      const input = form.gameStart.toString().trim();
+      let totalSeconds = 0;
+      if (input.includes(':')) {
+        const parts = input.split(':').map(p => parseInt(p, 10));
+        if (parts.length === 2) {
+          totalSeconds = (parts[0] * 60) + parts[1];
+        } else if (parts.length === 3) {
+          totalSeconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+        }
+      } else {
+        totalSeconds = parseInt(input, 10);
+      }
+      newForm.gameStart = isNaN(totalSeconds) ? '' : totalSeconds.toString();
+    }
+
     if (form.length) {
       const input = form.length.toString().trim();
       let totalSeconds = 0;
@@ -122,12 +140,12 @@ export default function VideoModal({ open, onClose, onSave, videoTypes, cameras,
         />
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField
-            label="Startzeit (Sek.)"
+            label="Startzeit (Sek. oder mm:ss oder hh:mm:ss)"
             name="gameStart"
             value={form.gameStart}
             onChange={handleChange}
-            type="number"
             fullWidth
+            helperText="z.B. 90, 1:30 oder 1:30:00"
           />
           <TextField
             label="Sortierung"

@@ -6,19 +6,26 @@ use App\Entity\Game;
 use App\Entity\GameEvent;
 use App\Entity\GameEventType;
 use App\Entity\Player;
+use App\Entity\Team;
 use App\Entity\Tournament;
 use App\Entity\User;
 use App\Repository\CameraRepository;
 use App\Repository\GameEventRepository;
 use App\Repository\GameRepository;
+use App\Repository\ParticipationRepository;
+use App\Repository\TeamRepository;
 use App\Security\Voter\GameEventVoter;
 use App\Security\Voter\GameVoter;
 use App\Security\Voter\VideoVoter;
+use App\Service\CoachTeamPlayerService;
+use App\Service\TournamentAdvancementService;
 use App\Service\UserTitleService;
 use App\Service\VideoTimelineService;
+use DateTime;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 
 #[Route(path: '/api/games', name: 'api_games_')]
@@ -69,9 +76,103 @@ class GamesController extends ApiController
 
     public function __construct(
         EntityManagerInterface $entityManager,
-        private readonly VideoTimelineService $videoTimelineService
+        private readonly VideoTimelineService $videoTimelineService,
+        private readonly TournamentAdvancementService $advancementService,
+        private readonly CoachTeamPlayerService $coachTeamPlayerService,
     ) {
         $this->entityManager = $entityManager;
+    }
+
+    /**
+     * Mark a game as finished. If the game belongs to a tournament match,
+     * automatically advance the winner to the next round.
+     */
+    #[Route('/{id}/finish', name: 'finish', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function finish(Game $game): JsonResponse
+    {
+        $this->denyAccessUnlessGranted('ROLE_ADMIN');
+
+        if ($game->isFinished()) {
+            return $this->json(['error' => 'Spiel ist bereits beendet.'], 400);
+        }
+
+        $game->setIsFinished(true);
+        $this->entityManager->persist($game);
+        $this->entityManager->flush();
+
+        $advanced = null;
+        $tournamentMatch = $game->getTournamentMatch();
+        if ($tournamentMatch) {
+            $tournamentMatch->setStatus('finished');
+            $this->entityManager->persist($tournamentMatch);
+            $this->entityManager->flush();
+
+            $nextMatch = $this->advancementService->advanceWinner($tournamentMatch);
+            if ($nextMatch) {
+                $advanced = [
+                    'nextMatchId' => $nextMatch->getId(),
+                    'round' => $nextMatch->getRound(),
+                    'slot' => $nextMatch->getSlot(),
+                    'homeTeam' => $nextMatch->getHomeTeam()?->getName(),
+                    'awayTeam' => $nextMatch->getAwayTeam()?->getName(),
+                    'gameCreated' => null !== $nextMatch->getGame(),
+                ];
+            }
+        }
+
+        return $this->json([
+            'success' => true,
+            'isFinished' => true,
+            'advanced' => $advanced,
+        ]);
+    }
+
+    /**
+     * Update timing fields for a game (halfDuration, halftimeBreakDuration, firstHalfExtraTime, secondHalfExtraTime).
+     */
+    #[Route('/{id}/timing', name: 'timing', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function timing(Game $game, Request $request): JsonResponse
+    {
+        $this->denyAccessUnlessGranted('ROLE_ADMIN');
+
+        $data = json_decode($request->getContent(), true) ?? [];
+
+        if (isset($data['halfDuration'])) {
+            $half = (int) $data['halfDuration'];
+            if ($half < 1 || $half > 90) {
+                return $this->json(['error' => 'halfDuration muss zwischen 1 und 90 Minuten liegen.'], 400);
+            }
+            $game->setHalfDuration($half);
+        }
+
+        if (array_key_exists('halftimeBreakDuration', $data)) {
+            $break = (int) $data['halftimeBreakDuration'];
+            if ($break < 0 || $break > 60) {
+                return $this->json(['error' => 'halftimeBreakDuration muss zwischen 0 und 60 Minuten liegen.'], 400);
+            }
+            $game->setHalftimeBreakDuration($break);
+        }
+
+        if (array_key_exists('firstHalfExtraTime', $data)) {
+            $extra = null !== $data['firstHalfExtraTime'] ? (int) $data['firstHalfExtraTime'] : null;
+            $game->setFirstHalfExtraTime($extra);
+        }
+
+        if (array_key_exists('secondHalfExtraTime', $data)) {
+            $extra = null !== $data['secondHalfExtraTime'] ? (int) $data['secondHalfExtraTime'] : null;
+            $game->setSecondHalfExtraTime($extra);
+        }
+
+        $this->entityManager->persist($game);
+        $this->entityManager->flush();
+
+        return $this->json([
+            'success' => true,
+            'halfDuration' => $game->getHalfDuration(),
+            'halftimeBreakDuration' => $game->getHalftimeBreakDuration(),
+            'firstHalfExtraTime' => $game->getFirstHalfExtraTime(),
+            'secondHalfExtraTime' => $game->getSecondHalfExtraTime(),
+        ]);
     }
 
     #[Route('/{id}/details', name: 'details', requirements: ['id' => '\d+'], methods: ['GET'])]
@@ -124,9 +225,16 @@ class GamesController extends ApiController
                     ] : [],
                 ] : null,
                 'fussballDeUrl' => method_exists($game, 'getFussballDeUrl') ? $game->getFussballDeUrl() : null,
+                'isFinished' => $game->isFinished(),
+                'tournamentId' => $game->getTournamentMatch()?->getTournament()?->getId(),
+                'halfDuration' => $game->getHalfDuration(),
+                'halftimeBreakDuration' => $game->getHalftimeBreakDuration(),
+                'firstHalfExtraTime' => $game->getFirstHalfExtraTime(),
+                'secondHalfExtraTime' => $game->getSecondHalfExtraTime(),
                 'permissions' => [
                     'can_create_videos' => $this->isGranted(VideoVoter::CREATE, $game->getHomeTeam()) || $this->isGranted(VideoVoter::CREATE, $game->getAwayTeam()),
-                    'can_create_game_events' => $this->isGranted(GameEventVoter::CREATE, $game)
+                    'can_create_game_events' => $this->isGranted(GameEventVoter::CREATE, $game),
+                    'can_edit_timing' => $this->isGranted('ROLE_ADMIN'),
                 ]
             ];
         };
@@ -146,7 +254,9 @@ class GamesController extends ApiController
                 $relatedUserTitleData = $userTitleService->retrieveTitleDataForPlayer($event->getRelatedPlayer());
             }
 
-            $titleData = $userTitleService->retrieveTitleDataForPlayer($event->getPlayer());
+            if ($event->getPlayer() instanceof Player) {
+                $titleData = $userTitleService->retrieveTitleDataForPlayer($event->getPlayer());
+            }
 
             return [
                 'id' => $event->getId(),
@@ -232,11 +342,47 @@ class GamesController extends ApiController
     }
 
     #[Route('/overview', name: 'overview', methods: ['GET'])]
-    public function overview(GameRepository $gameRepository, GameEventRepository $gameEventRepository): JsonResponse
+    public function overview(Request $request, GameRepository $gameRepository, GameEventRepository $gameEventRepository, TeamRepository $teamRepository): JsonResponse
     {
         $now = new DateTimeImmutable();
 
-        $upcomingGames = $gameRepository->createQueryBuilder('g')
+        // ---- Resolve team filter ----
+        /** @var User|null $currentUser */
+        $currentUser = $this->getUser();
+        $userDefaultTeamId = null;
+        if ($currentUser instanceof User) {
+            $userDefaultTeamId = $this->coachTeamPlayerService->resolveDefaultTeamId($currentUser);
+        }
+
+        $noTeamAssignment = (null === $userDefaultTeamId);
+
+        $teamIdParam = $request->query->get('teamId');
+        if ('all' === $teamIdParam) {
+            $filterTeamId = null;
+        } elseif (null !== $teamIdParam && '' !== $teamIdParam) {
+            $filterTeamId = (int) $teamIdParam;
+        } else {
+            // No explicit param: use user's default team, or -1 (no results) if unlinked
+            $filterTeamId = $userDefaultTeamId ?? -1;
+        }
+
+        // ---- Season filter ----
+        // German football season N/N+1 runs from ~Aug N to ~Jun N+1.
+        // ?season=2025 means the 2025/26 season. Defaults to current season.
+        $seasonParam = $request->query->get('season');
+        $currentMonth = (int) $now->format('n');
+        $currentYear = (int) $now->format('Y');
+        $defaultSeasonYear = $currentMonth >= 7 ? $currentYear : ($currentYear - 1);
+        $seasonYear = (null !== $seasonParam && ctype_digit($seasonParam)) ? (int) $seasonParam : $defaultSeasonYear;
+        $seasonStart = new DateTimeImmutable("{$seasonYear}-07-01");
+        $seasonEnd = new DateTimeImmutable(($seasonYear + 1) . '-06-30 23:59:59');
+        // Available seasons: 2021/22 – current (capped at current)
+        $availableSeasons = [];
+        for ($y = 2021; $y <= $defaultSeasonYear; ++$y) {
+            $availableSeasons[] = $y;
+        }
+
+        $upcomingGamesQb = $gameRepository->createQueryBuilder('g')
             ->addSelect('ce', 'cet', 'ht', 'at', 'l', 'wd')
             ->leftJoin('g.calendarEvent', 'ce')
             ->leftJoin('ce.calendarEventType', 'cet')
@@ -247,13 +393,22 @@ class GamesController extends ApiController
             ->where('cet.name = :spiel')
             ->andWhere('ce.startDate > :now')
             ->andWhere('ce.endDate > :now OR ce.endDate IS NULL')
+            ->andWhere('ce.startDate >= :seasonStart AND ce.startDate <= :seasonEnd')
             ->setParameter('spiel', 'Spiel')
             ->setParameter('now', $now)
-            ->orderBy('ce.startDate', 'ASC')
-            ->getQuery()
-            ->getResult();
+            ->setParameter('seasonStart', $seasonStart)
+            ->setParameter('seasonEnd', $seasonEnd)
+            ->orderBy('ce.startDate', 'ASC');
 
-        $otherGames = $gameRepository->createQueryBuilder('g')
+        if (null !== $filterTeamId) {
+            $upcomingGamesQb
+                ->andWhere('ht.id = :filterTeamId OR at.id = :filterTeamId')
+                ->setParameter('filterTeamId', $filterTeamId);
+        }
+
+        $upcomingGames = $upcomingGamesQb->getQuery()->getResult();
+
+        $otherGamesQb = $gameRepository->createQueryBuilder('g')
             ->addSelect('ce', 'cet', 'ht', 'at', 'l', 'wd')
             ->leftJoin('g.calendarEvent', 'ce')
             ->leftJoin('ce.calendarEventType', 'cet')
@@ -263,11 +418,20 @@ class GamesController extends ApiController
             ->leftJoin('ce.weatherData', 'wd')
             ->where('cet.name = :spiel')
             ->andWhere('ce.startDate <= :now')
+            ->andWhere('ce.startDate >= :seasonStart AND ce.startDate <= :seasonEnd')
             ->setParameter('spiel', 'Spiel')
             ->setParameter('now', $now)
-            ->orderBy('ce.startDate', 'DESC')
-            ->getQuery()
-            ->getResult();
+            ->setParameter('seasonStart', $seasonStart)
+            ->setParameter('seasonEnd', $seasonEnd)
+            ->orderBy('ce.startDate', 'DESC');
+
+        if (null !== $filterTeamId) {
+            $otherGamesQb
+                ->andWhere('ht.id = :filterTeamId OR at.id = :filterTeamId')
+                ->setParameter('filterTeamId', $filterTeamId);
+        }
+
+        $otherGames = $otherGamesQb->getQuery()->getResult();
 
         $running = [];
         $finished = [];
@@ -395,28 +559,34 @@ class GamesController extends ApiController
             ];
         };
 
-        $tournamentsArr = array_map($serializeTournament, $tournaments);
+        $tournamentsArr = array_values(array_filter(
+            array_map($serializeTournament, $tournaments),
+            function (array $t) use ($filterTeamId): bool {
+                if (null === $filterTeamId) {
+                    return true;
+                }
 
-        // ---- Resolve user team IDs ----
+                return in_array($filterTeamId, $t['teamIds'], true);
+            }
+        ));
+
+        // ---- Resolve user team IDs (only currently active assignments) ----
         $userTeamIds = [];
-        /** @var User|null $currentUser */
-        $currentUser = $this->getUser();
         if ($currentUser instanceof User) {
-            foreach ($currentUser->getUserRelations() as $rel) {
-                if ($rel->getPlayer() instanceof Player) {
-                    foreach ($rel->getPlayer()->getPlayerTeamAssignments() as $assignment) {
-                        $teamId = $assignment->getTeam()->getId();
-                        $userTeamIds[$teamId] = $teamId;
-                    }
-                }
-                if ($rel->getCoach() instanceof \App\Entity\Coach) {
-                    foreach ($rel->getCoach()->getCoachTeamAssignments() as $assignment) {
-                        $teamId = $assignment->getTeam()->getId();
-                        $userTeamIds[$teamId] = $teamId;
-                    }
-                }
+            foreach ($this->coachTeamPlayerService->collectPlayerTeams($currentUser) as $team) {
+                $userTeamIds[$team->getId()] = $team->getId();
+            }
+            foreach ($this->coachTeamPlayerService->collectCoachTeams($currentUser) as $team) {
+                $userTeamIds[$team->getId()] = $team->getId();
             }
         }
+
+        // ---- All teams for dropdown (independent of game filter) ----
+        $allTeams = $teamRepository->createQueryBuilder('t')
+            ->select('t.id', 't.name')
+            ->orderBy('t.name', 'ASC')
+            ->getQuery()
+            ->getResult();
 
         return $this->json([
             'running_games' => $running,
@@ -424,6 +594,150 @@ class GamesController extends ApiController
             'finished_games' => $finished,
             'tournaments' => $tournamentsArr,
             'userTeamIds' => array_values($userTeamIds),
+            'userDefaultTeamId' => $userDefaultTeamId,
+            'noTeamAssignment' => $noTeamAssignment,
+            'availableTeams' => $allTeams,
+            'availableSeasons' => $availableSeasons,
+            'selectedSeason' => $seasonYear,
+        ]);
+    }
+
+    /**
+     * Returns confirmed squad players and all active team players for a game.
+     *
+     * squad      – players with attending/late participation (self_player relation only)
+     * allPlayers – all players with an active assignment to the game's teams
+     *
+     * Parents, siblings etc. are excluded from squad via the relationType identifier.
+     */
+    #[Route('/{id}/squad', name: 'squad', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function squad(
+        Game $game,
+        ParticipationRepository $participationRepo,
+    ): JsonResponse {
+        if (!$this->isGranted(GameVoter::VIEW, $game)) {
+            return $this->json(['error' => 'Zugriff verweigert'], 403);
+        }
+
+        $calendarEvent = $game->getCalendarEvent();
+        if (!$calendarEvent) {
+            return $this->json(['squad' => [], 'allPlayers' => [], 'hasParticipationData' => false]);
+        }
+
+        $teamIds = [];
+        if ($game->getHomeTeam()) {
+            $teamIds[] = $game->getHomeTeam()->getId();
+        }
+        if ($game->getAwayTeam()) {
+            $teamIds[] = $game->getAwayTeam()->getId();
+        }
+
+        if (empty($teamIds)) {
+            return $this->json(['squad' => [], 'allPlayers' => [], 'hasParticipationData' => false]);
+        }
+
+        // ── All active team players ────────────────────────────────────────────
+        $allPlayersRows = $this->entityManager->createQuery(
+            'SELECT p.id, p.firstName, p.lastName, pta.shirtNumber, IDENTITY(pta.team) as teamId
+            FROM App\Entity\Player p
+            INNER JOIN p.playerTeamAssignments pta
+            WHERE IDENTITY(pta.team) IN (:teamIds)
+              AND (pta.endDate IS NULL OR pta.endDate >= :today)
+            ORDER BY pta.shirtNumber ASC'
+        )
+            ->setParameter('teamIds', $teamIds)
+            ->setParameter('today', new DateTime('today'))
+            ->getArrayResult();
+
+        $seenAll = [];
+        $allPlayers = [];
+        foreach ($allPlayersRows as $row) {
+            $key = $row['id'] . '_' . $row['teamId'];
+            if (isset($seenAll[$key])) {
+                continue;
+            }
+            $seenAll[$key] = true;
+            $allPlayers[] = [
+                'id' => $row['id'],
+                'fullName' => $row['firstName'] . ' ' . $row['lastName'],
+                'shirtNumber' => $row['shirtNumber'],
+                'teamId' => (int) $row['teamId'],
+            ];
+        }
+
+        $playerSortFn = static function (array $a, array $b): int {
+            if ($a['shirtNumber'] === $b['shirtNumber']) {
+                return strcmp((string) $a['fullName'], (string) $b['fullName']);
+            }
+            if (null === $a['shirtNumber']) {
+                return 1;
+            }
+            if (null === $b['shirtNumber']) {
+                return -1;
+            }
+
+            return (int) $a['shirtNumber'] <=> (int) $b['shirtNumber'];
+        };
+
+        usort($allPlayers, $playerSortFn);
+
+        // ── Confirmed squad (attending / late) ────────────────────────────────
+        $participations = $participationRepo->findByEvent($calendarEvent);
+        $hasParticipationData = count($participations) > 0;
+
+        $confirmedUserIds = [];
+        foreach ($participations as $participation) {
+            $code = $participation->getStatus()->getCode();
+            if (in_array($code, ['attending', 'late'], true)) {
+                $confirmedUserIds[] = $participation->getUser()->getId();
+            }
+        }
+
+        $squad = [];
+        if (!empty($confirmedUserIds)) {
+            // Query players linked via self_player UserRelation to the confirmed users,
+            // restricted to active assignments in the game's home/away teams.
+            // Parents/guardians are excluded because they have a different relationType identifier.
+            $rows = $this->entityManager->createQuery(
+                'SELECT p.id, p.firstName, p.lastName, pta.shirtNumber, IDENTITY(pta.team) as teamId
+                FROM App\Entity\Player p
+                INNER JOIN p.userRelations ur
+                INNER JOIN ur.relationType rt
+                INNER JOIN p.playerTeamAssignments pta
+                WHERE IDENTITY(ur.user) IN (:userIds)
+                  AND rt.identifier = :relationType
+                  AND IDENTITY(pta.team) IN (:teamIds)
+                  AND (pta.endDate IS NULL OR pta.endDate >= :today)
+                ORDER BY pta.shirtNumber ASC'
+            )
+                ->setParameter('userIds', $confirmedUserIds)
+                ->setParameter('relationType', 'self_player')
+                ->setParameter('teamIds', $teamIds)
+                ->setParameter('today', new DateTime('today'))
+                ->getArrayResult();
+
+            $seen = [];
+            foreach ($rows as $row) {
+                $key = $row['id'] . '_' . $row['teamId'];
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $squad[] = [
+                    'id' => $row['id'],
+                    'fullName' => $row['firstName'] . ' ' . $row['lastName'],
+                    'shirtNumber' => $row['shirtNumber'],
+                    'teamId' => (int) $row['teamId'],
+                ];
+            }
+
+            usort($squad, $playerSortFn);
+        }
+
+        return $this->json([
+            'squad' => $squad,
+            'allPlayers' => $allPlayers,
+            'hasParticipationData' => $hasParticipationData,
         ]);
     }
 

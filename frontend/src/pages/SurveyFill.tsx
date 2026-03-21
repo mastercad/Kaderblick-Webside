@@ -68,7 +68,7 @@ const SurveyFill: React.FC = () => {
   if (!survey) return null;
 
   return (
-    <Box minHeight="100vh" bgcolor={theme.palette.background.default}>
+    <Box minHeight="100dvh" bgcolor={theme.palette.background.default}>
       <AppBar position="static" color="primary" elevation={1}>
         <Toolbar>
           <Box component="img" src={KaderblickLogo} alt="Kaderblick" height={40} sx={{ mr: 2 }} />

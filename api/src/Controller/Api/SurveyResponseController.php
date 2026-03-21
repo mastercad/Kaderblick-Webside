@@ -3,11 +3,14 @@
 namespace App\Controller\Api;
 
 use App\Entity\SurveyResponse;
+use App\Entity\User;
+use App\Event\SurveyCompletedEvent;
 use App\Repository\SurveyRepository;
 use App\Repository\SurveyResponseRepository;
 use App\Security\Voter\SurveyResponseVoter;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
@@ -15,6 +18,10 @@ use Symfony\Component\Routing\Annotation\Route;
 #[Route('/api/survey-responses', name: 'api_survey_responses_')]
 class SurveyResponseController extends AbstractController
 {
+    public function __construct(private EventDispatcherInterface $dispatcher)
+    {
+    }
+
     #[Route('', name: 'list', methods: ['GET'])]
     public function list(SurveyResponseRepository $repo): JsonResponse
     {
@@ -89,6 +96,12 @@ class SurveyResponseController extends AbstractController
         $response->setAnswers($data['answers']);
         $em->persist($response);
         $em->flush();
+
+        /** @var User|null $currentUser */
+        $currentUser = $this->getUser();
+        if ($currentUser instanceof User) {
+            $this->dispatcher->dispatch(new SurveyCompletedEvent($currentUser, $survey));
+        }
 
         return $this->json(['id' => $response->getId()], 201);
     }

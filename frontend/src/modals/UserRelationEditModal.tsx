@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { useToast } from '../context/ToastContext';
 import {
-	Button, Box, Typography, Card, CardHeader, CardContent, IconButton, TextField, MenuItem, Checkbox, ListItemText
+	Button, Box, Typography, IconButton, TextField, MenuItem,
+	Checkbox, FormControlLabel, FormGroup, Divider, Chip,
+	CircularProgress, Alert, Paper, Stack,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
+import SportsIcon from '@mui/icons-material/Sports';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import { apiJson } from '../utils/api';
+import { useToast } from '../context/ToastContext';
 import BaseModal from './BaseModal';
 
 // Typdefinitionen
@@ -15,8 +20,8 @@ export type RelationType = {
 	name: string;
 	category: 'player' | 'coach';
 };
-export type Player = { id: number; fullName: string };
-export type Coach = { id: number; fullName: string };
+export type Player = { id: number; fullName: string; teams?: string[] };
+export type Coach = { id: number; fullName: string; teams?: string[] };
 export type Relation = {
 	id?: string;
 	relationType: RelationType | null;
@@ -26,65 +31,86 @@ export type Relation = {
 export type UserRelationEditModalProps = {
 	open: boolean;
 	onClose: () => void;
+	onSaved?: () => void;
 	user: { id: number; fullName: string };
 };
 
-const UserRelationEditModal: React.FC<UserRelationEditModalProps> = ({ open, onClose, user }) => {
-    // Sofortiger Schutz: Wenn user nicht gesetzt, gar nichts rendern und keine Logik ausführen
-    if (!user || typeof user.id === 'undefined') {
-        return null;
-    }
+/** Technische Berechtigungsnamen in lesbares Deutsch übersetzen */
+function formatPermission(perm: string): string {
+	const map: Record<string, string> = {
+		view: 'Ansehen',
+		edit: 'Bearbeiten',
+		delete: 'Löschen',
+		create: 'Erstellen',
+		manage: 'Verwalten',
+		view_stats: 'Statistiken ansehen',
+		view_health: 'Gesundheitsdaten ansehen',
+		edit_profile: 'Profil bearbeiten',
+		view_profile: 'Profil ansehen',
+		view_training: 'Training ansehen',
+		manage_training: 'Training verwalten',
+		view_games: 'Spiele ansehen',
+		manage_games: 'Spiele verwalten',
+		view_documents: 'Dokumente ansehen',
+		manage_documents: 'Dokumente verwalten',
+		view_attendance: 'Anwesenheit ansehen',
+		manage_attendance: 'Anwesenheit verwalten',
+		send_message: 'Nachricht senden',
+		view_finances: 'Finanzen ansehen',
+	};
+	return map[perm] ?? perm.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
-    const [playerRelations, setPlayerRelations] = useState<Relation[]>([]);
-    const [coachRelations, setCoachRelations] = useState<Relation[]>([]);
-    const [relationTypes, setRelationTypes] = useState<RelationType[]>([]);
-    const [players, setPlayers] = useState<Player[]>([]);
-    const [coaches, setCoaches] = useState<Coach[]>([]);
-    const [allPermissions, setAllPermissions] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+const UserRelationEditModal: React.FC<UserRelationEditModalProps> = ({ open, onClose, onSaved, user }) => {
+	if (!user || typeof user.id === 'undefined') {
+		return null;
+	}
 
-    const { showToast } = useToast();
+	const [playerRelations, setPlayerRelations] = useState<Relation[]>([]);
+	const [coachRelations, setCoachRelations] = useState<Relation[]>([]);
+	const [relationTypes, setRelationTypes] = useState<RelationType[]>([]);
+	const [players, setPlayers] = useState<Player[]>([]);
+	const [coaches, setCoaches] = useState<Coach[]>([]);
+	const [allPermissions, setAllPermissions] = useState<string[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (!open) return;
-        setLoading(true);
-        apiJson(`/admin/users/${user.id}/assign`).then((data) => {
-            // relationTypes ist im Backend nach Kategorie gruppiert, wir brauchen ein flaches Array
-            const flatRelationTypes = Object.values(data.relationTypes || {}).flat() as RelationType[];
-            setRelationTypes(flatRelationTypes);
-            setPlayers(data.players || []);
-            setCoaches(data.coaches || []);
-            setAllPermissions((data.permissions || []).map((p: any) => p.name || p));
-            // currentAssignments: { players: [...], coaches: [...] }
-            setPlayerRelations((data.currentAssignments?.players || []).map((a: any) => ({
-                relationType: a.relationType,
-                entity: a.entity,
-                permissions: a.permissions || []
-            })));
-            setCoachRelations((data.currentAssignments?.coaches || []).map((a: any) => ({
-                relationType: a.relationType,
-                entity: a.entity,
-                permissions: a.permissions || []
-            })));
-        }).finally(() => setLoading(false));
-    }, [open, user.id]);
+	const { showToast } = useToast();
+
+	useEffect(() => {
+		if (!open) return;
+		setLoading(true);
+		apiJson(`/admin/users/${user.id}/assign`).then((data) => {
+			const flatRelationTypes = Object.values(data.relationTypes || {}).flat() as RelationType[];
+			setRelationTypes(flatRelationTypes);
+			setPlayers(data.players || []);
+			setCoaches(data.coaches || []);
+			setAllPermissions((data.permissions || []).map((p: any) => p.name || p));
+			setPlayerRelations((data.currentAssignments?.players || []).map((a: any) => ({
+				relationType: a.relationType,
+				entity: a.entity,
+				permissions: a.permissions || [],
+			})));
+			setCoachRelations((data.currentAssignments?.coaches || []).map((a: any) => ({
+				relationType: a.relationType,
+				entity: a.entity,
+				permissions: a.permissions || [],
+			})));
+		}).finally(() => setLoading(false));
+	}, [open, user.id]);
 
 	const handleAdd = (category: 'player' | 'coach') => {
-        let rel: Relation;
-        if (category === 'player') {
-            const firstType = relationTypes.find(rt => rt.category === 'player') || null;
-            rel = { relationType: firstType, entity: null, permissions: [] };
-            setPlayerRelations(prev => [...prev, rel]);
-        } else {
-            const firstType = relationTypes.find(rt => rt.category === 'coach') || null;
-            rel = { relationType: firstType, entity: null, permissions: [] };
-            setCoachRelations(prev => [...prev, rel]);
-        }
+		const firstType = relationTypes.find(rt => rt.category === category) || null;
+		const rel: Relation = { relationType: firstType, entity: null, permissions: [] };
+		if (category === 'player') setPlayerRelations(prev => [...prev, rel]);
+		else setCoachRelations(prev => [...prev, rel]);
 	};
+
 	const handleRemove = (category: 'player' | 'coach', idx: number) => {
 		if (category === 'player') setPlayerRelations(prev => prev.filter((_, i) => i !== idx));
 		else setCoachRelations(prev => prev.filter((_, i) => i !== idx));
 	};
+
 	const handleChange = (category: 'player' | 'coach', idx: number, field: keyof Relation, value: any) => {
 		const setter = category === 'player' ? setPlayerRelations : setCoachRelations;
 		const rels = category === 'player' ? [...playerRelations] : [...coachRelations];
@@ -93,153 +119,298 @@ const UserRelationEditModal: React.FC<UserRelationEditModalProps> = ({ open, onC
 		setter(rels);
 	};
 
-    const handleSave = async () => {
-        // Speichern-Logik (API-Aufruf)
-        const allRelations = [
-            ...playerRelations.map(r => ({ ...r, player: r.entity, coach: null })),
-            ...coachRelations.map(r => ({ ...r, coach: r.entity, player: null })),
-        ];
-        try {
-            const res = await apiJson(`/admin/users/${user.id}/assign`, {
-                method: 'POST',
-                body: { relations: allRelations },
-                headers: { 'Content-Type': 'application/json' },
-            });
-            if (res && res.status === 'success') {
-                showToast(res.message || 'Zuordnungen erfolgreich gespeichert.', 'success');
-            } else {
-                showToast(res?.message || 'Fehler beim Speichern der Zuordnungen.', 'error');
-            }
-        } catch (e: any) {
-            showToast(e?.message || 'Fehler beim Speichern der Zuordnungen.', 'error');
-        }
-        onClose();
-    };
+	const togglePermission = (category: 'player' | 'coach', idx: number, perm: string) => {
+		const rels = category === 'player' ? [...playerRelations] : [...coachRelations];
+		const current = rels[idx].permissions;
+		rels[idx] = {
+			...rels[idx],
+			permissions: current.includes(perm)
+				? current.filter(p => p !== perm)
+				: [...current, perm],
+		};
+		if (category === 'player') setPlayerRelations(rels);
+		else setCoachRelations(rels);
+	};
 
-    if (!user || !user.id) {
-        return null;
-    }
+	const handleSave = async () => {
+		setSaving(true);
+		const allRelations = [
+			...playerRelations.map(r => ({ ...r, player: r.entity, coach: null })),
+			...coachRelations.map(r => ({ ...r, coach: r.entity, player: null })),
+		];
+		try {
+			const res = await apiJson(`/admin/users/${user.id}/assign`, {
+				method: 'POST',
+				body: { relations: allRelations },
+				headers: { 'Content-Type': 'application/json' },
+			});
+			if (res && res.status === 'success') {
+				showToast(res.message || 'Zuordnungen erfolgreich gespeichert.', 'success');
+				onSaved?.();
+				onClose();
+			} else {
+				showToast(res?.message || 'Fehler beim Speichern der Zuordnungen.', 'error');
+			}
+		} catch (e: any) {
+			showToast(e?.message || 'Fehler beim Speichern. Bitte versuche es nochmal.', 'error');
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	/** Eine einzelne Zuordnungs-Karte */
+	const RelationCard = ({
+		category,
+		rel,
+		idx,
+	}: {
+		category: 'player' | 'coach';
+		rel: Relation;
+		idx: number;
+	}) => {
+		const isPlayer = category === 'player';
+		const typeOptions = relationTypes.filter(rt => rt.category === category);
+		const entityOptions = isPlayer ? players : coaches;
+		const entityLabel = isPlayer ? 'Spieler auswählen' : 'Trainer auswählen';
+
+		return (
+			<Paper
+				variant="outlined"
+				sx={{
+					p: 2,
+					mb: 2,
+					borderRadius: 3,
+					borderColor: isPlayer ? 'primary.light' : 'secondary.light',
+					bgcolor: isPlayer ? 'primary.50' : 'secondary.50',
+					position: 'relative',
+				}}
+			>
+				{/* Löschen-Button */}
+				<IconButton
+					size="small"
+					color="error"
+					onClick={() => handleRemove(category, idx)}
+					aria-label="Zuordnung entfernen"
+					sx={{ position: 'absolute', top: 8, right: 8 }}
+				>
+					<DeleteOutlineIcon fontSize="small" />
+				</IconButton>
+
+				<Stack spacing={2} sx={{ pr: 4 }}>
+					{/* Verhältnis / Rolle */}
+					<TextField
+						select
+						fullWidth
+						label={isPlayer ? '👨‍👩‍👧 Meine Rolle zu diesem Spieler' : '👋 Meine Rolle zu diesem Trainer'}
+						value={rel.relationType?.id ?? ''}
+						onChange={e =>
+							handleChange(category, idx, 'relationType', typeOptions.find(rt => rt.id === +e.target.value) || null)
+						}
+					>
+						{typeOptions.map(rt => (
+							<MenuItem key={rt.id} value={rt.id}>{rt.name}</MenuItem>
+						))}
+					</TextField>
+
+					{/* Person */}
+					<TextField
+						select
+						fullWidth
+						label={entityLabel}
+						value={rel.entity?.id ?? ''}
+						onChange={e =>
+							handleChange(
+								category,
+								idx,
+								'entity',
+								(isPlayer ? players : coaches).find(p => p.id === +e.target.value) || null,
+							)
+						}
+						disabled={!rel.relationType}
+						helperText={!rel.relationType ? 'Bitte zuerst die Rolle auswählen' : undefined}
+					>
+						{entityOptions.map(p => (
+							<MenuItem key={p.id} value={p.id}>
+								<Box sx={{ lineHeight: 1.3 }}>
+									<div>{p.fullName}</div>
+									{p.teams && p.teams.length > 0 && (
+										<Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+											{p.teams.join(' · ')}
+										</Box>
+									)}
+								</Box>
+							</MenuItem>
+						))}
+					</TextField>
+
+					{/* Berechtigungen */}
+					{allPermissions.length > 0 && (
+						<Box>
+							<Typography variant="body2" fontWeight={600} gutterBottom sx={{ color: 'text.secondary' }}>
+								Was darf {rel.entity ? rel.entity.fullName : 'diese Person'} sehen?
+							</Typography>
+							<FormGroup>
+								<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+									{allPermissions.map(perm => (
+										<FormControlLabel
+											key={perm}
+											control={
+												<Checkbox
+													checked={rel.permissions.includes(perm)}
+													onChange={() => togglePermission(category, idx, perm)}
+													size="small"
+												/>
+											}
+											label={
+												<Typography variant="body2">
+													{formatPermission(perm)}
+												</Typography>
+											}
+											sx={{ mr: 1, mb: 0.5 }}
+										/>
+									))}
+								</Box>
+							</FormGroup>
+						</Box>
+					)}
+				</Stack>
+			</Paper>
+		);
+	};
+
+	/** Abschnitt mit Karten + Hinzufügen-Button */
+	const RelationSection = ({
+		category,
+		icon,
+		title,
+		subtitle,
+		relations,
+		emptyText,
+	}: {
+		category: 'player' | 'coach';
+		icon: React.ReactNode;
+		title: string;
+		subtitle: string;
+		relations: Relation[];
+		emptyText: string;
+	}) => (
+		<Box sx={{ mb: 3 }}>
+			{/* Abschnitts-Header */}
+			<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+				{icon}
+				<Box>
+					<Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+					<Typography variant="caption" color="text.secondary">{subtitle}</Typography>
+				</Box>
+				{relations.length > 0 && (
+					<Chip label={relations.length} size="small" sx={{ ml: 'auto' }} />
+				)}
+			</Box>
+			<Divider sx={{ mb: 2 }} />
+
+			{/* Karten */}
+			{relations.length === 0 ? (
+				<Alert severity="info" sx={{ borderRadius: 3, mb: 2 }}>
+					{emptyText}
+				</Alert>
+			) : (
+				relations.map((rel, idx) => (
+					<RelationCard key={idx} category={category} rel={rel} idx={idx} />
+				))
+			)}
+
+			{/* Hinzufügen */}
+			<Button
+				variant="outlined"
+				startIcon={<AddIcon />}
+				onClick={() => handleAdd(category)}
+				fullWidth
+				sx={{ borderRadius: 3, borderStyle: 'dashed', py: 1.2 }}
+			>
+				{category === 'player' ? 'Spieler-Zuordnung hinzufügen' : 'Trainer-Zuordnung hinzufügen'}
+			</Button>
+		</Box>
+	);
 
 	return (
 		<BaseModal
 			open={open}
 			onClose={onClose}
-			maxWidth="md"
-			title={`Benutzer zuordnen: ${user.fullName}`}
+			maxWidth="sm"
+			title={
+				<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+					<PersonAddAlt1Icon color="primary" />
+					<Box>
+						<Typography variant="h6" fontWeight={700} lineHeight={1.2}>
+							Zuordnungen verwalten
+						</Typography>
+						<Typography variant="caption" color="text.secondary">
+							{user.fullName}
+						</Typography>
+					</Box>
+				</Box>
+			}
 			actions={
-				<>
-					<Button variant="outlined" color="secondary" onClick={onClose}>Abbrechen</Button>
-					<Button variant="contained" color="primary" onClick={handleSave} disabled={loading}>Speichern</Button>
-				</>
+				<Stack direction="row" spacing={1.5} sx={{ width: '100%', px: 0.5, pb: 0.5 }}>
+					<Button
+						variant="outlined"
+						color="inherit"
+						onClick={onClose}
+						fullWidth
+						sx={{ borderRadius: 3 }}
+						disabled={saving}
+					>
+						Abbrechen
+					</Button>
+					<Button
+						variant="contained"
+						color="primary"
+						onClick={handleSave}
+						fullWidth
+						disabled={loading || saving}
+						startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
+						sx={{ borderRadius: 3 }}
+					>
+						{saving ? 'Wird gespeichert…' : 'Speichern'}
+					</Button>
+				</Stack>
 			}
 		>
-			{loading ? <Typography>Lade...</Typography> : (
-				<>
-					{/* Spielerzuordnungen */}
-					<Card sx={{ mb: 3 }}>
-						<CardHeader title="Spielerzuordnungen" action={<Button onClick={() => handleAdd('player')} startIcon={<AddIcon />}>Hinzufügen</Button>} />
-						<CardContent>
-                                {Array.isArray(playerRelations) && playerRelations.filter(rel => rel && rel.relationType && typeof rel.relationType.id !== 'undefined').map((rel, idx) => (
-                                    <Box key={idx} display="flex" gap={2} alignItems="center" mb={1}>
-                                        <TextField
-                                            select
-                                            label="Beziehungstyp"
-                                            value={rel.relationType?.id}
-                                            onChange={e => handleChange('player', idx, 'relationType', relationTypes.find(rt => rt.id === +e.target.value) || null)}
-                                            sx={{ minWidth: 180 }}
-                                            size="small"
-                                        >
-                                            {relationTypes.filter(rt => rt.category === 'player').map(rt => (
-                                                <MenuItem key={rt.id} value={rt.id}>{rt.name}</MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <TextField
-                                            select
-                                            label="Spieler"
-                                            value={rel.entity && rel.entity.id ? rel.entity.id : ''}
-                                            onChange={e => handleChange('player', idx, 'entity', players.find(p => p.id === +e.target.value) || null)}
-                                            sx={{ minWidth: 180 }}
-                                            size="small"
-                                            disabled={!rel.relationType}
-                                        >
-                                            {players.map(p => (
-                                                <MenuItem key={p.id} value={p.id}>{p.fullName}</MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <TextField
-                                            select
-                                            label="Berechtigungen"
-                                            SelectProps={{ multiple: true, renderValue: (selected: any) => (selected as string[]).join(', ') }}
-                                            value={rel.permissions}
-                                            onChange={e => handleChange('player', idx, 'permissions', e.target.value)}
-                                            sx={{ minWidth: 200 }}
-                                            size="small"
-                                        >
-                                            {allPermissions.map(perm => (
-                                                <MenuItem key={perm} value={perm}>
-                                                    <Checkbox checked={rel.permissions.includes(perm)} />
-                                                    <ListItemText primary={perm} />
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <IconButton color="error" onClick={() => handleRemove('player', idx)}><DeleteIcon /></IconButton>
-                                    </Box>
-                                ))}
-						</CardContent>
-					</Card>
-					{/* Trainerzuordnungen */}
-					<Card sx={{ mb: 3 }}>
-						<CardHeader title="Trainerzuordnungen" action={<Button onClick={() => handleAdd('coach')} startIcon={<AddIcon />}>Hinzufügen</Button>} />
-						<CardContent>
-                                {Array.isArray(coachRelations) && coachRelations.filter(rel => rel && rel.relationType && typeof rel.relationType.id !== 'undefined').map((rel, idx) => (
-                                    <Box key={idx} display="flex" gap={2} alignItems="center" mb={1}>
-                                        <TextField
-                                            select
-                                            label="Beziehungstyp"
-                                            value={rel.relationType!.id}
-                                            onChange={e => handleChange('coach', idx, 'relationType', relationTypes.find(rt => rt.id === +e.target.value) || null)}
-                                            sx={{ minWidth: 180 }}
-                                            size="small"
-                                        >
-                                            {relationTypes.filter(rt => rt.category === 'coach').map(rt => (
-                                                <MenuItem key={rt.id} value={rt.id}>{rt.name}</MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <TextField
-                                            select
-                                            label="Trainer"
-                                            value={rel.entity && rel.entity.id ? rel.entity.id : ''}
-                                            onChange={e => handleChange('coach', idx, 'entity', coaches.find(c => c.id === +e.target.value) || null)}
-                                            sx={{ minWidth: 180 }}
-                                            size="small"
-                                            disabled={!rel.relationType}
-                                        >
-                                            {coaches.map(c => (
-                                                <MenuItem key={c.id} value={c.id}>{c.fullName}</MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <TextField
-                                            select
-                                            label="Berechtigungen"
-                                            SelectProps={{ multiple: true, renderValue: (selected: any) => (selected as string[]).join(', ') }}
-                                            value={rel.permissions}
-                                            onChange={e => handleChange('coach', idx, 'permissions', e.target.value)}
-                                            sx={{ minWidth: 200 }}
-                                            size="small"
-                                        >
-                                            {allPermissions.map(perm => (
-                                                <MenuItem key={perm} value={perm}>
-                                                    <Checkbox checked={rel.permissions.includes(perm)} />
-                                                    <ListItemText primary={perm} />
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
-                                        <IconButton color="error" onClick={() => handleRemove('coach', idx)}><DeleteIcon /></IconButton>
-                                    </Box>
-                                ))}
-						</CardContent>
-					</Card>
-				</>
+			{loading ? (
+				<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6, gap: 2 }}>
+					<CircularProgress size={28} />
+					<Typography color="text.secondary">Daten werden geladen…</Typography>
+				</Box>
+			) : (
+				<Box sx={{ pt: 1 }}>
+					{/* Kurze Erklärung */}
+					<Alert severity="info" icon={false} sx={{ mb: 3, borderRadius: 3 }}>
+						<Typography variant="body2">
+							Hier kannst du festlegen, welche Spieler oder Trainer diesem Benutzer zugeordnet sind –
+							und was er dabei sehen oder bearbeiten darf.
+						</Typography>
+					</Alert>
+
+					{/* Spieler-Abschnitt */}
+					<RelationSection
+						category="player"
+						icon={<SportsSoccerIcon color="primary" />}
+						title="Spieler"
+						subtitle="z.B. eigene Kinder im Team"
+						relations={playerRelations}
+						emptyText="Noch kein Spieler zugeordnet. Tippe auf den Button unten, um einen hinzuzufügen."
+					/>
+
+					{/* Trainer-Abschnitt */}
+					<RelationSection
+						category="coach"
+						icon={<SportsIcon color="secondary" />}
+						title="Trainer"
+						subtitle="z.B. Trainer meines Kindes"
+						relations={coachRelations}
+						emptyText="Noch kein Trainer zugeordnet. Tippe auf den Button unten, um einen hinzuzufügen."
+					/>
+				</Box>
 			)}
 		</BaseModal>
 	);
