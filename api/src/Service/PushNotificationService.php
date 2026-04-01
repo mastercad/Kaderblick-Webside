@@ -135,12 +135,10 @@ class PushNotificationService
 
             ++$failed;
 
-            if (!$report->isSuccess()) {
-                if ($report->isSubscriptionExpired()) {
-                    if (isset($endpointMap[$endpoint])) {
-                        $this->logger->info('Removing expired push subscription', ['endpoint' => $endpoint, 'user_id' => $user->getId()]);
-                        $this->em->remove($endpointMap[$endpoint]);
-                    }
+            if ($report->isSubscriptionExpired()) {
+                if (isset($endpointMap[$endpoint])) {
+                    $this->logger->info('Removing expired push subscription', ['endpoint' => $endpoint, 'user_id' => $user->getId()]);
+                    $this->em->remove($endpointMap[$endpoint]);
                 }
             }
         }
