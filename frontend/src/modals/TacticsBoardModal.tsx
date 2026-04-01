@@ -47,6 +47,7 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
 
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [showStepNumbers, setShowStepNumbers] = useState(false);
+  const [tacticToDeleteId, setTacticToDeleteId] = useState<string | null>(null);
 
   // ── Opponent edit form state ──────────────────────────────────────────────
   const [oppEditForm, setOppEditForm] = useState({ number: '', name: '' });
@@ -82,6 +83,24 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
     await board.handleSave();
     onClose();
   }, [board, onClose]);
+
+  const tacticToDelete = tacticToDeleteId
+    ? board.tactics.find(tactic => tactic.id === tacticToDeleteId) ?? null
+    : null;
+
+  const handleDeleteRequest = useCallback((id: string) => {
+    setTacticToDeleteId(id);
+  }, []);
+
+  const handleConfirmDeleteTactic = useCallback(() => {
+    if (!tacticToDeleteId) return;
+    board.handleDeleteTactic(tacticToDeleteId);
+    setTacticToDeleteId(null);
+  }, [board, tacticToDeleteId]);
+
+  const handleCancelDeleteTactic = useCallback(() => {
+    setTacticToDeleteId(null);
+  }, []);
 
   return (
     <>
@@ -241,7 +260,7 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
           renameValue={board.renameValue}
           onSelect={board.setActiveTacticId}
           onNew={board.handleNewTactic}
-          onDelete={board.handleDeleteTactic}
+          onDelete={handleDeleteRequest}
           onStartRename={(id, name) => { board.setRenamingId(id); board.setRenameValue(name); }}
           onRenameChange={board.setRenameValue}
           onConfirmRename={board.confirmRename}
@@ -411,6 +430,47 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
           sx={{ textTransform: 'none', bgcolor: '#1d4ed8', '&:hover': { bgcolor: '#1e40af' } }}
         >
           Speichern & Schließen
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    <Dialog
+      open={Boolean(tacticToDelete)}
+      onClose={handleCancelDeleteTactic}
+      container={getDialogContainer}
+      PaperProps={{
+        sx: {
+          bgcolor: '#1f2937',
+          color: '#e5e7eb',
+          borderRadius: 2,
+          border: '1px solid #374151',
+          minWidth: 340,
+        },
+      }}
+    >
+      <DialogTitle sx={{ color: '#f9fafb', fontWeight: 700, pb: 1 }}>
+        Taktik löschen?
+      </DialogTitle>
+      <DialogContent sx={{ pt: 0 }}>
+        <DialogContentText sx={{ color: '#9ca3af' }}>
+          Soll die Taktik &quot;{tacticToDelete?.name ?? 'Diese Taktik'}&quot; wirklich gelöscht werden?
+          Diese Aktion kann nicht rückgängig gemacht werden.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
+        <Button
+          onClick={handleCancelDeleteTactic}
+          sx={{ color: '#9ca3af', textTransform: 'none' }}
+        >
+          Abbrechen
+        </Button>
+        <Button
+          onClick={handleConfirmDeleteTactic}
+          color="error"
+          variant="contained"
+          sx={{ textTransform: 'none', bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' } }}
+        >
+          Löschen
         </Button>
       </DialogActions>
     </Dialog>
