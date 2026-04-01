@@ -68,6 +68,16 @@
   margin-top: 0rem;
 }
 
+.hero-description {
+  margin: 1.5rem 0 0;
+  max-width: 38rem;
+  color: rgba(255, 255, 255, 0.94);
+  font-family: 'Inter', 'Roboto Flex', Arial, sans-serif;
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  line-height: 1.7;
+  text-wrap: balance;
+}
+
 .hero-btn-wrapper {
   margin-top: 3rem;
   width: 100%;
@@ -134,6 +144,10 @@
     align-items: center;
     text-align: center;
   }
+
+  .hero-description {
+    text-align: center;
+  }
 }
 
 @media (max-width: 600px) {
@@ -177,6 +191,11 @@
     align-self: center;
     margin-top: 10rem;
     padding-right: 0;
+  }
+
+  .hero-description {
+    max-width: 100%;
+    font-size: 1rem;
   }
   
   /* Scroll Indikator in Mobile – über dem Footer positionieren */

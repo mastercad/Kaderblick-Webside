@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktuelles von Kaderblick</title>
+    <meta name="description" content="Oeffentliche Plattform-News von Kaderblick mit neuen Funktionen, Produkt-Updates und Ratgeberinhalten fuer Fussballvereine.">
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+    <link rel="canonical" href="{{ absolute_url(path('public_news_index')) }}">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Aktuelles von Kaderblick">
+    <meta property="og:description" content="Oeffentliche Plattform-News von Kaderblick mit neuen Funktionen, Produkt-Updates und Ratgeberinhalten fuer Fussballvereine.">
+    <meta property="og:url" content="{{ absolute_url(path('public_news_index')) }}">
+    <meta property="og:image" content="{{ absolute_url('/images/share_bg.jpg') }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Aktuelles von Kaderblick">
+    <meta name="twitter:description" content="Oeffentliche Plattform-News von Kaderblick mit neuen Funktionen, Produkt-Updates und Ratgeberinhalten fuer Fussballvereine.">
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Inter, system-ui, sans-serif;
+            line-height: 1.6;
+            color: #17301a;
+            background: linear-gradient(180deg, #f5f8f1 0%, #ffffff 48%);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: #17301a; }
+        a { color: #056d13; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+        header { padding: 24px 0 12px; }
+        nav { display: flex; flex-wrap: wrap; gap: 16px; font-weight: 600; }
+        .hero { padding: 56px 0 28px; }
+        .eyebrow { letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.78rem; color: #056d13; font-weight: 700; }
+        h1 { font-size: clamp(2.4rem, 5vw, 4.4rem); line-height: 0.98; margin: 10px 0 18px; }
+        .lead { max-width: 780px; font-size: 1.12rem; color: #4a6050; }
+        .grid { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); padding: 18px 0 72px; }
+        article { background: rgba(255,255,255,0.95); border: 1px solid #d9e4d4; border-radius: 20px; padding: 24px; box-shadow: 0 12px 36px rgba(23, 48, 26, 0.08); }
+        article h2 { margin: 0 0 12px; font-size: 1.38rem; line-height: 1.2; }
+        .meta { font-size: 0.92rem; color: #5d6f61; margin-bottom: 14px; }
+        .intro { color: #405443; margin: 0 0 20px; }
+        .cta { display: inline-flex; padding: 10px 14px; border-radius: 999px; background: #056d13; color: #fff; font-weight: 700; }
+        footer { padding: 24px 0 48px; color: #5d6f61; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    <header class="shell">
+        <nav aria-label="Public navigation">
+            <a href="/">Startseite</a>
+            <a href="/funktionen">Funktionen</a>
+            <a href="/fuer-trainer">Fuer Trainer</a>
+            <a href="/fuer-eltern">Fuer Eltern</a>
+            <a href="/fuer-jugendleitung">Fuer Jugendleitung</a>
+            <a href="/spielanalyse-software">Spielanalyse</a>
+            <a href="/faq">FAQ</a>
+            <a href="/kontakt">Kontakt</a>
+            <a href="/?modal=register">Login / Register</a>
+        </nav>
+    </header>
+
+    <main class="shell">
+        <section class="hero">
+            <p class="eyebrow">Oeffentliche Plattform-News</p>
+            <h1>Aktuelles, Produkt-Updates und neue Inhalte fuer Fussballvereine</h1>
+            <p class="lead">
+                Diese Seite ist der oeffentliche News-Bereich von Kaderblick. Hier erscheinen plattformweite Neuigkeiten, neue SEO-Inhalte und Hinweise fuer Trainer, Eltern, Jugendleitung und Vereinsverantwortliche.
+            </p>
+        </section>
+
+        <section class="grid" aria-label="News list">
+            {% for news in newsEntries %}
+                <article>
+                    <p class="meta">{{ news.createdAt|date('d.m.Y') }} · {{ news.authorName }}</p>
+                    <h2>
+                        <a href="{{ news.url }}">{{ news.title }}</a>
+                    </h2>
+                    <p class="intro">{{ news.excerpt }}</p>
+                    <a class="cta" href="{{ news.url }}">Weiterlesen</a>
+                </article>
+            {% else %}
+                <article>
+                    <h2>Noch keine oeffentlichen Plattform-News</h2>
+                    <p class="intro">Sobald neue plattformweite Beitraege veroeffentlicht werden, erscheinen sie hier automatisch als indexierbare, serverseitig ausgelieferte Seiten.</p>
+                </article>
+            {% endfor %}
+        </section>
+    </main>
+
+    <footer class="shell">
+        Kaderblick verbindet oeffentliche SEO-Seiten mit einer geschuetzten Vereins-App. Dieser Bereich ist bewusst read-only und fuer Suchmaschinen optimiert.
+    </footer>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as CustomThemeProvider } from './context/ThemeContext';
 import { BrowserRouter } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { lightTheme } from './theme/theme';
 
 import './index.css';
@@ -47,17 +48,19 @@ if (!rootElement) throw new Error('Root element not found');
 
 createRoot(rootElement).render(
   <StrictMode>
-    <CustomThemeProvider>
-      <ThemeProvider theme={lightTheme}>
-        <AuthProvider>
-          <BrowserRouter>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
-          </BrowserRouter>
-        </AuthProvider>
-      </ThemeProvider>
-    </CustomThemeProvider>
+    <HelmetProvider>
+      <CustomThemeProvider>
+        <ThemeProvider theme={lightTheme}>
+          <AuthProvider>
+            <BrowserRouter>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </BrowserRouter>
+          </AuthProvider>
+        </ThemeProvider>
+      </CustomThemeProvider>
+    </HelmetProvider>
   </StrictMode>
 );
 

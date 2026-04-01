@@ -88,6 +88,7 @@ import NavigationMessagesButton from './NavigationMessagesButton';
 import { BACKEND_URL } from '../../config';
 import UserAvatar from './UserAvatar';
 import { getAvatarFrameUrl } from '../utils/avatarFrame';
+import { isPublicSeoPath } from '../seo/siteConfig';
 
 interface NavigationProps {
   onOpenAuth: () => void;
@@ -244,6 +245,7 @@ export default function Navigation({ onOpenAuth, onOpenProfile, onOpenQRShare }:
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/' || location.pathname === '';
+  const isPublicSeoRoute = isPublicSeoPath(location.pathname);
 
   React.useEffect(() => {
     if (!isAuthenticated) { setUserRelations([]); return; }
@@ -735,6 +737,43 @@ export default function Navigation({ onOpenAuth, onOpenProfile, onOpenQRShare }:
             </>
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {!isMobile && isPublicSeoRoute && (
+                <>
+                  <Button
+                    onClick={() => navigate('/funktionen')}
+                    className="navigation-transparent-btn"
+                    sx={{
+                      color: isHome ? '#fff' : theme.palette.primary.contrastText,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Funktionen
+                  </Button>
+                  <Button
+                    component="a"
+                    href="https://docs.kaderblick.de"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="navigation-transparent-btn"
+                    sx={{
+                      color: isHome ? '#fff' : theme.palette.primary.contrastText,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Dokumentation
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/kontakt')}
+                    className="navigation-transparent-btn"
+                    sx={{
+                      color: isHome ? '#fff' : theme.palette.primary.contrastText,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Kontakt
+                  </Button>
+                </>
+              )}
               {!user && showLoginButton && (
                 <Button
                   variant="contained"

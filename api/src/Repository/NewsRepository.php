@@ -94,4 +94,18 @@ class NewsRepository extends ServiceEntityRepository implements NewsRepositoryIn
 
         return $qb->getQuery()->getResult();
     }
+
+    /**
+     * @return News[]
+     */
+    public function findPublicPlatformNews(int $limit = 20): array
+    {
+        return $this->createQueryBuilder('n')
+            ->where('n.visibility = :platform')
+            ->setParameter('platform', 'platform')
+            ->orderBy('n.createdAt', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }

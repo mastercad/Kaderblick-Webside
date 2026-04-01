@@ -81,6 +81,7 @@ Diese Dokumentation richtet sich an **alle Nutzer** von Kaderblick:
 | Kapitel | Thema | Beschreibung |
 |---------|-------|-------------|
 | [22 - Load-Test-Fixtures](22-load-test-fixtures.md) | Testdaten | 25 Vereine, 101 Teams, ~70 000 Datensätze über 3 Jahre · Befehle, Umfang, Technik |
+| [23 - SEO-Zielarchitektur](23-seo-zielarchitektur.md) | Oeffentliche Seiten & interne App | Trennung von indexierbarer Website und geschuetzter Vereins-App |
 
 ---
 

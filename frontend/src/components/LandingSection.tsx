@@ -3,6 +3,7 @@ import { Box, Typography, IconButton, Modal, Button, useMediaQuery, useTheme } f
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import { Link as RouterLink } from 'react-router-dom';
 import '../styles/landing-section.css';
 
 interface LandingSectionProps {
@@ -13,9 +14,10 @@ interface LandingSectionProps {
   reverse?: boolean;
   onAuthClick?: () => void;
   ctaText?: string;
+  learnMoreHref?: string;
 }
 
-export default function LandingSection({ name, image, additionalImages = [], text, reverse = false, onAuthClick, ctaText = 'Jetzt starten' }: LandingSectionProps) {
+export default function LandingSection({ name, image, additionalImages = [], text, reverse = false, onAuthClick, ctaText = 'Jetzt starten', learnMoreHref }: LandingSectionProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [thumbStart, setThumbStart] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
@@ -110,7 +112,7 @@ export default function LandingSection({ name, image, additionalImages = [], tex
 
   const textSection = (
     <Box className="landing-section-text-wrapper">
-      <Box className="landing-section-title">
+      <Box component="h2" className="landing-section-title">
         <Box component="span" className="landing-section-title-highlight">
           {name.charAt(0).toUpperCase()}
         </Box>
@@ -122,6 +124,17 @@ export default function LandingSection({ name, image, additionalImages = [], tex
       >
         {text}
       </Typography>
+      {learnMoreHref && (
+        <Button
+          component={RouterLink}
+          to={learnMoreHref}
+          variant="text"
+          color="inherit"
+          sx={{ alignSelf: reverse ? 'flex-end' : 'flex-start', px: 0, fontWeight: 700 }}
+        >
+          Mehr zum Thema
+        </Button>
+      )}
       
       {/* CTA Button in Desktop im Text-Bereich */}
       {onAuthClick && (
@@ -195,7 +208,7 @@ export default function LandingSection({ name, image, additionalImages = [], tex
 
   return (
     <>
-      <Box ref={sectionRef} className={`landing-section ${isVisible ? 'visible' : ''}`}>
+      <Box component="section" ref={sectionRef} className={`landing-section ${isVisible ? 'visible' : ''}`}>
         <Box className="landing-section-content">
           {reverse ? (
             <>

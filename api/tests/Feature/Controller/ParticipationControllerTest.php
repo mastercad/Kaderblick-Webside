@@ -25,7 +25,7 @@ class ParticipationControllerTest extends WebTestCase
         $this->entityManager = $container->get(EntityManagerInterface::class);
     }
 
-    public function testGetEventParticipationsOnlyReturnsVisibleParticipations(): void
+    public function testGetEventParticipationsReturnsAllEventParticipationsForEligibleUser(): void
     {
         $user1 = $this->createUser('voter-test-user1@example.com');
         $user2 = $this->createUser('voter-test-user2@example.com');
@@ -45,8 +45,11 @@ class ParticipationControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $data = json_decode($this->client->getResponse()->getContent(), true);
 
-        // Voter filters participations - user should see their own
-        $this->assertGreaterThanOrEqual(1, count($data['participations']));
+        $this->assertCount(2, $data['participations']);
+
+        $returnedUserIds = array_column($data['participations'], 'user_id');
+        $this->assertContains($user1->getId(), $returnedUserIds);
+        $this->assertContains($user2->getId(), $returnedUserIds);
     }
 
     private function createUser(string $email): User

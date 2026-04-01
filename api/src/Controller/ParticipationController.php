@@ -10,7 +10,6 @@ use App\Event\MatchAttendedEvent;
 use App\Event\TrainingAttendedEvent;
 use App\Repository\ParticipationRepository;
 use App\Repository\ParticipationStatusRepository;
-use App\Security\Voter\ParticipationVoter;
 use App\Service\NotificationService;
 use App\Service\TeamMembershipService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -46,8 +45,6 @@ class ParticipationController extends AbstractController
         }
 
         $participations = $this->participationRepository->findBy(['event' => $event]);
-
-        $participations = array_filter($participations, fn ($p) => $this->isGranted(ParticipationVoter::VIEW, $p));
 
         $participationData = [];
         $currentUser = $this->getUser();

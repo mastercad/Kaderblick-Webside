@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { AppNotification, NotificationContextType } from '../types/notifications';
 import { notificationService } from '../services/notificationService';
 import { ToastContainer } from '../components/ToastContainer';
-import { apiJson } from '../utils/api';
+import { apiJson, isAuthenticationError } from '../utils/api';
 import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -26,6 +26,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
+    notificationService.setAuthenticated(isAuthenticated && Boolean(user));
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
     if (!isAuthenticated || !user) {
       setNotifications([]);
       setToasts([]);
@@ -43,6 +47,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       setNotifications(serverNotifications);
     })
     .catch(error => {
+      if (isAuthenticationError(error)) {
+        setNotifications([]);
+        notificationService.stopListening();
+        return;
+      }
+
       console.error('Failed to load notifications:', error);
       const saved = localStorage.getItem('notifications');
       if (saved) {
