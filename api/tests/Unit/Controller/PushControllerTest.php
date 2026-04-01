@@ -12,6 +12,7 @@ use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -303,7 +304,7 @@ class PushControllerTest extends TestCase
         $this->notificationRepo->expects($this->once())
             ->method('findUnsentByUser')
             ->with($this->user)
-            ->willReturn([new \stdClass()]);
+            ->willReturn([new stdClass()]);
 
         $this->user->method('getLastPushSuccessAt')->willReturn(null);
         $this->user->method('getLastPushFailureAt')->willReturn(null);
