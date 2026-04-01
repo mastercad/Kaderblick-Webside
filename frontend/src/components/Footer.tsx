@@ -53,19 +53,15 @@ const Footer: React.FC = () => {
             )}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Link component={RouterLink} to="/kontakt" color="inherit" underline="hover">
+            Kontakt
+          </Link>
           <Link component={RouterLink} to="/imprint" color="inherit" underline="hover">
             Impressum
           </Link>
           <Link component={RouterLink} to="/privacy" color="inherit" underline="hover">
             Datenschutz
-          </Link>
-          <Link href="#" color="inherit" underline="hover" onClick={e => {
-            e.preventDefault();
-            const event = new CustomEvent('openContactModal');
-            window.dispatchEvent(event);
-          }}>
-            Kontakt
           </Link>
           <Link component={RouterLink} to="https://docs.kaderblick.de" color="inherit" underline="hover">
             Dokumentation

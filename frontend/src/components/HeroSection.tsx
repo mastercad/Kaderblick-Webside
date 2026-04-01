@@ -28,14 +28,17 @@ export default function HeroSection({ onStartClick, heroRef, onScrollDown }: Her
     >
       <Box className="hero-outer">
         <Box className="hero-content">
-          <Box component="span" className="hero-title">
+          <Box component="h1" className="hero-title">
             <Box component="span" className="hero-title-highlight">
                 K</Box>
             ADERBLICK
           </Box>
-          <Box component="span" className="hero-subtitle">
+          <Box component="p" className="hero-subtitle">
             DEINEN VEREIN IM BLICK
           </Box>
+          <Typography component="p" className="hero-description">
+            Die Vereinssoftware fuer Fussballvereine mit Kalender, Kommunikation, Spielanalyse, Aufstellungen, Taktikplanung und digitaler Organisation fuer Trainer, Teams, Eltern und Vereinsverantwortliche.
+          </Typography>
           {!user ? (
             <Box className="hero-btn-wrapper">
               <Button

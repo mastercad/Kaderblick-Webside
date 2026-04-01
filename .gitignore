@@ -9,3 +9,4 @@ frontend/coverage/*
 nginx.conf.working
 immunify360.whitelist.commands
 regex_replacements
+SEO Analyse*

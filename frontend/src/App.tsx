@@ -27,6 +27,14 @@ import { PushWarningBanner } from './components/PushWarningBanner';
 import RegistrationContextDialog from './modals/RegistrationContextDialog';
 import QRCodeShareModal from './modals/QRCodeShareModal';
 import ContactModal from './modals/ContactModal';
+import Seo from './seo/Seo';
+import {
+  APP_NOINDEX_DESCRIPTION,
+  APP_NOINDEX_TITLE,
+  DEFAULT_SEO_DESCRIPTION,
+  DEFAULT_SEO_TITLE,
+  isPublicSeoPath,
+} from './seo/siteConfig';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Calendar = lazy(() => import('./pages/Calendar'));
@@ -72,6 +80,11 @@ const Cups = lazy(() => import('./pages/Cups'));
 const Cameras = lazy(() => import('./pages/Cameras'));
 const VideoTypes = lazy(() => import('./pages/VideoTypes'));
 const Teams = lazy(() => import('./pages/Teams'));
+const FeaturesOverview = lazy(() => import('./pages/FeaturesOverview'));
+const FeatureDetail = lazy(() => import('./pages/FeatureDetail'));
+const Faq = lazy(() => import('./pages/Faq'));
+const ContactPage = lazy(() => import('./pages/Contact'));
+const PublicIntentPage = lazy(() => import('./pages/PublicIntentPage'));
 
 function RouteFallback() {
   return (
@@ -85,6 +98,20 @@ function RouteFallback() {
     >
       <CircularProgress size={28} />
     </Box>
+  );
+}
+
+function RouteSeoBoundary() {
+  const location = useLocation();
+  const isPublicPath = isPublicSeoPath(location.pathname);
+
+  return (
+    <Seo
+      title={isPublicPath ? DEFAULT_SEO_TITLE : APP_NOINDEX_TITLE}
+      description={isPublicPath ? DEFAULT_SEO_DESCRIPTION : APP_NOINDEX_DESCRIPTION}
+      canonicalPath={location.pathname}
+      noindex={!isPublicPath}
+    />
   );
 }
 
@@ -223,6 +250,7 @@ function App() {
   return (
     <MuiThemeProvider theme={currentTheme}>
       <CssBaseline />
+      <RouteSeoBoundary />
       <NotificationProvider>
         <HomeScrollProvider>
           <FabStackRoot>
@@ -242,6 +270,14 @@ function App() {
                 <Suspense fallback={<RouteFallback />}>
                   <Routes>
                     <Route path="/" element={<Home />} />
+                    <Route path="/funktionen" element={<FeaturesOverview />} />
+                    <Route path="/funktionen/:slug" element={<FeatureDetail />} />
+                    <Route path="/fuer-trainer" element={<PublicIntentPage />} />
+                    <Route path="/fuer-eltern" element={<PublicIntentPage />} />
+                    <Route path="/fuer-jugendleitung" element={<PublicIntentPage />} />
+                    <Route path="/spielanalyse-software" element={<PublicIntentPage />} />
+                    <Route path="/faq" element={<Faq />} />
+                    <Route path="/kontakt" element={<ContactPage />} />
                     <Route path="/verify-email/:token" element={<VerifyEmail />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password/:token" element={<ResetPassword />} />
