@@ -1,16 +1,29 @@
 import { AppNotification } from '../types/notifications';
 import { BACKEND_URL } from '../../config';
-import { apiJson } from '../utils/api';
+import { apiJson, isAuthenticationError } from '../utils/api';
 
 type NotificationListener = (notification: Omit<AppNotification, 'read'>) => void;
 
-class NotificationService {
+export class NotificationService {
   private listeners: NotificationListener[] = [];
   private pollingInterval: any | null = null;
   private pushSubscription: PushSubscription | null = null;
   private serviceWorkerRegistration: ServiceWorkerRegistration | null = null;
+  private isAuthenticated = false;
+
+  setAuthenticated(isAuthenticated: boolean): void {
+    this.isAuthenticated = isAuthenticated;
+
+    if (!isAuthenticated) {
+      this.stopListening();
+    }
+  }
 
   async initialize(): Promise<void> {
+    if (!this.isAuthenticated) {
+      return;
+    }
+
     try {
       // Service Worker ist bereits in main.tsx registriert, hier nur die Registration holen
       if ('serviceWorker' in navigator) {
@@ -19,19 +32,33 @@ class NotificationService {
 
       // Push-Berechtigung anfragen (non-blocking)
       this.requestPushPermission().catch(error => {
-        console.warn('Push setup failed, continuing with polling only:', error);
+        if (!isAuthenticationError(error)) {
+          console.warn('Push setup failed, continuing with polling only:', error);
+        }
       });
       
       // Polling immer starten (als Fallback)
       this.startPolling();
     } catch (error) {
-      console.error('Failed to initialize notification service:', error);
+      if (!isAuthenticationError(error)) {
+        console.error('Failed to initialize notification service:', error);
+      }
+
+      if (!this.isAuthenticated || isAuthenticationError(error)) {
+        this.stopListening();
+        return;
+      }
+
       // Fallback: Nur Polling
       this.startPolling();
     }
   }
 
   private async requestPushPermission(): Promise<boolean> {
+    if (!this.isAuthenticated) {
+      return false;
+    }
+
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
 //      console.warn('Push notifications not supported');
       return false;
@@ -98,7 +125,9 @@ class NotificationService {
 //      console.log('Push notifications enabled successfully');
       return true;
     } catch (error) {
-      console.error('Failed to setup push notifications:', error);
+      if (!isAuthenticationError(error)) {
+        console.error('Failed to setup push notifications:', error);
+      }
       return false;
     }
   }
@@ -119,8 +148,17 @@ class NotificationService {
   }
 
   private startPolling(): void {
+    if (!this.isAuthenticated || this.pollingInterval) {
+      return;
+    }
+
     // Polling alle 30 Sekunden für In-App Notifications
     this.pollingInterval = setInterval(async () => {
+      if (!this.isAuthenticated) {
+        this.stopListening();
+        return;
+      }
+
       if (document.visibilityState === 'visible') {
         try {
           const response = await apiJson('/api/notifications/unread');
@@ -139,6 +177,11 @@ class NotificationService {
             this.listeners.forEach(listener => listener(notification));
           });
         } catch (error) {
+          if (isAuthenticationError(error)) {
+            this.stopListening();
+            return;
+          }
+
           console.error('Polling error:', error);
         }
       }
@@ -146,6 +189,10 @@ class NotificationService {
   }
 
   startListening(): () => void {
+    if (!this.isAuthenticated) {
+      return () => this.stopListening();
+    }
+
     // Initialisierung starten falls noch nicht geschehen
     if (!this.pollingInterval && !this.pushSubscription) {
       this.initialize();

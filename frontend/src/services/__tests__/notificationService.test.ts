@@ -11,6 +11,17 @@
 // Mock the api module before importing notificationService
 jest.mock('../../utils/api', () => ({
   apiJson: jest.fn(),
+  ApiError: class ApiError extends Error {
+    status?: number;
+    data?: any;
+    constructor(message: string, status?: number, data?: any) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.data = data;
+    }
+  },
+  isAuthenticationError: (error: unknown) => Boolean(error && typeof error === 'object' && 'status' in error && (error as { status?: number }).status === 401),
 }));
 
 // Mock config
@@ -19,6 +30,8 @@ jest.mock('../../../config', () => ({
 }));
 
 import { apiJson } from '../../utils/api';
+import { ApiError } from '../../utils/api';
+import { NotificationService } from '../notificationService';
 
 const mockApiJson = apiJson as jest.MockedFunction<typeof apiJson>;
 
@@ -205,6 +218,60 @@ describe('NotificationService', () => {
     const result = await mockApiJson('/api/notifications/unread');
     expect(result.notifications).toHaveLength(1);
     expect(result.notifications[0].type).toBe('news');
+  });
+
+  test('does not start polling when user is not authenticated', () => {
+    const service = new NotificationService();
+
+    service.setAuthenticated(false);
+    service.startListening();
+    jest.advanceTimersByTime(30000);
+
+    expect(mockApiJson).not.toHaveBeenCalledWith('/api/notifications/unread');
+  });
+
+  test('stops polling after authentication error', async () => {
+    const service = new NotificationService();
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+
+    Object.defineProperty(window, 'Notification', {
+      value: {
+        permission: 'denied',
+        requestPermission: jest.fn().mockResolvedValue('denied'),
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    mockApiJson.mockImplementation(async (endpoint: string) => {
+      if (endpoint === '/api/notifications/unread') {
+        throw new ApiError('Authentication required', 401);
+      }
+
+      return { key: 'AAAA' };
+    });
+
+    service.setAuthenticated(true);
+    service.startListening();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    jest.advanceTimersByTime(30000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockApiJson).toHaveBeenCalledWith('/api/notifications/unread');
+
+    mockApiJson.mockClear();
+    jest.advanceTimersByTime(30000);
+    await Promise.resolve();
+
+    expect(mockApiJson).not.toHaveBeenCalled();
   });
 
   // ======================================================================

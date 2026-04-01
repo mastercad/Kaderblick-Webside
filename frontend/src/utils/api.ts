@@ -67,6 +67,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isAuthenticationError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 /**
  * Vereinfachte API-Funktion die direkt JSON zurückgibt.
  * Wirft ApiError bei HTTP-Fehlern.
