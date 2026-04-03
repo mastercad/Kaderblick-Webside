@@ -907,7 +907,7 @@ function GameDetailsInner({ gameId: propGameId, onBack }: GameDetailsProps) {
           open={sectionsOpen.events}
           onToggle={() => toggleSection('events')}
           testId="events-section-header"
-          action={canCreateEvents() ? (
+          action={hasStaffMatchAccess ? (
             <Button
               variant="contained"
               size="small"
