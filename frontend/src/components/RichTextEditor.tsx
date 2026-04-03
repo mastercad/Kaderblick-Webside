@@ -13,7 +13,8 @@ import TextAlign from '@tiptap/extension-text-align';
 import {
   Box, IconButton, Tooltip, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, Button, TextField, Stack,
-  Paper, CircularProgress, useTheme, alpha, Typography,
+  Paper, CircularProgress, useTheme, alpha, Typography, Chip,
+  Popover,
 } from '@mui/material';
 import FormatBoldIcon from '@mui/icons-material/FormatBold';
 import FormatItalicIcon from '@mui/icons-material/FormatItalic';
@@ -51,6 +52,34 @@ const CustomImage = ImageExtension.extend({
     };
   },
 });
+
+// ── Emoji Picker data ─────────────────────────────────────────────────────────
+const EMOJI_CATEGORIES: Array<{ label: string; emojis: string[] }> = [
+  {
+    label: 'Vorlagen-Icons',
+    emojis: ['🚀', '✨', '⚡', '🐛', '💬', '🎉', '🎯', '👉', '⚽', '📅', '🕐', '📍', '💪', '🥅', '📣', '🥇', '🙌', '🖼️', '📸', '🆕'],
+  },
+  {
+    label: 'Fußball & Sport',
+    emojis: ['⚽', '🏆', '🥇', '🥈', '🥉', '🎯', '🏅', '🎽', '👟', '🧤', '🧢', '📣', '🔔', '📢', '🏟️', '🌟', '💪', '🏃', '🤸', '⛹️'],
+  },
+  {
+    label: 'Feier & Emotion',
+    emojis: ['🎉', '🎊', '🙌', '👏', '🥳', '🎈', '❤️', '🔥', '💥', '✨', '🌈', '😄', '😍', '🤩', '👍', '💯', '🚀', '⭐', '🌟', '💫'],
+  },
+  {
+    label: 'Info & Aktionen',
+    emojis: ['📅', '📍', '📌', '🕐', 'ℹ️', '✅', '❌', '⚠️', '🔗', '📎', '📋', '📝', '📊', '💡', '🔑', '🔒', '📲', '💬', '📩', '🗓️'],
+  },
+  {
+    label: 'Pfeile & Zeichen',
+    emojis: ['👉', '👈', '👆', '👇', '➡️', '⬅️', '⬆️', '⬇️', '↪️', '🔄', '▶️', '⏩', '🔷', '🔹', '🟢', '🔴', '🟡', '🟠', '🔵', '⚫'],
+  },
+  {
+    label: 'Natur & Wetter',
+    emojis: ['☀️', '🌤️', '⛅', '🌧️', '❄️', '🌿', '🍀', '🌸', '🌺', '🌻', '🍂', '🌊', '🏔️', '🌙', '⭐', '💧', '🌱', '🌳', '🌾', '🍃'],
+  },
+];
 
 // ── Image size options ────────────────────────────────────────────────────────
 const IMAGE_SIZE_OPTIONS: Array<{ id: string; label: string; desc: string; maxWidth: string }> = [
@@ -168,6 +197,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
@@ -176,6 +206,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [imageSizeOpen, setImageSizeOpen] = useState(false);
   const [pendingImageSrc, setPendingImageSrc] = useState('');
   const [imageSize, setImageSize] = useState<string>('img-medium');
+  const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -268,10 +299,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }, [editor, pendingImageSrc, imageSize]);
 
   // ── Image file upload ───────────────────────────────────────────────────────
-  const handleImageFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !editor) return;
-    e.target.value = '';
+  const uploadImageFile = useCallback(async (file: File) => {
+    if (!editor) return;
+    setImageDialogOpen(false);
     setUploading(true);
     try {
       const formData = new FormData();
@@ -291,6 +321,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   }, [editor]);
 
+  const handleImageFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    await uploadImageFile(file);
+  }, [uploadImageFile]);
+
   if (!editor) return null;
 
   // ── Toolbar State ───────────────────────────────────────────────────────────
@@ -308,11 +345,15 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           alignItems: 'center',
           gap: 0.25,
           p: '4px 6px',
-          borderBottom: 'none',
+          borderBottom: `1px solid ${theme.palette.divider}`,
           borderRadius: '8px 8px 0 0',
           bgcolor: theme.palette.mode === 'dark'
-            ? alpha(theme.palette.background.paper, 0.6)
-            : alpha(theme.palette.grey[50], 1),
+            ? alpha(theme.palette.background.paper, 0.95)
+            : alpha(theme.palette.grey[50], 0.98),
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          backdropFilter: 'blur(4px)',
         }}
       >
         {/* History */}
@@ -390,7 +431,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           onClick={() => editor.chain().focus().toggleOrderedList().run()}>
           <FormatListNumberedIcon fontSize="small" />
         </ToolBtn>
-        <ToolBtn title="Zitat" active={is('blockquote')}
+        <ToolBtn title="Zitat / grüner Balken (Strg+Shift+B zum Beenden)" active={is('blockquote')}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}>
           <FormatQuoteIcon fontSize="small" />
         </ToolBtn>
@@ -437,6 +478,50 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           style={{ display: 'none' }}
           onChange={handleImageFileChange}
         />
+
+        {/* Emoji Picker */}
+        <Tooltip title="Emoji einfügen">
+          <span>
+            <IconButton
+              size="small"
+              onMouseDown={e => {
+                e.preventDefault();
+                setEmojiAnchor(e.currentTarget as HTMLElement);
+              }}
+              sx={{ borderRadius: 1, p: '4px', fontSize: '1rem', lineHeight: 1 }}
+            >
+              😊
+            </IconButton>
+          </span>
+        </Tooltip>
+
+        {/* Blockquote context indicator */}
+        {is('blockquote') && (
+          <>
+            <ToolDivider />
+            <Tooltip title="Klicken um Zitat-Format zu beenden">
+              <Chip
+                label="Im Zitat"
+                size="small"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  editor.chain().focus().toggleBlockquote().run();
+                }}
+                sx={{
+                  height: 22,
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: theme.palette.primary.main,
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+                  '& .MuiChip-label': { px: 1 },
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
+                }}
+              />
+            </Tooltip>
+          </>
+        )}
       </Paper>
 
       {/* ── Editor Area ───────────────────────────────────────────────────── */}
@@ -539,6 +624,40 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         <EditorContent editor={editor} />
       </Paper>
 
+      {/* ── Emoji Popover ─────────────────────────────────────────────────── */}
+      <Popover
+        open={Boolean(emojiAnchor)}
+        anchorEl={emojiAnchor}
+        onClose={() => setEmojiAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{ sx: { p: 1.5, maxWidth: 340, maxHeight: 380, overflowY: 'auto' } }}
+      >
+        {EMOJI_CATEGORIES.map(cat => (
+          <Box key={cat.label} sx={{ mb: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5, px: 0.5 }}>
+              {cat.label}
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
+              {cat.emojis.map(emoji => (
+                <IconButton
+                  key={emoji}
+                  size="small"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    editor.chain().focus().insertContent(emoji).run();
+                    setEmojiAnchor(null);
+                  }}
+                  sx={{ fontSize: '1.25rem', width: 34, height: 34, borderRadius: 1, lineHeight: 1 }}
+                >
+                  {emoji}
+                </IconButton>
+              ))}
+            </Box>
+          </Box>
+        ))}
+      </Popover>
+
       {/* ── Link Dialog ───────────────────────────────────────────────────── */}
       <Dialog open={linkDialogOpen} onClose={() => setLinkDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Link einfügen</DialogTitle>
@@ -573,22 +692,56 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </Dialog>
 
       {/* ── Image Dialog ──────────────────────────────────────────────────── */}
-      <Dialog open={imageDialogOpen} onClose={() => setImageDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={imageDialogOpen} onClose={() => { setImageDialogOpen(false); setDragOver(false); }} maxWidth="xs" fullWidth>
         <DialogTitle>Bild einfügen</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={<ImageIcon />}
-              onClick={() => {
-                setImageDialogOpen(false);
-                fileInputRef.current?.click();
+            {/* Drag & Drop Zone */}
+            <Box
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file && file.type.startsWith('image/')) {
+                  uploadImageFile(file);
+                }
               }}
-              fullWidth
+              onClick={() => fileInputRef.current?.click()}
+              sx={{
+                border: `2px dashed ${dragOver ? theme.palette.primary.main : theme.palette.divider}`,
+                borderRadius: 2,
+                p: 3,
+                textAlign: 'center',
+                cursor: 'pointer',
+                bgcolor: dragOver
+                  ? alpha(theme.palette.primary.main, 0.07)
+                  : theme.palette.mode === 'dark'
+                    ? alpha(theme.palette.common.white, 0.02)
+                    : alpha(theme.palette.common.black, 0.01),
+                transition: 'all 0.15s',
+                userSelect: 'none',
+                '&:hover': {
+                  borderColor: theme.palette.primary.main,
+                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                },
+              }}
             >
-              Bild vom Computer hochladen
-            </Button>
-            <Divider>oder</Divider>
+              {uploading ? (
+                <CircularProgress size={32} sx={{ mb: 1 }} />
+              ) : (
+                <ImageIcon sx={{ fontSize: 36, color: dragOver ? 'primary.main' : 'text.disabled', mb: 0.75, display: 'block', mx: 'auto' }} />
+              )}
+              <Typography variant="body2" fontWeight={600} color={dragOver ? 'primary.main' : 'text.primary'} sx={{ mb: 0.25 }}>
+                {dragOver ? 'Bild loslassen …' : 'Bild hier ablegen'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                oder klicken zum Durchsuchen
+              </Typography>
+            </Box>
+            <Divider>oder URL</Divider>
             <TextField
               label="Bild-URL"
               value={imageUrl}
