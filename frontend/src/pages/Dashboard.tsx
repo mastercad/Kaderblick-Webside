@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import AddIcon from '@mui/icons-material/Add';
+import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
+import EventIcon from '@mui/icons-material/Event';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { Link as RouterLink } from 'react-router-dom';
 import { DashboardWidget } from '../components/DashboardWidget';
 import { UpcomingEventsWidget } from '../widgets/UpcomingEventsWidget';
 import { NewsWidget } from '../widgets/NewsWidget';
@@ -23,6 +30,7 @@ import { DynamicConfirmationModal } from '../modals/DynamicConfirmationModal';
 import { deleteWidget } from '../services/deleteWidget';
 import { WidgetRefreshProvider, useWidgetRefresh } from '../context/WidgetRefreshContext';
 import { ReportBuilderModal, type Report } from '../modals/ReportBuilderModal';
+import { apiJson } from '../utils/api';
 
 export default function Dashboard() {
   return (
@@ -45,6 +53,25 @@ function DashboardContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWidgetId, setSettingsWidgetId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Upcoming game banner: next game within 7 days
+  const [nextGame, setNextGame] = useState<{ id: number; title: string; start: string } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    apiJson<any[]>('/api/calendar/upcoming')
+      .then(events => {
+        const upcomingGame = events?.find(e => e.game);
+        if (upcomingGame) {
+          setNextGame({
+            id: upcomingGame.id,
+            title: upcomingGame.title,
+            start: upcomingGame.start,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [user]);
   const [deleteWidgetId, setDeleteWidgetId] = useState<string | null>(null);
 
   // ── Report edit flow ──
@@ -180,6 +207,60 @@ function DashboardContent() {
 
   return (
   <Box sx={{ width: '100%', height: '100%', minWidth: 320, p: { xs: 1, md: 3 } }}>
+      {/* ── Upcoming game banner ── */}
+      {nextGame && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 3,
+            p: 2,
+            borderRadius: 2,
+            background: 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #388e3c 100%)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1,
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <SportsSoccerIcon sx={{ color: '#fff' }} />
+            <Box>
+              <Typography variant="caption" sx={{ opacity: 0.85 }}>Nächstes Spiel</Typography>
+              <Typography variant="subtitle1" fontWeight={700}>{nextGame.title}</Typography>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <EventIcon fontSize="small" sx={{ opacity: 0.8, fontSize: 14 }} />
+                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                  {new Date(nextGame.start).toLocaleString('de-DE', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Typography>
+              </Stack>
+            </Box>
+          </Stack>
+          <Button
+            variant="contained"
+            endIcon={<ArrowForwardIcon />}
+            component={RouterLink}
+            to={`/mein-spieltag/${nextGame.id}`}
+            sx={{
+              bgcolor: 'rgba(255,255,255,0.18)',
+              color: '#fff',
+              fontWeight: 700,
+              textTransform: 'none',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.28)' },
+            }}
+          >
+            Zum Spieltag
+          </Button>
+        </Paper>
+      )}
+
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h4" component="h1">
           Dashboard{user?.firstName ? ` – ${user.firstName}` : ''}

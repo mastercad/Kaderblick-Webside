@@ -384,4 +384,542 @@ class PlayersControllerTest extends ApiWebTestCase
             $this->assertDateFormat($a['endDate'] ?? null, "teamAssignments[$i].endDate");
         }
     }
+
+    // ────────────────────────────── show() ──────────────────────────────
+
+    public function testShowReturnsPlayerById(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('player', $data);
+        $this->assertSame(1, $data['player']['id']);
+        $this->assertArrayHasKey('firstName', $data['player']);
+        $this->assertArrayHasKey('lastName', $data['player']);
+        $this->assertArrayHasKey('fullName', $data['player']);
+    }
+
+    public function testShowReturnsPlayerPermissions(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('permissions', $data['player']);
+        $this->assertArrayHasKey('canView', $data['player']['permissions']);
+        $this->assertArrayHasKey('canEdit', $data['player']['permissions']);
+        $this->assertArrayHasKey('canCreate', $data['player']['permissions']);
+        $this->assertArrayHasKey('canDelete', $data['player']['permissions']);
+    }
+
+    public function testShowReturnsPlayerRelations(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('mainPosition', $data['player']);
+        $this->assertArrayHasKey('teamAssignments', $data['player']);
+        $this->assertArrayHasKey('clubAssignments', $data['player']);
+        $this->assertArrayHasKey('nationalityAssignments', $data['player']);
+        $this->assertArrayHasKey('alternativePositions', $data['player']);
+    }
+
+    public function testShowRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testShowReturns404ForUnknownPlayer(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/players/99999999');
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testShowAsRegularUserSucceeds(): void
+    {
+        // PlayerVoter allows all authenticated users to view
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseIsSuccessful();
+    }
+
+    public function testShowAdminHasFullPermissions(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/players/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertTrue($data['player']['permissions']['canView']);
+        $this->assertTrue($data['player']['permissions']['canEdit']);
+        $this->assertTrue($data['player']['permissions']['canCreate']);
+        $this->assertTrue($data['player']['permissions']['canDelete']);
+    }
+
+    // ────────────────────────────── create() ──────────────────────────────
+
+    public function testCreateRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode(['firstName' => 'New', 'lastName' => 'Player'])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testCreateAsAdminReturnsCreated(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        // Get a position ID from fixtures
+        $client->request('GET', '/api/players/1');
+        $playerData = json_decode($client->getResponse()->getContent(), true);
+        $positionId = $playerData['player']['mainPosition']['id'];
+
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'NewCreate',
+                'lastName' => 'PCT-' . $suffix,
+                'email' => 'pct-create-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => $positionId],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+
+        // Cleanup
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $em->getConnection()->executeStatement(
+            "DELETE FROM players WHERE last_name = 'PCT-" . $suffix . "'"
+        );
+    }
+
+    public function testCreateAsRegularUserForbidden(): void
+    {
+        // Regular user is not a coach/admin, so PlayerVoter denies CREATE
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Blocked',
+                'lastName' => 'PCT-blocked',
+                'email' => 'blocked-pct@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testCreateWithNationalityAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'NewNat',
+                'lastName' => 'PCT-nat-' . $suffix,
+                'email' => 'pct-nat-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [
+                    [
+                        'startDate' => '2020-01-01',
+                        'endDate' => null,
+                        'nationality' => ['id' => 1],
+                    ]
+                ],
+                'teamAssignments' => [],
+            ])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Cleanup
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement("DELETE pna FROM player_nationality_assignments pna INNER JOIN players p ON pna.player_id = p.id WHERE p.last_name = 'PCT-nat-" . $suffix . "'");
+        $conn->executeStatement("DELETE FROM players WHERE last_name = 'PCT-nat-" . $suffix . "'");
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    public function testCreateWithClubAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'NewClub',
+                'lastName' => 'PCT-club-' . $suffix,
+                'email' => 'pct-club-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [
+                    [
+                        'startDate' => '2020-01-01',
+                        'endDate' => null,
+                        'club' => ['id' => 1],
+                    ]
+                ],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Cleanup
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement("DELETE pca FROM player_club_assignments pca INNER JOIN players p ON pca.player_id = p.id WHERE p.last_name = 'PCT-club-" . $suffix . "'");
+        $conn->executeStatement("DELETE FROM players WHERE last_name = 'PCT-club-" . $suffix . "'");
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    public function testCreateWithTeamAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'NewTeam',
+                'lastName' => 'PCT-team-' . $suffix,
+                'email' => 'pct-team-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [
+                    [
+                        'startDate' => '2024-07-01',
+                        'endDate' => null,
+                        'shirtNumber' => 77,
+                        'team' => ['id' => 1],
+                        'type' => 1,
+                    ]
+                ],
+            ])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Cleanup
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement("DELETE pta FROM player_team_assignments pta INNER JOIN players p ON pta.player_id = p.id WHERE p.last_name = 'PCT-team-" . $suffix . "'");
+        $conn->executeStatement("DELETE FROM players WHERE last_name = 'PCT-team-" . $suffix . "'");
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    // ────────────────────────────── update() ──────────────────────────────
+
+    public function testUpdateRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request(
+            'PUT',
+            '/api/players/1',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode(['firstName' => 'X', 'lastName' => 'Y'])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testUpdateReturns404ForUnknownPlayer(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request(
+            'PUT',
+            '/api/players/99999999',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode(['firstName' => 'X', 'lastName' => 'Y', 'mainPosition' => ['id' => 1]])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testUpdateAsRegularUserForbidden(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+
+        $client->request(
+            'PUT',
+            '/api/players/1',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Hacked',
+                'lastName' => 'Player',
+                'email' => '',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testUpdateAsAdminSucceeds(): void
+    {
+        // Minimal: create a player, update it, verify, restore original data
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        // 1. Create a disposable player
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Upd',
+                'lastName' => 'PCT-upd-' . $suffix,
+                'email' => 'pct-upd-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Get the new player's ID
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $player = $em->getRepository(\App\Entity\Player::class)->findOneBy(['lastName' => 'PCT-upd-' . $suffix]);
+        $this->assertNotNull($player);
+        $playerId = $player->getId();
+
+        // 2. Update it
+        $client->request(
+            'PUT',
+            '/api/players/' . $playerId,
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'UpdatedName',
+                'lastName' => 'PCT-upd-' . $suffix,
+                'email' => 'pct-upd-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+
+        // Cleanup
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement('DELETE FROM players WHERE id = ' . $playerId);
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    public function testUpdateWithNationalityAndClubAndTeamAssignments(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        // Create player with assignments
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'UAll',
+                'lastName' => 'PCT-uall-' . $suffix,
+                'email' => 'pct-uall-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [
+                    ['startDate' => '2020-01-01', 'endDate' => null, 'club' => ['id' => 1]]
+                ],
+                'nationalityAssignments' => [
+                    ['startDate' => '2020-01-01', 'endDate' => null, 'nationality' => ['id' => 1]]
+                ],
+                'teamAssignments' => [
+                    ['startDate' => '2024-07-01', 'endDate' => null, 'shirtNumber' => 44, 'team' => ['id' => 1], 'type' => 1]
+                ],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $player = $em->getRepository(\App\Entity\Player::class)->findOneBy(['lastName' => 'PCT-uall-' . $suffix]);
+        $this->assertNotNull($player);
+        $playerId = $player->getId();
+
+        // Update - replace with different assignments
+        $client->request(
+            'PUT',
+            '/api/players/' . $playerId,
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'UAllUpdated',
+                'lastName' => 'PCT-uall-' . $suffix,
+                'email' => 'pct-uall-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [
+                    ['startDate' => '2021-01-01', 'endDate' => null, 'club' => ['id' => 2]]
+                ],
+                'nationalityAssignments' => [
+                    ['startDate' => '2021-01-01', 'endDate' => null, 'nationality' => ['id' => 2]]
+                ],
+                'teamAssignments' => [
+                    ['startDate' => '2024-07-01', 'endDate' => null, 'shirtNumber' => 55, 'team' => ['id' => 1], 'type' => 1]
+                ],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Cleanup
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement('DELETE pna FROM player_nationality_assignments pna WHERE pna.player_id = ' . $playerId);
+        $conn->executeStatement('DELETE pca FROM player_club_assignments pca WHERE pca.player_id = ' . $playerId);
+        $conn->executeStatement('DELETE pta FROM player_team_assignments pta WHERE pta.player_id = ' . $playerId);
+        $conn->executeStatement('DELETE FROM players WHERE id = ' . $playerId);
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    // ────────────────────────────── delete() ──────────────────────────────
+
+    public function testDeleteRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('DELETE', '/api/players/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testDeleteReturns404ForUnknownPlayer(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('DELETE', '/api/players/99999999');
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testDeleteAsRegularUserForbidden(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+
+        $client->request('DELETE', '/api/players/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testDeleteAsAdminSucceeds(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $suffix = bin2hex(random_bytes(4));
+
+        // Create a disposable player to delete
+        $client->request(
+            'POST',
+            '/api/players',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'DelMe',
+                'lastName' => 'PCT-del-' . $suffix,
+                'email' => 'pct-del-' . $suffix . '@test.example.com',
+                'mainPosition' => ['id' => 1],
+                'alternativePositions' => [],
+                'clubAssignments' => [],
+                'nationalityAssignments' => [],
+                'teamAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $player = $em->getRepository(\App\Entity\Player::class)->findOneBy(['lastName' => 'PCT-del-' . $suffix]);
+        $this->assertNotNull($player);
+        $playerId = $player->getId();
+
+        // Delete the player
+        $client->request('DELETE', '/api/players/' . $playerId);
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+
+        // Verify it's gone
+        $em->clear();
+        $this->assertNull($em->getRepository(\App\Entity\Player::class)->find($playerId));
+    }
 }

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -189,6 +190,45 @@ export const EventStepContent: React.FC<EventStepContentProps> = ({
           {/* Training fields */}
           {isTraining && (
             <TrainingEventFields formData={event} teams={teams} handleChange={handleChange} />
+          )}
+
+          {/* Treffpunkt / Treffzeit — for all non-task events */}
+          {!isTask && (isMatchEvent || isTraining || isGenericEvent) && (
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, mt: 1 }}>
+              <Autocomplete
+                freeSolo
+                options={locations}
+                getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+                value={event.meetingPoint || ''}
+                onInputChange={(_, value) => handleChange('meetingPoint', value)}
+                filterOptions={(options, { inputValue }) => {
+                  if (inputValue.length < 2) return [];
+                  return options.filter(opt =>
+                    opt.label.toLowerCase().includes(inputValue.toLowerCase()),
+                  );
+                }}
+                noOptionsText="Keine Orte gefunden (mindestens 2 Zeichen eingeben)"
+                sx={{ flex: 1 }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Treffpunkt"
+                    placeholder="Ort suchen oder frei eingeben…"
+                    size="small"
+                    fullWidth
+                  />
+                )}
+              />
+              <TextField
+                label="Treffzeit"
+                type="time"
+                value={event.meetingTime || ''}
+                onChange={e => handleChange('meetingTime', e.target.value)}
+                size="small"
+                sx={{ minWidth: 140 }}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Box>
           )}
 
           {/* No type selected yet — hint */}

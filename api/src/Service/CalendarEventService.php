@@ -379,6 +379,19 @@ class CalendarEventService
             $calendarEvent->setTrainingSeriesId($data['trainingSeriesId']);
         }
 
+        if (array_key_exists('meetingPoint', $data)) {
+            $calendarEvent->setMeetingPoint('' !== $data['meetingPoint'] ? $data['meetingPoint'] : null);
+        }
+
+        if (array_key_exists('meetingTime', $data)) {
+            $meetingTimeRaw = $data['meetingTime'];
+            if (null !== $meetingTimeRaw && '' !== $meetingTimeRaw) {
+                $calendarEvent->setMeetingTime(new DateTime($meetingTimeRaw));
+            } else {
+                $calendarEvent->setMeetingTime(null);
+            }
+        }
+
         if (isset($data['task']) && is_array($data['task'])) {
             $taskData = $data['task'];
 

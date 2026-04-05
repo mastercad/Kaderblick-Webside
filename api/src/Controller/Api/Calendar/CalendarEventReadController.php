@@ -9,6 +9,7 @@ use App\Entity\WeatherData;
 use App\Repository\CalendarEventRepository;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventSerializer;
+use App\Service\SystemSettingService;
 use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -22,6 +23,7 @@ class CalendarEventReadController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CalendarEventSerializer $serializer,
+        private readonly SystemSettingService $systemSettingService,
     ) {
     }
 
@@ -69,9 +71,18 @@ class CalendarEventReadController extends AbstractController
     #[Route('/upcoming', name: 'upcoming', methods: ['GET'])]
     public function retrieveUpcomingEvents(CalendarEventRepository $calendarEventRepository): JsonResponse
     {
-        $calendarEvents = $calendarEventRepository->findUpcoming();
+        $lookaheadDays = $this->systemSettingService->getMatchdayLookaheadDays();
+        $calendarEvents = $calendarEventRepository->findUpcoming(20, $lookaheadDays);
 
-        return $this->json($calendarEvents, 200, [], ['groups' => ['calendar_event:read']]);
+        /** @var ?User $user */
+        $user = $this->getUser();
+        $tournamentEventType = $this->entityManager->getRepository(CalendarEventType::class)
+            ->findOneBy(['name' => 'Turnier']);
+
+        return $this->json(array_values(array_map(
+            fn (CalendarEvent $e) => $this->serializer->serialize($e, $user, $tournamentEventType),
+            $calendarEvents
+        )));
     }
 
     #[Route('/event/{id}/weather-data', name: 'event_weather_data', methods: ['GET'])]

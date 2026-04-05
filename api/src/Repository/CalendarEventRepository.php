@@ -27,8 +27,10 @@ class CalendarEventRepository extends ServiceEntityRepository implements Optimiz
     /**
      * @return CalendarEvent[]
      */
-    public function findUpcoming(int $limit = 5): array
+    public function findUpcoming(int $limit = 5, int $withinDays = 7): array
     {
+        $until = (new DateTime())->modify("+{$withinDays} days");
+
         return $this->createQueryBuilder('ce')
             ->select('ce', 'cet', 'l', 'g', 'ht', 'at', 'gt')
             ->leftJoin('ce.calendarEventType', 'cet')
@@ -38,7 +40,9 @@ class CalendarEventRepository extends ServiceEntityRepository implements Optimiz
             ->leftJoin('g.awayTeam', 'at')
             ->leftJoin('g.gameType', 'gt')
             ->where('ce.startDate >= :now')
+            ->andWhere('ce.startDate <= :until')
             ->setParameter('now', new DateTime())
+            ->setParameter('until', $until)
             ->orderBy('ce.startDate', 'ASC')
             ->setMaxResults($limit)
             ->getQuery()

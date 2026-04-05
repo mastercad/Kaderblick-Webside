@@ -183,6 +183,31 @@ export const WizardStep1: React.FC<WizardStep1Props> = ({
           handleChange={onChange}
         />
       )}
+
+      {/* Treffpunkt / Treffzeit (für alle Nicht-Aufgaben-Termine) */}
+      {!isTask && (
+        <>
+          <TextField
+            label="Treffpunkt"
+            value={formData.meetingPoint || ''}
+            onChange={e => onChange('meetingPoint', e.target.value)}
+            fullWidth
+            margin="normal"
+            size="small"
+            placeholder="z.B. Parkplatz Nordseite, Eingang B"
+          />
+          <TextField
+            label="Treffzeit"
+            type="time"
+            value={formData.meetingTime || ''}
+            onChange={e => onChange('meetingTime', e.target.value)}
+            fullWidth
+            margin="normal"
+            size="small"
+            InputLabelProps={{ shrink: true }}
+          />
+        </>
+      )}
     </>
   );
 };

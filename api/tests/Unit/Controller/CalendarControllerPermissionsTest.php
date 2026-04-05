@@ -11,6 +11,7 @@ use App\Repository\CalendarEventRepository;
 use App\Repository\ParticipationRepository;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventSerializer;
+use App\Service\SystemSettingService;
 use App\Service\TeamMembershipService;
 use DateTime;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -64,7 +65,11 @@ class CalendarControllerPermissionsTest extends TestCase
             $this->security,
         );
 
-        $this->controller = new CalendarEventReadController($this->em, $serializer);
+        $this->controller = new CalendarEventReadController(
+            $this->em,
+            $serializer,
+            $this->createMock(SystemSettingService::class),
+        );
 
         $this->authChecker = $this->createMock(AuthorizationCheckerInterface::class);
 

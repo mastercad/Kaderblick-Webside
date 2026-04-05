@@ -89,6 +89,7 @@ const FeatureDetail = lazy(() => import('./pages/FeatureDetail'));
 const Faq = lazy(() => import('./pages/Faq'));
 const ContactPage = lazy(() => import('./pages/Contact'));
 const PublicIntentPage = lazy(() => import('./pages/PublicIntentPage'));
+const Matchday = lazy(() => import('./pages/Matchday'));
 
 function RouteFallback() {
   return (
@@ -338,6 +339,8 @@ function App() {
                     <Route path="cameras" element={<ProtectedRoute><Cameras /></ProtectedRoute>} />
                     <Route path="videoTypes" element={<ProtectedRoute><VideoTypes /></ProtectedRoute>} />
                     <Route path="/survey/fill/:surveyId" element={<ProtectedRoute><SurveyFill /></ProtectedRoute>} />
+                    <Route path="/mein-spieltag" element={<ProtectedRoute><Matchday /></ProtectedRoute>} />
+                    <Route path="/mein-spieltag/:eventId" element={<ProtectedRoute><Matchday /></ProtectedRoute>} />
                     <Route path="/imprint" element={<Imprint />} />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="*" element={<Navigate to="/" />} />

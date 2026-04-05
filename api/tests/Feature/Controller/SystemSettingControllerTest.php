@@ -322,4 +322,213 @@ class SystemSettingControllerTest extends ApiWebTestCase
         $data = json_decode($client->getResponse()->getContent(), true);
         $this->assertArrayHasKey('error', $data);
     }
+
+    // ────────────────────────────── Matchday lookahead days ──────────────────────────────
+
+    public function testListDefaultIncludesMatchdayLookaheadDays(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request('GET', '/api/superadmin/system-settings');
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey(
+            SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            $data['defaults'],
+            'matchday_lookahead_days must appear in the defaults list.'
+        );
+        $this->assertSame(
+            (string) SystemSettingService::MATCHDAY_LOOKAHEAD_DAYS_DEFAULT,
+            $data['defaults'][SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS]
+        );
+    }
+
+    public function testUpdateMatchdayLookaheadDaysAcceptsValidValue(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '14'])
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('14', $data['value']);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysAcceptsBoundaryOne(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '1'])
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('1', $data['value']);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysAcceptsBoundaryNinety(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '90'])
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('90', $data['value']);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysRejectsZero(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '0'])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysRejectsNegativeValue(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '-1'])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysRejectsAboveNinety(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '91'])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysRejectsNonIntegerString(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => 'abc'])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysRejectsFloatValue(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '7.5'])
+        );
+
+        $this->assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+    }
+
+    public function testUpdateMatchdayLookaheadDaysIsPersisted(): void
+    {
+        $client = static::createClient();
+        $em = static::getContainer()->get('doctrine')->getManager();
+        $this->authenticateUser($client, 'user21@example.com');
+
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => '21'])
+        );
+
+        $this->assertResponseIsSuccessful();
+
+        // Read back from DB
+        $em->clear();
+        $setting = $em->getRepository(SystemSetting::class)
+            ->findOneBy(['key' => SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS]);
+        $this->assertNotNull($setting);
+        $this->assertSame('21', $setting->getValue(), 'matchday_lookahead_days was not persisted.');
+
+        // Restore default
+        $client->request(
+            'PATCH',
+            '/api/superadmin/system-settings/' . SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['value' => (string) SystemSettingService::MATCHDAY_LOOKAHEAD_DAYS_DEFAULT])
+        );
+    }
 }

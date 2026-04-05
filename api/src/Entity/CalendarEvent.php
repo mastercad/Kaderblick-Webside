@@ -103,6 +103,16 @@ class CalendarEvent
     #[ORM\Column(type: Types::STRING, length: 36, nullable: true)]
     private ?string $trainingSeriesId = null;
 
+    /** Free-text description of the meeting point, e.g. "Parkplatz hinter der Halle" */
+    #[ORM\Column(type: Types::STRING, length: 255, nullable: true)]
+    #[Groups(['calendar_event:read'])]
+    private ?string $meetingPoint = null;
+
+    /** Time the team gathers at the meeting point (may differ from event start) */
+    #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
+    #[Groups(['calendar_event:read'])]
+    private ?DateTimeInterface $meetingTime = null;
+
     /**
      * @var Collection<int, CalendarEventPermission>
      */
@@ -363,6 +373,30 @@ class CalendarEvent
     public function setTrainingSeriesId(?string $trainingSeriesId): self
     {
         $this->trainingSeriesId = $trainingSeriesId;
+
+        return $this;
+    }
+
+    public function getMeetingPoint(): ?string
+    {
+        return $this->meetingPoint;
+    }
+
+    public function setMeetingPoint(?string $meetingPoint): self
+    {
+        $this->meetingPoint = $meetingPoint;
+
+        return $this;
+    }
+
+    public function getMeetingTime(): ?DateTimeInterface
+    {
+        return $this->meetingTime;
+    }
+
+    public function setMeetingTime(?DateTimeInterface $meetingTime): self
+    {
+        $this->meetingTime = $meetingTime;
 
         return $this;
     }

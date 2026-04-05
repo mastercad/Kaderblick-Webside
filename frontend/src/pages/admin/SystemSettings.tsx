@@ -12,15 +12,18 @@ import {
   Paper,
   RadioGroup,
   Radio,
+  Slider,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SecurityIcon from '@mui/icons-material/Security';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
 import { apiJson } from '../../utils/api';
 
 const REGISTRATION_CONTEXT_KEY = 'registration_context_enabled';
 const TWO_FA_REQUIRED_KEY = '2fa_required';
 const PUSH_NOTIFICATIONS_MODE_KEY = 'push_notifications_mode';
+const MATCHDAY_LOOKAHEAD_DAYS_KEY = 'matchday_lookahead_days';
 
 interface Settings {
   [key: string]: { value: string; updatedAt: string };
@@ -77,6 +80,11 @@ export default function SystemSettings() {
 
   const getString = (key: string, defaultValue = ''): string =>
     settings[key]?.value ?? defaultValue;
+
+  const getInt = (key: string, defaultValue: number): number => {
+    const val = parseInt(settings[key]?.value ?? '', 10);
+    return isNaN(val) ? defaultValue : val;
+  };
 
   const handleSelect = async (key: string, value: string) => {
     setSaving(true);
@@ -288,6 +296,58 @@ export default function SystemSettings() {
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 Zuletzt geändert:{' '}
                 {new Date(settings[PUSH_NOTIFICATIONS_MODE_KEY].updatedAt).toLocaleString('de-DE')}
+              </Typography>
+            )}
+          </Box>
+        </CardContent>
+      </Paper>
+
+      {/* ── Mein Spieltag ───────────────────────────────────────────────── */}
+      <Paper variant="outlined" sx={{ mt: 3 }}>
+        <CardContent>
+          <Box display="flex" alignItems="center" gap={1} mb={1}>
+            <SportsSoccerIcon color="action" fontSize="small" />
+            <Typography variant="overline" color="text.secondary">
+              Mein Spieltag
+            </Typography>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+
+          <Box>
+            <Typography fontWeight={500} mb={0.5}>
+              Vorausschau-Zeitraum für anstehende Spiele
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Legt fest, wie viele Tage im Voraus Spiele in "Mein Spieltag" als Tabs angezeigt werden.
+              Bei einem Wert von 7 sieht ein Spieler alle Spiele der nächsten Woche.
+            </Typography>
+
+            <Box sx={{ px: 1 }}>
+              <Slider
+                value={getInt(MATCHDAY_LOOKAHEAD_DAYS_KEY, 7)}
+                min={1}
+                max={30}
+                step={1}
+                marks={[
+                  { value: 1, label: '1 Tag' },
+                  { value: 7, label: '7 Tage' },
+                  { value: 14, label: '14 Tage' },
+                  { value: 30, label: '30 Tage' },
+                ]}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(v) => `${v} ${v === 1 ? 'Tag' : 'Tage'}`}
+                disabled={saving}
+                onChangeCommitted={(_, value) =>
+                  handleSelect(MATCHDAY_LOOKAHEAD_DAYS_KEY, String(value))
+                }
+                sx={{ maxWidth: 480 }}
+              />
+            </Box>
+
+            {settings[MATCHDAY_LOOKAHEAD_DAYS_KEY]?.updatedAt && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Zuletzt geändert:{' '}
+                {new Date(settings[MATCHDAY_LOOKAHEAD_DAYS_KEY].updatedAt).toLocaleString('de-DE')}
               </Typography>
             )}
           </Box>

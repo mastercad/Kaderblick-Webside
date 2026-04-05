@@ -388,4 +388,453 @@ class CoachesControllerTest extends ApiWebTestCase
             $this->assertDateFormat($a['endDate'] ?? null, "nationalityAssignments[$i].endDate");
         }
     }
+
+    // ─────────────────────────── show() ───────────────────────────
+
+    public function testShowReturnsCoachById(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/coaches/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('coach', $data);
+        $this->assertSame(1, $data['coach']['id']);
+        $this->assertArrayHasKey('firstName', $data['coach']);
+        $this->assertArrayHasKey('lastName', $data['coach']);
+    }
+
+    public function testShowReturnsCoachRelations(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/coaches/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('clubAssignments', $data['coach']);
+        $this->assertArrayHasKey('teamAssignments', $data['coach']);
+        $this->assertArrayHasKey('licenseAssignments', $data['coach']);
+        $this->assertArrayHasKey('nationalityAssignments', $data['coach']);
+    }
+
+    public function testShowRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/coaches/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testShowReturns404ForUnknownCoach(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $client->request('GET', '/api/coaches/99999999');
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testShowAsRegularUserSucceeds(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+        $client->request('GET', '/api/coaches/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('coach', $data);
+    }
+
+    public function testShowReturnsPermissionsKey(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+
+        $client->request('GET', '/api/coaches/1');
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        $this->assertArrayHasKey('permissions', $data['coach']);
+        $this->assertArrayHasKey('canEdit', $data['coach']['permissions']);
+        $this->assertArrayHasKey('canDelete', $data['coach']['permissions']);
+    }
+
+    // ─────────────────────────── create() ───────────────────────────
+
+    public function testCreateRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode(['firstName' => 'New', 'lastName' => 'Coach'])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testCreateAsRegularUserForbidden(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'New',
+                'lastName' => 'Coach',
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testCreateAsAdminReturnsCreated(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'New',
+                'lastName' => 'CCT-' . $suffix,
+                'email' => 'cct-' . $suffix . '@test.example.com',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $em->getConnection()->executeStatement(
+            'DELETE FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-' . $suffix]
+        );
+    }
+
+    public function testCreateWithNationalityAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Nat',
+                'lastName' => 'CCT-NAT-' . $suffix,
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [
+                    ['nationality' => ['id' => 1], 'startDate' => '2024-01-01', 'endDate' => null],
+                ],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement(
+            'DELETE cna FROM coach_nationality_assignments cna
+              JOIN coaches c ON cna.coach_id = c.id WHERE c.last_name = :ln',
+            ['ln' => 'CCT-NAT-' . $suffix]
+        );
+        $conn->executeStatement(
+            'DELETE FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-NAT-' . $suffix]
+        );
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    public function testCreateWithClubAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Club',
+                'lastName' => 'CCT-CLUB-' . $suffix,
+                'email' => '',
+                'clubAssignments' => [
+                    ['club' => ['id' => 1], 'startDate' => '2024-01-01', 'endDate' => null],
+                ],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $conn = $em->getConnection();
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $conn->executeStatement(
+            'DELETE cca FROM coach_club_assignments cca
+              JOIN coaches c ON cca.coach_id = c.id WHERE c.last_name = :ln',
+            ['ln' => 'CCT-CLUB-' . $suffix]
+        );
+        $conn->executeStatement(
+            'DELETE FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-CLUB-' . $suffix]
+        );
+        $conn->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    // ─────────────────────────── update() ───────────────────────────
+
+    public function testUpdateRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request(
+            'PUT',
+            '/api/coaches/1',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode(['firstName' => 'X', 'lastName' => 'Y', 'email' => ''])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testUpdateReturns404ForUnknownCoach(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $client->request(
+            'PUT',
+            '/api/coaches/99999999',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'X',
+                'lastName' => 'Y',
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testUpdateAsRegularUserForbidden(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+        $client->request(
+            'PUT',
+            '/api/coaches/1',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'X',
+                'lastName' => 'Y',
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testUpdateAsAdminSucceeds(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        // Create a temporary coach so fixture data is not modified
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Upd',
+                'lastName' => 'CCT-UPD-' . $suffix,
+                'email' => 'cct-upd-' . $suffix . '@test.example.com',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $newId = $em->getConnection()->fetchOne(
+            'SELECT id FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-UPD-' . $suffix]
+        );
+        $this->assertNotFalse($newId);
+
+        $client->request(
+            'PUT',
+            '/api/coaches/' . $newId,
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Updated',
+                'lastName' => 'CCT-UPD-' . $suffix,
+                'email' => 'cct-upd-' . $suffix . '@test.example.com',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+
+        $em->getConnection()->executeStatement(
+            'DELETE FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-UPD-' . $suffix]
+        );
+    }
+
+    public function testUpdateWithNationalityAssignment(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        // Create a temporary coach so fixture data is not modified
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Nat',
+                'lastName' => 'CCT-NAUPD-' . $suffix,
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $newId = $em->getConnection()->fetchOne(
+            'SELECT id FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-NAUPD-' . $suffix]
+        );
+        $this->assertNotFalse($newId);
+
+        $client->request(
+            'PUT',
+            '/api/coaches/' . $newId,
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Nat',
+                'lastName' => 'CCT-NAUPD-' . $suffix,
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [
+                    ['nationality' => ['id' => 1], 'startDate' => '2024-01-01', 'endDate' => null],
+                ],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Cleanup temporary coach and its assignments
+        $em->getConnection()->executeStatement('SET FOREIGN_KEY_CHECKS=0');
+        $em->getConnection()->executeStatement(
+            'DELETE cna FROM coach_nationality_assignments cna
+              JOIN coaches c ON cna.coach_id = c.id WHERE c.last_name = :ln',
+            ['ln' => 'CCT-NAUPD-' . $suffix]
+        );
+        $em->getConnection()->executeStatement(
+            'DELETE FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-NAUPD-' . $suffix]
+        );
+        $em->getConnection()->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+    }
+
+    // ─────────────────────────── delete() ───────────────────────────
+
+    public function testDeleteRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('DELETE', '/api/coaches/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testDeleteReturns404ForUnknownCoach(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $client->request('DELETE', '/api/coaches/99999999');
+        $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testDeleteAsRegularUserForbidden(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user6@example.com');
+        $client->request('DELETE', '/api/coaches/1');
+        $this->assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+    }
+
+    public function testDeleteAsAdminSucceeds(): void
+    {
+        $client = static::createClient();
+        $this->authenticateUser($client, 'user16@example.com');
+        $suffix = bin2hex(random_bytes(4));
+
+        // Create a coach to delete
+        $client->request(
+            'POST',
+            '/api/coaches',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([
+                'firstName' => 'Del',
+                'lastName' => 'CCT-DEL-' . $suffix,
+                'email' => '',
+                'clubAssignments' => [],
+                'teamAssignments' => [],
+                'licenseAssignments' => [],
+                'nationalityAssignments' => [],
+            ])
+        );
+        $this->assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        // Find the new coach's ID via the list
+        $em = static::getContainer()->get('doctrine.orm.entity_manager');
+        $newId = $em->getConnection()->fetchOne(
+            'SELECT id FROM coaches WHERE last_name = :ln',
+            ['ln' => 'CCT-DEL-' . $suffix]
+        );
+        $this->assertNotFalse($newId);
+
+        $client->request('DELETE', '/api/coaches/' . $newId);
+        $this->assertResponseIsSuccessful();
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
 }

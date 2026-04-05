@@ -28,6 +28,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import HomeIcon from '@mui/icons-material/Home';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
+import ChecklistIcon from '@mui/icons-material/Checklist';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import { useAuth } from '../../context/AuthContext';
 
@@ -71,6 +72,7 @@ export const navigationItems: NavItem[] = [
   { key: 'surveys',       label: 'Umfragen',       disabled: false, icon: <PollIcon fontSize="small" /> },
   { key: 'mein-feedback', label: 'Mein Feedback',  disabled: false, icon: <FeedbackIcon fontSize="small" /> },
   { key: 'tasks',         label: 'Meine Aufgaben', disabled: false, icon: <AssignmentIcon fontSize="small" /> },
+  { key: 'mein-spieltag', label: 'Mein Spieltag',  disabled: false },
 ];
 
 export const trainerMenuItems: TrainerMenuItem[] = [
@@ -138,6 +140,7 @@ export const navItemIconMap: Record<string, React.ReactNode> = {
   'surveys':       <PollIcon fontSize="small" />,
   'mein-feedback': <FeedbackIcon fontSize="small" />,
   'tasks':         <AssignmentIcon fontSize="small" />,
+  'mein-spieltag':  <ChecklistIcon fontSize="small" />,
 };
 
 export const navItemColorMap: Record<string, string> = {
@@ -151,6 +154,7 @@ export const navItemColorMap: Record<string, string> = {
   'surveys':         '#26C6DA',
   'mein-feedback':   '#EC407A',
   'tasks':           '#F59E0B',
+  'mein-spieltag':   '#EF5350',
   'formations':      '#66BB6A',
   'players':         '#26A69A',
   'teams':           '#5C6BC0',
@@ -164,6 +168,7 @@ export const navItemColorMap: Record<string, string> = {
 export function isNavItemActive(pathname: string, key: string): boolean {
   if (key === 'home') return pathname === '/' || pathname === '';
   if (key === 'surveys') return pathname === '/surveys' || pathname.startsWith('/surveys/') || pathname.startsWith('/survey/');
+  if (key === 'mein-spieltag') return pathname.startsWith('/mein-spieltag');
   return pathname === `/${key}` || pathname.startsWith(`/${key}/`);
 }
 

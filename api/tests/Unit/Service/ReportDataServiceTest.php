@@ -11,6 +11,7 @@ use App\Entity\Team;
 use App\Entity\WeatherData;
 use App\Service\ReportDataService;
 use App\Service\ReportFieldAliasService;
+use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Query;
@@ -1183,5 +1184,429 @@ class ReportDataServiceTest extends TestCase
         $this->assertSame('radar', $result['diagramType']);
         $this->assertArrayHasKey('meta', $result);
         $this->assertArrayHasKey('radarHasData', $result['meta']);
+    }
+
+    // ── DB aggregate path tests ────────────────────────────────────────
+
+    /**
+     * Creates a fully-mocked QueryBuilder that supports all chaining methods used by
+     * both the DB-aggregate path and the PHP-fallback path.
+     *
+     * @param array<int, array<string,mixed>> $arrayResult rows for getArrayResult()
+     * @param array<int, mixed>               $result      rows for getResult()
+     *
+     * @return array{qb: QueryBuilder, query: Query}
+     */
+    private function makeFullQbMock(array $arrayResult = [], array $result = []): array
+    {
+        $query = $this->createMock(Query::class);
+        $query->method('getResult')->willReturn($result);
+        $query->method('getArrayResult')->willReturn($arrayResult);
+
+        $qb = $this->createMock(QueryBuilder::class);
+        $qb->method('leftJoin')->willReturnSelf();
+        $qb->method('join')->willReturnSelf();
+        $qb->method('andWhere')->willReturnSelf();
+        $qb->method('setParameter')->willReturnSelf();
+        $qb->method('addSelect')->willReturnSelf();
+        $qb->method('addGroupBy')->willReturnSelf();
+        $qb->method('select')->willReturnSelf();
+        $qb->method('getQuery')->willReturn($query);
+
+        return compact('qb', 'query');
+    }
+
+    public function testGenerateReportDataDbAggregateSuccessReturnsLabelAndData(): void
+    {
+        ['qb' => $qb] = $this->makeFullQbMock(
+            [['label' => 'Alice', 'value' => '3'], ['label' => 'Bob', 'value' => '1']]
+        );
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $svc = new ReportDataService($em);
+
+        $result = $svc->generateReportData([
+            'xField' => 'player',
+            'yField' => 'goals',
+            'groupBy' => ['player'],
+            'use_db_aggregates' => true,
+        ]);
+
+        $this->assertSame(['Alice', 'Bob'], $result['labels']);
+        $this->assertSame([3.0, 1.0], $result['datasets'][0]['data']);
+        $this->assertTrue($result['meta']['dbAggregate']);
+    }
+
+    public function testGenerateReportDataDbAggregateGoalsMetric(): void
+    {
+        // Verifies that the metric code-map path is hit for 'goals'
+        ['qb' => $qb] = $this->makeFullQbMock([['label' => 'TeamX', 'value' => '5']]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'team',
+            'yField' => 'goals',
+            'groupBy' => ['team'],
+            'use_db_aggregates' => true,
+        ]);
+
+        $this->assertSame(['TeamX'], $result['labels']);
+        $this->assertSame([5.0], $result['datasets'][0]['data']);
+        $this->assertTrue($result['meta']['dbAggregate']);
+    }
+
+    public function testGenerateReportDataDbAggregateEventTypeIdField(): void
+    {
+        // yField matching 'eventType:42' triggers the regex path
+        ['qb' => $qb] = $this->makeFullQbMock([['label' => 'Max', 'value' => '2']]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'eventType:42',
+            'groupBy' => ['player'],
+            'use_db_aggregates' => true,
+        ]);
+
+        $this->assertSame(['Max'], $result['labels']);
+        $this->assertTrue($result['meta']['dbAggregate']);
+    }
+
+    public function testGenerateReportDataDbAggregateUnsupportedMetricFallsBackToPhp(): void
+    {
+        // 'duelsWonPercent' is NOT in $dbSupportedMetrics → falls back to PHP
+        $ev = $this->createMock(GameEvent::class);
+
+        ['qb' => $qb] = $this->makeFullQbMock([], [$ev]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'duelsWonPercent',
+            'groupBy' => ['player'],
+            'use_db_aggregates' => true,
+        ]);
+
+        // PHP fallback: result has dbAggregate = false (or not set, or meta.suggestions has hint)
+        $this->assertArrayHasKey('meta', $result);
+        // suggestions should mention that the metric needs PHP processing
+        $this->assertStringContainsString('not supported', implode(' ', $result['meta']['suggestions'] ?? []));
+    }
+
+    public function testGenerateReportDataDbAggregateNoJoinPathFallsBackToPhp(): void
+    {
+        // 'homeAway' has joinHint = null → canUseDb becomes false
+        $ev = $this->createMock(GameEvent::class);
+
+        ['qb' => $qb] = $this->makeFullQbMock([], [$ev]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'goals',
+            'groupBy' => ['homeAway'],  // joinHint = null → canUseDb = false
+            'use_db_aggregates' => true,
+        ]);
+
+        $this->assertArrayHasKey('meta', $result);
+        // Should have fallen back to PHP path with userSuggestions set
+        $this->assertArrayHasKey('userSuggestions', $result['meta']);
+    }
+
+    public function testGenerateReportDataDbAggregateWithDateFilters(): void
+    {
+        // Covers the dateFrom / dateTo filter branches in the DB aggregate path
+        ['qb' => $qb] = $this->makeFullQbMock([['label' => 'Alice', 'value' => '1']]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'assists',
+            'groupBy' => ['player'],
+            'use_db_aggregates' => true,
+            'filters' => [
+                'team' => 1,
+                'player' => 2,
+                'dateFrom' => '2024-01-01',
+                'dateTo' => '2024-12-31',
+            ],
+        ]);
+
+        $this->assertTrue($result['meta']['dbAggregate']);
+    }
+
+    public function testGenerateReportDataDbAggregateWithSurfaceTypeFilter(): void
+    {
+        // Covers the surfaceType / gameType filter branches in the DB aggregate path
+        ['qb' => $qb] = $this->makeFullQbMock([['label' => 'Rasen', 'value' => '2']]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'surfaceType',
+            'yField' => 'shots',
+            'groupBy' => ['player'],
+            'use_db_aggregates' => true,
+            'filters' => [
+                'surfaceType' => 3,
+                'gameType' => 2,
+            ],
+        ]);
+
+        $this->assertTrue($result['meta']['dbAggregate']);
+    }
+
+    // ── Spatial heatmap via generateReportData ─────────────────────────
+
+    public function testGenerateReportDataPitchHeatmapReturnsSpatialPoints(): void
+    {
+        $ev = new class {
+            public function getPosX(): float
+            {
+                return 50.0;
+            }
+
+            public function getPosY(): float
+            {
+                return 30.0;
+            }
+        };
+
+        ['qb' => $qb] = $this->makeFullQbMock([], [$ev]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'diagramType' => 'pitchheatmap',
+            'heatmapSpatial' => true,
+            'xField' => 'player',
+            'yField' => 'goals',
+        ]);
+
+        $this->assertSame('pitchheatmap', $result['diagramType']);
+        $this->assertTrue($result['meta']['spatialRequested']);
+        $this->assertTrue($result['meta']['spatialProvided']);
+        $this->assertNotEmpty($result['datasets'][0]['data']);
+        $this->assertSame(50.0, $result['datasets'][0]['data'][0]['x']);
+        $this->assertSame(30.0, $result['datasets'][0]['data'][0]['y']);
+    }
+
+    public function testGenerateReportDataPitchHeatmapFallsBackWhenNoPos(): void
+    {
+        // Events without pos getters → spatialProvided = false, continues to matrix output
+        $ev = $this->createMock(GameEvent::class);
+
+        ['qb' => $qb] = $this->makeFullQbMock([], [$ev]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'diagramType' => 'pitchheatmap',
+            'heatmapSpatial' => true,
+            'xField' => 'player',
+            'yField' => 'goals',
+        ]);
+
+        // Falls through to standard output (no diagramType in result, or different structure)
+        $this->assertArrayHasKey('meta', $result);
+        $this->assertTrue($result['meta']['spatialRequested']);
+        $this->assertFalse($result['meta']['spatialProvided']);
+    }
+
+    public function testGenerateReportDataZeroEventsAddsUserMessage(): void
+    {
+        // When no events match filters, meta.userMessage should be set
+        ['qb' => $qb] = $this->makeFullQbMock([], []);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'goals',
+            'diagramType' => 'bar',
+        ]);
+
+        $this->assertSame(0, $result['meta']['eventsCount']);
+        $this->assertArrayHasKey('userMessage', $result['meta']);
+        $this->assertStringContainsString('Keine', $result['meta']['userMessage']);
+    }
+
+    public function testGenerateReportDataWithAllStandardFilters(): void
+    {
+        // Covers all individual filter branches in the PHP fallback path
+        ['qb' => $qb] = $this->makeFullQbMock([], []);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'xField' => 'player',
+            'yField' => 'goals',
+            'diagramType' => 'bar',
+            'filters' => [
+                'team' => 1,
+                'eventType' => 2,
+                'player' => 3,
+                'surfaceType' => 4,
+                'gameType' => 5,
+                'dateFrom' => '2024-01-01',
+                'dateTo' => '2024-12-31',
+            ],
+        ]);
+
+        $this->assertArrayHasKey('meta', $result);
+    }
+
+    public function testGenerateReportDataFacetedTypeDelegatesCorrectly(): void
+    {
+        $teamX = $this->createMock(Team::class);
+        $teamX->method('getName')->willReturn('TeamX');
+        $teamX->method('__toString')->willReturn('TeamX');
+
+        $playerA = $this->createMock(Player::class);
+        $playerA->method('getFullName')->willReturn('Alice');
+        $playerA->method('__toString')->willReturn('Alice');
+
+        $ev = $this->createMock(GameEvent::class);
+        $ev->method('getTeam')->willReturn($teamX);
+        $ev->method('getPlayer')->willReturn($playerA);
+        $ev->method('getGameEventType')->willReturn(null);
+
+        ['qb' => $qb] = $this->makeFullQbMock([], [$ev]);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('createQueryBuilder')->willReturn($qb);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+
+        $result = (new ReportDataService($em))->generateReportData([
+            'diagramType' => 'faceted',
+            'facetBy' => 'team',
+            'xField' => 'player',
+            'yField' => 'goals',
+        ]);
+
+        $this->assertSame('faceted', $result['diagramType']);
+        $this->assertArrayHasKey('panels', $result);
+    }
+
+    // ── retrieveSortKey ───────────────────────────────────────────────
+
+    public function testRetrieveSortKeyUsesSortKeyCallback(): void
+    {
+        // 'gameDate' field has a sortKey callable
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+        $svc = new ReportDataService($em);
+
+        $date = new DateTime('2024-05-20');
+
+        $ce = $this->createMock(CalendarEvent::class);
+        $ce->method('getStartDate')->willReturn($date);
+
+        $game = $this->createMock(Game::class);
+        $game->method('getCalendarEvent')->willReturn($ce);
+
+        $ev = $this->createMock(GameEvent::class);
+        $ev->method('getGame')->willReturn($game);
+
+        $ref = new ReflectionClass(ReportDataService::class);
+        $m = $ref->getMethod('retrieveSortKey');
+        $m->setAccessible(true);
+
+        $key = $m->invoke($svc, $ev, 'gameDate');
+        $this->assertSame('2024-05-20', $key);
+    }
+
+    public function testRetrieveSortKeyFallsBackToStringifyForPlayerField(): void
+    {
+        // 'player' field has no sortKey callable — uses fallback stringify
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('findAll')->willReturn([]);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->willReturn($repo);
+        $svc = new ReportDataService($em);
+
+        $player = $this->createMock(Player::class);
+        $player->method('getFullName')->willReturn('Charlie Brown');
+
+        $ev = $this->createMock(GameEvent::class);
+        $ev->method('getPlayer')->willReturn($player);
+
+        $ref = new ReflectionClass(ReportDataService::class);
+        $m = $ref->getMethod('retrieveSortKey');
+        $m->setAccessible(true);
+
+        $key = $m->invoke($svc, $ev, 'player');
+        // 'player' alias has no sortKey callable; value falls back to getter getPlayer() →
+        // Player mock has getFullName but stringifyValue picks getFullName on the Player object
+        $this->assertNotEmpty($key); // confirms the fallback path was exercised
+        $this->assertNotSame('zzzz', $key); // not the default empty placeholder
     }
 }
