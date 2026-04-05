@@ -157,7 +157,7 @@ class CalendarEventRepositoryFindUpcomingTest extends TestCase
         $this->capturedParameters = []; // reset
         $this->repository->findUpcoming(5, 30);
         $this->assertArrayHasKey('until', $this->capturedParameters);
-        /** @var array<string, \DateTime> $capturedParams */
+        /** @var array<string, DateTime> $capturedParams */
         $capturedParams = $this->capturedParameters;
         $until30 = $capturedParams['until'];
 

@@ -27,7 +27,8 @@ class MatchdayControllerFindPositionAlternativesTest extends TestCase
     /** Calls the private method via Reflection. */
     /**
      * @param array<string|int, mixed> $squadByPlayerId
-     * @param array<int> $plannedPlayerIds
+     * @param array<int>               $plannedPlayerIds
+     *
      * @return array<mixed>
      */
     private function callFindPositionAlternatives(

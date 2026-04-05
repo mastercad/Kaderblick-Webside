@@ -14,6 +14,7 @@ use App\Repository\MatchdayViewRepository;
 use App\Repository\ParticipationRepository;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventSerializer;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -141,9 +142,9 @@ class MatchdayController extends AbstractController
         }
 
         // --- Tasks on event date ---
-        $eventDate = $calendarEvent->getStartDate() ?? new \DateTimeImmutable();
-        $eventDateStart = \DateTimeImmutable::createFromInterface($eventDate)->setTime(0, 0, 0);
-        $eventDateEnd = \DateTimeImmutable::createFromInterface($eventDate)->setTime(23, 59, 59);
+        $eventDate = $calendarEvent->getStartDate() ?? new DateTimeImmutable();
+        $eventDateStart = DateTimeImmutable::createFromInterface($eventDate)->setTime(0, 0, 0);
+        $eventDateEnd = DateTimeImmutable::createFromInterface($eventDate)->setTime(23, 59, 59);
 
         /** @var TaskAssignment[] $myTaskAssignments */
         $myTaskAssignments = $this->entityManager->getRepository(TaskAssignment::class)
