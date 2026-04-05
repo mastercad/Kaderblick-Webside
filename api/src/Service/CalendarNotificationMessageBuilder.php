@@ -6,6 +6,7 @@ use App\Dto\CalendarEventChangeSet;
 use App\Entity\CalendarEvent;
 use App\Event\CalendarEventDeletedEvent;
 use App\Event\CalendarEventUpdatedEvent;
+use DateTimeImmutable;
 
 /**
  * Builds human-readable push notification title and body for calendar events.
@@ -20,21 +21,21 @@ class CalendarNotificationMessageBuilder
      */
     public function forCreated(CalendarEvent $calendarEvent): array
     {
-        $isTraining    = null !== $calendarEvent->getTrainingSeriesId();
+        $isTraining = null !== $calendarEvent->getTrainingSeriesId();
         $seriesEndDate = $calendarEvent->getTrainingSeriesEndDate();
-        $startDt       = $calendarEvent->getStartDate();
-        $endDt         = $calendarEvent->getEndDate();
-        $locationObj   = $calendarEvent->getLocation();
-        $game          = $calendarEvent->getGame();
-        $lines         = [];
+        $startDt = $calendarEvent->getStartDate();
+        $endDt = $calendarEvent->getEndDate();
+        $locationObj = $calendarEvent->getLocation();
+        $game = $calendarEvent->getGame();
+        $lines = [];
 
         if ($isTraining && null !== $seriesEndDate) {
             $title = 'Neue Trainings: ' . $calendarEvent->getTitle();
-            $endDateFmt = (new \DateTimeImmutable($seriesEndDate))->format('d.m.Y');
+            $endDateFmt = (new DateTimeImmutable($seriesEndDate))->format('d.m.Y');
             $lines[] = 'Es wurden neue Trainings angelegt.';
             if (null !== $startDt) {
                 $lines[] = '📅 ' . $startDt->format('d.m.Y') . ' bis ' . $endDateFmt;
-                $timeStr  = $startDt->format('H:i');
+                $timeStr = $startDt->format('H:i');
                 $timeStr .= null !== $endDt ? '–' . $endDt->format('H:i') . ' Uhr' : ' Uhr';
                 $lines[] = '⏰ Uhrzeit: ' . $timeStr;
             }
@@ -42,12 +43,12 @@ class CalendarNotificationMessageBuilder
                 $lines[] = '📍 Ort: ' . $locationObj->getName();
             }
         } elseif (null !== $game) {
-            $home  = $game->getHomeTeam()?->getName() ?? '?';
-            $away  = $game->getAwayTeam()?->getName() ?? '?';
+            $home = $game->getHomeTeam()?->getName() ?? '?';
+            $away = $game->getAwayTeam()?->getName() ?? '?';
             $title = 'Neues Spiel: ' . $calendarEvent->getTitle();
             $lines[] = $home . ' vs. ' . $away;
             if (null !== $startDt) {
-                $timeStr  = $startDt->format('d.m.Y') . ' · ' . $startDt->format('H:i');
+                $timeStr = $startDt->format('d.m.Y') . ' · ' . $startDt->format('H:i');
                 $timeStr .= null !== $endDt ? '–' . $endDt->format('H:i') . ' Uhr' : ' Uhr';
                 $lines[] = '📅 ' . $timeStr;
             }
@@ -57,7 +58,7 @@ class CalendarNotificationMessageBuilder
         } else {
             $title = ($isTraining ? 'Neues Training: ' : 'Neuer Termin: ') . $calendarEvent->getTitle();
             if (null !== $startDt) {
-                $timeStr  = $startDt->format('d.m.Y') . ' · ' . $startDt->format('H:i');
+                $timeStr = $startDt->format('d.m.Y') . ' · ' . $startDt->format('H:i');
                 $timeStr .= null !== $endDt ? '–' . $endDt->format('H:i') . ' Uhr' : ' Uhr';
                 $lines[] = '📅 ' . $timeStr;
             }
@@ -75,21 +76,21 @@ class CalendarNotificationMessageBuilder
     public function forUpdated(CalendarEventUpdatedEvent $event): array
     {
         $calendarEvent = $event->getCalendarEvent();
-        $updatedCount  = $event->getUpdatedCount();
-        $changeSet     = $event->getChangeSet();
+        $updatedCount = $event->getUpdatedCount();
+        $changeSet = $event->getChangeSet();
 
-        $eventTitle  = $calendarEvent->getTitle();
-        $isTraining  = null !== $calendarEvent->getTrainingSeriesId();
-        $termPost    = $isTraining ? 'Training' : 'Termin';
-        $termPlural  = $isTraining ? 'Trainings' : 'Termine';
-        $location    = $calendarEvent->getLocation();
-        $startDt     = $calendarEvent->getStartDate();
-        $dateFmt     = null !== $startDt ? $startDt->format('d.m.Y') : null;
+        $eventTitle = $calendarEvent->getTitle();
+        $isTraining = null !== $calendarEvent->getTrainingSeriesId();
+        $termPost = $isTraining ? 'Training' : 'Termin';
+        $termPlural = $isTraining ? 'Trainings' : 'Termine';
+        $location = $calendarEvent->getLocation();
+        $startDt = $calendarEvent->getStartDate();
+        $dateFmt = null !== $startDt ? $startDt->format('d.m.Y') : null;
 
-        $oldEndDate      = $event->getOldSeriesEndDate();
-        $newEndDate      = $event->getNewSeriesEndDate();
-        $endDateChanged   = $updatedCount > 1 && null !== $newEndDate && $oldEndDate !== $newEndDate;
-        $endDateExtended  = $endDateChanged && null !== $oldEndDate && $newEndDate > $oldEndDate;
+        $oldEndDate = $event->getOldSeriesEndDate();
+        $newEndDate = $event->getNewSeriesEndDate();
+        $endDateChanged = $updatedCount > 1 && null !== $newEndDate && $oldEndDate !== $newEndDate;
+        $endDateExtended = $endDateChanged && null !== $oldEndDate && $newEndDate > $oldEndDate;
         $endDateShortened = $endDateChanged && null !== $oldEndDate && $newEndDate < $oldEndDate;
 
         $title = ($updatedCount > 1 ? $termPlural : $termPost) . ' geändert: ' . $eventTitle;
@@ -123,13 +124,13 @@ class CalendarNotificationMessageBuilder
 
         // ── Series end-date changes (cumulative – always shown when applicable) ─
         if ($endDateExtended) {
-            $newFmt  = (new \DateTimeImmutable($newEndDate))->format('d.m.Y');
+            $newFmt = (new DateTimeImmutable($newEndDate))->format('d.m.Y');
             $lines[] = 'Neue ' . $termPlural . ' bis zum ' . $newFmt . ' wurden hinzugefügt.';
         }
         if ($endDateShortened) {
-            $oldFmt      = $oldEndDate ? (new \DateTimeImmutable($oldEndDate))->format('d.m.Y') : '?';
-            $deletedFrom = (new \DateTimeImmutable($newEndDate))->modify('+1 day')->format('d.m.Y');
-            $lines[]     = 'Die ' . $termPlural . ' vom ' . $deletedFrom . ' bis ' . $oldFmt . ' wurden abgesagt.';
+            $oldFmt = $oldEndDate ? (new DateTimeImmutable($oldEndDate))->format('d.m.Y') : '?';
+            $deletedFrom = (new DateTimeImmutable($newEndDate))->modify('+1 day')->format('d.m.Y');
+            $lines[] = 'Die ' . $termPlural . ' vom ' . $deletedFrom . ' bis ' . $oldFmt . ' wurden abgesagt.';
         }
 
         // ── Fallback when nothing specific was captured ──────────────────────
@@ -147,8 +148,8 @@ class CalendarNotificationMessageBuilder
      */
     private function buildTimeChangeLine(CalendarEventChangeSet $changeSet): string
     {
-        $oldDay   = $changeSet->oldWeekday ? $changeSet->oldWeekday . ' ' : '';
-        $newDay   = $changeSet->newWeekday ? $changeSet->newWeekday . ' ' : '';
+        $oldDay = $changeSet->oldWeekday ? $changeSet->oldWeekday . ' ' : '';
+        $newDay = $changeSet->newWeekday ? $changeSet->newWeekday . ' ' : '';
         $oldRange = ($changeSet->oldStartTime ?? '') . ($changeSet->oldEndTime ? '–' . $changeSet->oldEndTime : '') . ' Uhr';
         $newRange = ($changeSet->newStartTime ?? '') . ($changeSet->newEndTime ? '–' . $changeSet->newEndTime : '') . ' Uhr';
 
@@ -171,17 +172,17 @@ class CalendarNotificationMessageBuilder
      */
     public function forDeleted(CalendarEventDeletedEvent $event): array
     {
-        $calendarEvent    = $event->getCalendarEvent();
-        $deletedCount     = $event->getDeletedCount();
+        $calendarEvent = $event->getCalendarEvent();
+        $deletedCount = $event->getDeletedCount();
         $firstDeletedDate = $event->getFirstDeletedDate();
-        $lastDeletedDate  = $event->getLastDeletedDate();
+        $lastDeletedDate = $event->getLastDeletedDate();
 
         $eventTitle = $calendarEvent->getTitle();
         $isTraining = null !== $calendarEvent->getTrainingSeriesId();
-        $termPost   = $isTraining ? 'Training' : 'Termin';
+        $termPost = $isTraining ? 'Training' : 'Termin';
         $termPlural = $isTraining ? 'Trainings' : 'Termine';
-        $location   = $calendarEvent->getLocation();
-        $lines      = [];
+        $location = $calendarEvent->getLocation();
+        $lines = [];
 
         if ($deletedCount > 1) {
             $title = $termPlural . ' abgesagt: ' . $eventTitle;
@@ -198,10 +199,10 @@ class CalendarNotificationMessageBuilder
                 $lines[] = '📍 Ort: ' . $location->getName();
             }
         } else {
-            $title   = $termPost . ' abgesagt: ' . $eventTitle;
+            $title = $termPost . ' abgesagt: ' . $eventTitle;
             $startDt = $calendarEvent->getStartDate();
             if (null !== $startDt) {
-                $endDt   = $calendarEvent->getEndDate();
+                $endDt = $calendarEvent->getEndDate();
                 $timeStr = $startDt->format('d.m.Y') . ' · ' . $startDt->format('H:i');
                 $timeStr .= null !== $endDt ? '–' . $endDt->format('H:i') . ' Uhr' : ' Uhr';
                 $lines[] = '📅 ' . $timeStr;

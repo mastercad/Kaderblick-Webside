@@ -63,7 +63,7 @@ class CalendarControllerUpdateTest extends TestCase
 
     private function makeController(?EntityManagerInterface $em = null): CalendarEventUpdateController
     {
-        $usedEm    = $em ?? $this->entityManager;
+        $usedEm = $em ?? $this->entityManager;
         $seriesSvc = new TrainingSeriesUpdateService($usedEm, $this->calendarEventService);
         $controller = new CalendarEventUpdateController(
             $usedEm,
@@ -709,11 +709,11 @@ class CalendarControllerUpdateTest extends TestCase
             });
 
         $payload = [
-            'title'                  => 'Training',
-            'startDate'              => '2026-04-14T18:00:00',
-            'endDate'                => '2026-04-14T19:30:00',
-            'trainingEditScope'      => 'from_here',
-            'trainingSeriesEndDate'  => $newEnd,
+            'title' => 'Training',
+            'startDate' => '2026-04-14T18:00:00',
+            'endDate' => '2026-04-14T19:30:00',
+            'trainingEditScope' => 'from_here',
+            'trainingSeriesEndDate' => $newEnd,
         ];
 
         $em = $this->buildMethodEM([$priorEvent, $pivotEvent, $afterEvent], $seriesId);
@@ -774,11 +774,11 @@ class CalendarControllerUpdateTest extends TestCase
             });
 
         $payload = [
-            'title'                  => 'Training',
-            'startDate'              => '2026-04-07T18:00:00',
-            'endDate'                => '2026-04-07T19:30:00',
-            'trainingEditScope'      => 'same_weekday',
-            'trainingSeriesEndDate'  => $newEnd,
+            'title' => 'Training',
+            'startDate' => '2026-04-07T18:00:00',
+            'endDate' => '2026-04-07T19:30:00',
+            'trainingEditScope' => 'same_weekday',
+            'trainingSeriesEndDate' => $newEnd,
         ];
 
         $em = $this->buildMethodEM([$tue1, $thu, $tue2], $seriesId);
@@ -816,9 +816,9 @@ class CalendarControllerUpdateTest extends TestCase
 
         // End date NOT included in payload → falls back to $oldSeriesEndDateStr → no change
         $payload = [
-            'title'             => 'Training',
-            'startDate'         => '2026-04-14T17:00:00',
-            'endDate'           => '2026-04-14T18:30:00',
+            'title' => 'Training',
+            'startDate' => '2026-04-14T17:00:00',
+            'endDate' => '2026-04-14T18:30:00',
             'trainingEditScope' => 'from_here',
             // intentionally omitting trainingSeriesEndDate
         ];
@@ -919,10 +919,10 @@ class CalendarControllerUpdateTest extends TestCase
             });
 
         $payload = [
-            'title'                 => 'Training',
-            'startDate'             => '2026-05-07T18:00:00',
-            'endDate'               => '2026-05-07T19:30:00',
-            'trainingEditScope'     => 'series',
+            'title' => 'Training',
+            'startDate' => '2026-05-07T18:00:00',
+            'endDate' => '2026-05-07T19:30:00',
+            'trainingEditScope' => 'series',
             'trainingSeriesEndDate' => $newEnd,
         ];
 
@@ -964,10 +964,10 @@ class CalendarControllerUpdateTest extends TestCase
             ->method('deleteCalendarEventWithDependencies');
 
         $payload = [
-            'title'                 => 'Training',
-            'startDate'             => '2026-05-07T18:00:00',
-            'endDate'               => '2026-05-07T19:30:00',
-            'trainingEditScope'     => 'series',
+            'title' => 'Training',
+            'startDate' => '2026-05-07T18:00:00',
+            'endDate' => '2026-05-07T19:30:00',
+            'trainingEditScope' => 'series',
             'trainingSeriesEndDate' => $sameEnd, // same → no shortening
         ];
 
@@ -1004,10 +1004,10 @@ class CalendarControllerUpdateTest extends TestCase
             ->willReturn(new ConstraintViolationList());
 
         $payload = [
-            'title'                 => 'Training',
-            'startDate'             => '2026-05-07T18:00:00',
-            'endDate'               => '2026-05-07T19:30:00',
-            'trainingEditScope'     => 'series',
+            'title' => 'Training',
+            'startDate' => '2026-05-07T18:00:00',
+            'endDate' => '2026-05-07T19:30:00',
+            'trainingEditScope' => 'series',
             'trainingSeriesEndDate' => '2026-05-31',
             // trainingWeekdays omitted → $newWeekdays = $oldWeekdays = [4], so Thu is kept
         ];

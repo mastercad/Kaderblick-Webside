@@ -4,16 +4,12 @@ namespace App\Tests\Unit\Controller;
 
 use App\Controller\Api\Calendar\CalendarEventWriteController;
 use App\Entity\CalendarEventPermission;
-use App\Enum\CalendarEventPermissionType;
 use App\Entity\CalendarEventType;
 use App\Entity\Team;
 use App\Entity\User;
-use App\Repository\ParticipationRepository;
+use App\Enum\CalendarEventPermissionType;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventService;
-use App\Service\EmailNotificationService;
-use App\Service\NotificationService;
-use App\Service\TeamMembershipService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Query;
@@ -403,12 +399,12 @@ class CalendarControllerTrainingSeriesTest extends TestCase
         $controller = $this->buildController($dispatcher);
 
         $request = new Request(content: json_encode([
-            'title'         => 'Öffentliches Training',
-            'startDate'     => '2026-04-07',
+            'title' => 'Öffentliches Training',
+            'startDate' => '2026-04-07',
             'seriesEndDate' => '2026-04-07',
-            'weekdays'      => [2],
-            'eventTypeId'   => 5,
-            'time'          => '18:00',
+            'weekdays' => [2],
+            'eventTypeId' => 5,
+            'time' => '18:00',
             // No teamId → PUBLIC permission
         ]));
 
@@ -450,13 +446,13 @@ class CalendarControllerTrainingSeriesTest extends TestCase
         $controller = $this->buildController($dispatcher);
 
         $request = new Request(content: json_encode([
-            'title'         => 'Teamtraining',
-            'startDate'     => '2026-04-07',
+            'title' => 'Teamtraining',
+            'startDate' => '2026-04-07',
             'seriesEndDate' => '2026-04-07',
-            'weekdays'      => [2],
-            'eventTypeId'   => 5,
-            'time'          => '18:00',
-            'teamId'        => 3,
+            'weekdays' => [2],
+            'eventTypeId' => 5,
+            'time' => '18:00',
+            'teamId' => 3,
         ]));
 
         $controller->createTrainingSeries($request);

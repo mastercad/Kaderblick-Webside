@@ -29,7 +29,7 @@ class TrainingSeriesUpdateServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->em                  = $this->createMock(EntityManagerInterface::class);
+        $this->em = $this->createMock(EntityManagerInterface::class);
         $this->calendarEventService = $this->createMock(CalendarEventService::class);
         $this->calendarEventService->method('updateEventFromData')
             ->willReturn(new ConstraintViolationList());
@@ -63,12 +63,17 @@ class TrainingSeriesUpdateServiceTest extends TestCase
         $this->em->method('getRepository')->willReturn($repo);
     }
 
+    /**
+     * @param array<string, mixed> $overrides
+     *
+     * @return array<string, mixed>
+     */
     private function makePayload(array $overrides = []): array
     {
         return array_merge([
-            'title'     => 'Training',
+            'title' => 'Training',
             'startDate' => '2026-04-07T18:00:00',
-            'endDate'   => '2026-04-07T19:30:00',
+            'endDate' => '2026-04-07T19:30:00',
         ], $overrides);
     }
 
@@ -92,9 +97,9 @@ class TrainingSeriesUpdateServiceTest extends TestCase
 
     public function testFromHereScopeSkipsPastEvents(): void
     {
-        $past    = $this->makeSeriesEvent('2026-04-01T18:00:00');
+        $past = $this->makeSeriesEvent('2026-04-01T18:00:00');
         $current = $this->makeSeriesEvent('2026-04-08T18:00:00');
-        $future  = $this->makeSeriesEvent('2026-04-15T18:00:00');
+        $future = $this->makeSeriesEvent('2026-04-15T18:00:00');
         $this->stubSeriesEvents([$past, $current, $future]);
 
         $updatedEvents = [];
@@ -120,7 +125,7 @@ class TrainingSeriesUpdateServiceTest extends TestCase
         $seriesId = 'uuid-wd';
         $tue1 = $this->makeSeriesEvent('2026-04-07T18:00:00', $seriesId); // Tue (w=2)
         $tue2 = $this->makeSeriesEvent('2026-04-14T18:00:00', $seriesId); // Tue
-        $wed  = $this->makeSeriesEvent('2026-04-08T18:00:00', $seriesId); // Wed (w=3)
+        $wed = $this->makeSeriesEvent('2026-04-08T18:00:00', $seriesId); // Wed (w=3)
         $this->stubSeriesEvents([$tue1, $tue2, $wed], $seriesId);
 
         $updatedEvents = [];
@@ -190,8 +195,8 @@ class TrainingSeriesUpdateServiceTest extends TestCase
     public function testShortenedEndDateDeletesEventsAfterCutoff(): void
     {
         $seriesId = 'uuid-shorten';
-        $oldEnd   = '2026-06-04';
-        $newEnd   = '2026-05-21';
+        $oldEnd = '2026-06-04';
+        $newEnd = '2026-05-21';
 
         $e1 = $this->makeSeriesEvent('2026-05-07T18:00:00', $seriesId);
         $e1->setTrainingSeriesEndDate($oldEnd);
@@ -221,12 +226,12 @@ class TrainingSeriesUpdateServiceTest extends TestCase
     public function testOutOfScopeEventGetsNewEndDateSilently(): void
     {
         $seriesId = 'uuid-sync';
-        $oldEnd   = '2026-04-28';
-        $newEnd   = '2026-06-30';
+        $oldEnd = '2026-04-28';
+        $newEnd = '2026-06-30';
 
-        $prior  = $this->makeSeriesEvent('2026-04-07T18:00:00', $seriesId);
+        $prior = $this->makeSeriesEvent('2026-04-07T18:00:00', $seriesId);
         $prior->setTrainingSeriesEndDate($oldEnd);
-        $pivot  = $this->makeSeriesEvent('2026-04-14T18:00:00', $seriesId);
+        $pivot = $this->makeSeriesEvent('2026-04-14T18:00:00', $seriesId);
         $pivot->setTrainingSeriesEndDate($oldEnd);
         $this->stubSeriesEvents([$prior, $pivot], $seriesId);
 
@@ -239,9 +244,9 @@ class TrainingSeriesUpdateServiceTest extends TestCase
             });
 
         $payload = $this->makePayload([
-            'startDate'             => '2026-04-14T18:00:00',
-            'endDate'               => '2026-04-14T19:30:00',
-            'trainingEditScope'     => 'from_here',
+            'startDate' => '2026-04-14T18:00:00',
+            'endDate' => '2026-04-14T19:30:00',
+            'trainingEditScope' => 'from_here',
             'trainingSeriesEndDate' => $newEnd,
         ]);
         $this->service->update($pivot, $payload, 'from_here', $this->user);
@@ -258,9 +263,9 @@ class TrainingSeriesUpdateServiceTest extends TestCase
         $this->stubSeriesEvents([$e1]);
 
         $payload = $this->makePayload([
-            'startDate'          => '2026-04-07T17:00:00',
-            'endDate'            => '2026-04-07T18:30:00',
-            'trainingEditScope'  => 'series',
+            'startDate' => '2026-04-07T17:00:00',
+            'endDate' => '2026-04-07T18:30:00',
+            'trainingEditScope' => 'series',
         ]);
         $result = $this->service->update($e1, $payload, 'series', $this->user);
 

@@ -34,11 +34,11 @@ class CalendarEventSerializerTest extends TestCase
         $defaultRepo->method('findOneBy')->willReturn(null);
         $this->em->method('getRepository')->willReturn($defaultRepo);
 
-        $this->participationRepo  = $this->createMock(ParticipationRepository::class);
+        $this->participationRepo = $this->createMock(ParticipationRepository::class);
         $this->participationRepo->method('findByUserAndEvent')->willReturn(null);
 
         $this->membershipService = $this->createMock(TeamMembershipService::class);
-        $this->security          = $this->createMock(Security::class);
+        $this->security = $this->createMock(Security::class);
 
         $this->serializer = new CalendarEventSerializer(
             $this->em,

@@ -30,11 +30,11 @@ class CalendarEventNotificationSubscriberTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->notificationService   = $this->createMock(NotificationService::class);
+        $this->notificationService = $this->createMock(NotificationService::class);
         $this->teamMembershipService = $this->createMock(TeamMembershipService::class);
-        $this->settingService        = $this->createMock(SystemSettingService::class);
-        $this->userRepository        = $this->createMock(UserRepository::class);
-        $this->messageBuilder        = $this->createMock(CalendarNotificationMessageBuilder::class);
+        $this->settingService = $this->createMock(SystemSettingService::class);
+        $this->userRepository = $this->createMock(UserRepository::class);
+        $this->messageBuilder = $this->createMock(CalendarNotificationMessageBuilder::class);
 
         // Default: builder always returns dummy strings so wiring tests don't fail on content.
         $this->messageBuilder->method('forCreated')->willReturn(['title' => 'T-created', 'body' => 'B-created']);
@@ -108,7 +108,7 @@ class CalendarEventNotificationSubscriberTest extends TestCase
         $this->settingService->method('getPushNotificationsMode')
             ->willReturn(SystemSettingService::PUSH_NOTIFICATIONS_MODE_ONLY_ME);
 
-        $superAdmin      = $this->makeUser(['ROLE_SUPERADMIN', 'ROLE_USER']);
+        $superAdmin = $this->makeUser(['ROLE_SUPERADMIN', 'ROLE_USER']);
         $normalRecipient = $this->makeUser(['ROLE_USER'], 'Max Mustermann');
 
         $this->userRepository->method('findSuperAdmins')->willReturn([$superAdmin]);
@@ -481,4 +481,3 @@ class CalendarEventNotificationSubscriberTest extends TestCase
         return $event;
     }
 }
-

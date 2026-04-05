@@ -77,8 +77,8 @@ class CalendarControllerDeleteTest extends TestCase
 
     private function makeUpdateController(?EntityManagerInterface $em = null): CalendarEventUpdateController
     {
-        $usedEm     = $em ?? $this->entityManager;
-        $seriesSvc  = new TrainingSeriesUpdateService($usedEm, $this->calendarEventService);
+        $usedEm = $em ?? $this->entityManager;
+        $seriesSvc = new TrainingSeriesUpdateService($usedEm, $this->calendarEventService);
         $controller = new CalendarEventUpdateController(
             $usedEm,
             $this->calendarEventService,

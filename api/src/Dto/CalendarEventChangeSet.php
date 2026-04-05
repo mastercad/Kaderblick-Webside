@@ -9,12 +9,12 @@ namespace App\Dto;
 final class CalendarEventChangeSet
 {
     public function __construct(
-        public readonly ?string $oldStartTime    = null,  // 'H:i', e.g. '18:00'
-        public readonly ?string $newStartTime    = null,
-        public readonly ?string $oldEndTime      = null,
-        public readonly ?string $newEndTime      = null,
-        public readonly ?string $oldWeekday      = null,  // 'Mo', 'Di', …
-        public readonly ?string $newWeekday      = null,
+        public readonly ?string $oldStartTime = null,  // 'H:i', e.g. '18:00'
+        public readonly ?string $newStartTime = null,
+        public readonly ?string $oldEndTime = null,
+        public readonly ?string $newEndTime = null,
+        public readonly ?string $oldWeekday = null,  // 'Mo', 'Di', …
+        public readonly ?string $newWeekday = null,
         public readonly ?string $oldLocationName = null,
         public readonly ?string $newLocationName = null,
     ) {

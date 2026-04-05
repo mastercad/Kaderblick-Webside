@@ -8,7 +8,6 @@ use App\Entity\User;
 use App\Event\CalendarEventDeletedEvent;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventService;
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -36,13 +35,13 @@ class CalendarEventDeleteController extends AbstractController
         /** @var User $currentUser */
         $currentUser = $this->getUser();
 
-        $data         = json_decode($request->getContent(), true);
+        $data = json_decode($request->getContent(), true);
         $deletionMode = $data['deletionMode'] ?? 'single';
 
         // Pre-compute deletion scope for the notification.
-        $delNotifCount    = 1;
+        $delNotifCount = 1;
         $firstDeletedDate = null;
-        $lastDeletedDate  = null;
+        $lastDeletedDate = null;
 
         if (in_array($deletionMode, ['series', 'from_here'], true) && $calendarEvent->getTrainingSeriesId()) {
             $allSeriesEvts = $this->entityManager->getRepository(CalendarEvent::class)->findBy([
@@ -59,23 +58,28 @@ class CalendarEventDeleteController extends AbstractController
             if (!empty($scopedForNotif)) {
                 $delNotifCount = count($scopedForNotif);
                 $dates = array_values(array_filter(array_map(
-                    fn (CalendarEvent $e) => $e->getStartDate(), $scopedForNotif
+                    fn (CalendarEvent $e) => $e->getStartDate(),
+                    $scopedForNotif
                 )));
                 usort($dates, fn ($a, $b) => $a <=> $b);
                 $firstDeletedDate = isset($dates[0]) ? $dates[0]->format('d.m.Y') : null;
-                $lastDeletedDate  = end($dates) ? end($dates)->format('d.m.Y') : null;
+                $lastDeletedDate = end($dates) ? end($dates)->format('d.m.Y') : null;
             }
         }
 
         // Dispatch BEFORE deletion while the entity is fully accessible.
         $this->dispatcher->dispatch(new CalendarEventDeletedEvent(
-            $currentUser, $calendarEvent,
-            $delNotifCount, $deletionMode, $firstDeletedDate, $lastDeletedDate
+            $currentUser,
+            $calendarEvent,
+            $delNotifCount,
+            $deletionMode,
+            $firstDeletedDate,
+            $lastDeletedDate
         ));
 
         $taskAssignmentRepo = $this->entityManager->getRepository(TaskAssignment::class);
-        $taskAssignment     = $taskAssignmentRepo->findOneBy(['calendarEvent' => $calendarEvent]);
-        $task               = $taskAssignment?->getTask();
+        $taskAssignment = $taskAssignmentRepo->findOneBy(['calendarEvent' => $calendarEvent]);
+        $task = $taskAssignment?->getTask();
 
         if ($task && 'series' === $deletionMode) {
             $taskAssignments = $taskAssignmentRepo->findBy(['task' => $task]);

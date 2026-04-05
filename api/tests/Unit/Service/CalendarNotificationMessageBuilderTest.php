@@ -244,12 +244,19 @@ class CalendarNotificationMessageBuilderTest extends TestCase
     {
         $event = $this->makeEvent('Event');
         $changeSet = new CalendarEventChangeSet(
-            oldWeekday: 'Do', newWeekday: 'Fr',
-            oldStartTime: '18:00', newStartTime: '19:00',
-            oldEndTime: '19:30', newEndTime: '20:45',
+            oldWeekday: 'Do',
+            newWeekday: 'Fr',
+            oldStartTime: '18:00',
+            newStartTime: '19:00',
+            oldEndTime: '19:30',
+            newEndTime: '20:45',
         );
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 1, 'single', $changeSet
+            $this->makeUser(),
+            $event,
+            1,
+            'single',
+            $changeSet
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -288,7 +295,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Donnerstags-Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 15, 'series', null, '2026-05-17', '2026-05-30'
+            $this->makeUser(),
+            $event,
+            15,
+            'series',
+            null,
+            '2026-05-17',
+            '2026-05-30'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -303,7 +316,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 5, 'series', null, '2026-05-17', '2026-06-30'
+            $this->makeUser(),
+            $event,
+            5,
+            'series',
+            null,
+            '2026-05-17',
+            '2026-06-30'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -316,7 +335,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 10, 'series', null, '2026-05-17', '2026-05-30'
+            $this->makeUser(),
+            $event,
+            10,
+            'series',
+            null,
+            '2026-05-17',
+            '2026-05-30'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -332,7 +357,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $event->method('getStartDate')->willReturn(new DateTime('2026-04-09'));
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 15, 'series', null, '2026-05-17', '2026-05-30'
+            $this->makeUser(),
+            $event,
+            15,
+            'series',
+            null,
+            '2026-05-17',
+            '2026-05-30'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -345,13 +376,21 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $changeSet = new CalendarEventChangeSet(
-            oldWeekday: 'Do', newWeekday: 'Do',
-            oldStartTime: '18:00', newStartTime: '19:00',
-            oldEndTime: '19:00', newEndTime: '20:00',
+            oldWeekday: 'Do',
+            newWeekday: 'Do',
+            oldStartTime: '18:00',
+            newStartTime: '19:00',
+            oldEndTime: '19:00',
+            newEndTime: '20:00',
         );
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 10, 'series', $changeSet,
-            '2026-05-17', '2026-05-30'
+            $this->makeUser(),
+            $event,
+            10,
+            'series',
+            $changeSet,
+            '2026-05-17',
+            '2026-05-30'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -370,7 +409,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         // newEnd < oldEnd → shortened
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 11, 'series', null, '2026-05-30', '2026-05-17'
+            $this->makeUser(),
+            $event,
+            11,
+            'series',
+            null,
+            '2026-05-30',
+            '2026-05-17'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -384,7 +429,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 11, 'series', null, '2026-05-30', '2026-05-17'
+            $this->makeUser(),
+            $event,
+            11,
+            'series',
+            null,
+            '2026-05-30',
+            '2026-05-17'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -401,7 +452,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         // newEnd = 2026-05-17 → body shows "18.05.2026" (day after), not "17.05.2026"
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 11, 'series', null, '2026-05-30', '2026-05-17'
+            $this->makeUser(),
+            $event,
+            11,
+            'series',
+            null,
+            '2026-05-30',
+            '2026-05-17'
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -419,13 +476,21 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $event->method('getStartDate')->willReturn(new DateTime('2026-06-01'));
         $changeSet = new CalendarEventChangeSet(
-            oldWeekday: 'Mo', newWeekday: 'Mo',
-            oldStartTime: '17:00', newStartTime: '18:00',
-            oldEndTime: '18:30', newEndTime: '19:30',
+            oldWeekday: 'Mo',
+            newWeekday: 'Mo',
+            oldStartTime: '17:00',
+            newStartTime: '18:00',
+            oldEndTime: '18:30',
+            newEndTime: '19:30',
         );
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 4, 'from_here', $changeSet,
-            null, null
+            $this->makeUser(),
+            $event,
+            4,
+            'from_here',
+            $changeSet,
+            null,
+            null
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -440,7 +505,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $changeSet = new CalendarEventChangeSet(oldStartTime: '18:00', newStartTime: '19:00');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 3, 'series', $changeSet, null, null
+            $this->makeUser(),
+            $event,
+            3,
+            'series',
+            $changeSet,
+            null,
+            null
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -458,7 +529,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $event->method('getStartDate')->willReturn(new DateTime('2026-06-01'));
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 8, 'series', null, '2026-06-30', null
+            $this->makeUser(),
+            $event,
+            8,
+            'series',
+            null,
+            '2026-06-30',
+            null
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -472,7 +549,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 3, 'series', null, null, null
+            $this->makeUser(),
+            $event,
+            3,
+            'series',
+            null,
+            null,
+            null
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -488,7 +571,13 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getStartDate')->willReturn(new DateTime('2026-06-01'));
         // Same old and new end date → no end-date change branch
         $updatedEvent = new CalendarEventUpdatedEvent(
-            $this->makeUser(), $event, 8, 'series', null, '2026-06-30', null
+            $this->makeUser(),
+            $event,
+            8,
+            'series',
+            null,
+            '2026-06-30',
+            null
         );
 
         $result = $this->builder->forUpdated($updatedEvent);
@@ -600,7 +689,12 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $deletedEvent = new CalendarEventDeletedEvent(
-            $this->makeUser(), $event, 12, 'series', '07.05.2026', '30.06.2026'
+            $this->makeUser(),
+            $event,
+            12,
+            'series',
+            '07.05.2026',
+            '30.06.2026'
         );
 
         $result = $this->builder->forDeleted($deletedEvent);
@@ -616,7 +710,12 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         // firstDeletedDate == lastDeletedDate → "ab" prefix path
         $deletedEvent = new CalendarEventDeletedEvent(
-            $this->makeUser(), $event, 3, 'from_here', '07.05.2026', '07.05.2026'
+            $this->makeUser(),
+            $event,
+            3,
+            'from_here',
+            '07.05.2026',
+            '07.05.2026'
         );
 
         $result = $this->builder->forDeleted($deletedEvent);
@@ -630,7 +729,12 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEvent('Training');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $deletedEvent = new CalendarEventDeletedEvent(
-            $this->makeUser(), $event, 2, 'series', null, null
+            $this->makeUser(),
+            $event,
+            2,
+            'series',
+            null,
+            null
         );
 
         $result = $this->builder->forDeleted($deletedEvent);
@@ -645,7 +749,12 @@ class CalendarNotificationMessageBuilderTest extends TestCase
         $event = $this->makeEventWithLocation('Training', 'Platz 2');
         $event->method('getTrainingSeriesId')->willReturn('uuid-1');
         $deletedEvent = new CalendarEventDeletedEvent(
-            $this->makeUser(), $event, 2, 'series', '01.05.2026', '15.05.2026'
+            $this->makeUser(),
+            $event,
+            2,
+            'series',
+            '01.05.2026',
+            '15.05.2026'
         );
 
         $result = $this->builder->forDeleted($deletedEvent);

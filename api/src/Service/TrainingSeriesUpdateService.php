@@ -7,7 +7,7 @@ use App\Dto\TrainingSeriesUpdateResult;
 use App\Entity\CalendarEvent;
 use App\Entity\CalendarEventPermission;
 use App\Entity\User;
-use App\Enum\CalendarEventPermissionType;
+use DateInterval;
 use DateTime;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -44,9 +44,9 @@ class TrainingSeriesUpdateService
         string $scope,
         User $currentUser,
     ): TrainingSeriesUpdateResult {
-        $seriesId          = $calendarEvent->getTrainingSeriesId();
+        $seriesId = $calendarEvent->getTrainingSeriesId();
         $calendarEventRepo = $this->entityManager->getRepository(CalendarEvent::class);
-        $seriesEvents      = $calendarEventRepo->findBy(['trainingSeriesId' => $seriesId]);
+        $seriesEvents = $calendarEventRepo->findBy(['trainingSeriesId' => $seriesId]);
 
         $eventsToUpdate = match ($scope) {
             'series' => $seriesEvents,
@@ -78,13 +78,13 @@ class TrainingSeriesUpdateService
         }
 
         // ── Weekday-set change detection ──────────────────────────────────────
-        $oldWeekdays     = array_map('intval', $calendarEvent->getTrainingWeekdays() ?? []);
-        $newWeekdays     = array_key_exists('trainingWeekdays', $data)
+        $oldWeekdays = array_map('intval', $calendarEvent->getTrainingWeekdays() ?? []);
+        $newWeekdays = array_key_exists('trainingWeekdays', $data)
             ? array_map('intval', (array) $data['trainingWeekdays'])
             : $oldWeekdays;
         $removedWeekdays = array_values(array_diff($oldWeekdays, $newWeekdays));
-        $addedWeekdays   = array_values(array_diff($newWeekdays, $oldWeekdays));
-        $keptWeekdays    = array_values(array_intersect($oldWeekdays, $newWeekdays));
+        $addedWeekdays = array_values(array_diff($newWeekdays, $oldWeekdays));
+        $keptWeekdays = array_values(array_intersect($oldWeekdays, $newWeekdays));
 
         // Scope-range start: earliest event date in the scope.
         $scopeRangeStart = DateTimeImmutable::createFromInterface(
@@ -107,13 +107,13 @@ class TrainingSeriesUpdateService
 
         // ── Time / duration helpers ────────────────────────────────────────────
         $originalStart = new DateTimeImmutable($data['startDate']);
-        $originalEnd   = isset($data['endDate']) ? new DateTimeImmutable($data['endDate']) : null;
-        $timeDiff      = $originalEnd ? $originalStart->diff($originalEnd) : null;
-        $newTime       = $originalStart->format('H:i:s');
+        $originalEnd = isset($data['endDate']) ? new DateTimeImmutable($data['endDate']) : null;
+        $timeDiff = $originalEnd ? $originalStart->diff($originalEnd) : null;
+        $newTime = $originalStart->format('H:i:s');
 
         // Capture old values for the ChangeSet before touching the entities.
         $oldStartTimeFmt = $calendarEvent->getStartDate()?->format('H:i');
-        $oldEndTimeFmt   = $calendarEvent->getEndDate()?->format('H:i');
+        $oldEndTimeFmt = $calendarEvent->getEndDate()?->format('H:i');
         $oldLocationName = $calendarEvent->getLocation()?->getName();
 
         // ── 1. Update existing scoped events (or delete if weekday was removed) ─
@@ -134,7 +134,7 @@ class TrainingSeriesUpdateService
                 $this->calendarEventService->deleteCalendarEventWithDependencies($event);
                 continue;
             }
-            $eventDate    = $event->getStartDate()?->format('Y-m-d') ?? $originalStart->format('Y-m-d');
+            $eventDate = $event->getStartDate()?->format('Y-m-d') ?? $originalStart->format('Y-m-d');
             $perEventData = array_merge($data, ['startDate' => $eventDate . 'T' . $newTime]);
             if ($originalEnd && $timeDiff) {
                 $newEndDt = new DateTime($eventDate . 'T' . $newTime);
@@ -151,8 +151,14 @@ class TrainingSeriesUpdateService
             while ($cursor <= $createUntil) {
                 if (in_array((int) $cursor->format('w'), $addedWeekdays, true)) {
                     $this->persistNewSeriesEvent(
-                        $cursor, $newTime, $timeDiff, $originalEnd,
-                        $calendarEvent, $newWeekdays, $newSeriesEndDateStr, $seriesId,
+                        $cursor,
+                        $newTime,
+                        $timeDiff,
+                        $originalEnd,
+                        $calendarEvent,
+                        $newWeekdays,
+                        $newSeriesEndDateStr,
+                        $seriesId,
                         $currentUser
                     );
                     ++$updatedCount;
@@ -166,14 +172,14 @@ class TrainingSeriesUpdateService
             && $newSeriesEndDateStr > $oldSeriesEndDateStr;
         if ($endDateExtended && !empty($keptWeekdays)) {
             $editedWeekdayNum = (int) $calendarEvent->getStartDate()?->format('w');
-            $scopeIsNarrow    = in_array($scope, ['same_weekday', 'same_weekday_from_here'], true);
+            $scopeIsNarrow = in_array($scope, ['same_weekday', 'same_weekday_from_here'], true);
             /** @var int[] $keptToExtend */
-            $keptToExtend     = $scopeIsNarrow
+            $keptToExtend = $scopeIsNarrow
                 ? array_values(array_filter($keptWeekdays, fn (int $w) => $w === $editedWeekdayNum))
                 : $keptWeekdays;
 
             if (!empty($keptToExtend)) {
-                $existingEventDates  = [];
+                $existingEventDates = [];
                 $lastSeriesEventDate = null;
                 foreach ($seriesEvents as $e) {
                     if ($e->getStartDate()) {
@@ -185,7 +191,7 @@ class TrainingSeriesUpdateService
                     }
                 }
                 $extStartFromConfig = (new DateTimeImmutable($oldSeriesEndDateStr . 'T00:00:00'))->modify('+1 day');
-                $extStart           = (null !== $lastSeriesEventDate
+                $extStart = (null !== $lastSeriesEventDate
                     && $lastSeriesEventDate->modify('+1 day') < $extStartFromConfig)
                     ? $lastSeriesEventDate->modify('+1 day')->setTime(0, 0, 0)
                     : $extStartFromConfig;
@@ -194,12 +200,19 @@ class TrainingSeriesUpdateService
                     $cursor = $extStart->setTime(0, 0, 0);
                     while ($cursor <= $extEnd) {
                         $cursorKey = $cursor->format('Y-m-d');
-                        if (in_array((int) $cursor->format('w'), $keptToExtend, true)
+                        if (
+                            in_array((int) $cursor->format('w'), $keptToExtend, true)
                             && !isset($existingEventDates[$cursorKey])
                         ) {
                             $this->persistNewSeriesEvent(
-                                $cursor, $newTime, $timeDiff, $originalEnd,
-                                $calendarEvent, $newWeekdays, $newSeriesEndDateStr, $seriesId,
+                                $cursor,
+                                $newTime,
+                                $timeDiff,
+                                $originalEnd,
+                                $calendarEvent,
+                                $newWeekdays,
+                                $newSeriesEndDateStr,
+                                $seriesId,
                                 $currentUser
                             );
                             ++$updatedCount;
@@ -219,24 +232,24 @@ class TrainingSeriesUpdateService
         }
 
         // ── 5. Build the structured ChangeSet ─────────────────────────────────
-        $newStartFmt    = $originalStart->format('H:i');
-        $newEndFmt      = $originalEnd?->format('H:i');
+        $newStartFmt = $originalStart->format('H:i');
+        $newEndFmt = $originalEnd?->format('H:i');
         $newLocationName = $calendarEvent->getLocation()?->getName();
 
         $changeSet = new CalendarEventChangeSet(
-            oldStartTime:    $oldStartTimeFmt,
-            newStartTime:    $newStartFmt,
-            oldEndTime:      $oldEndTimeFmt,
-            newEndTime:      $newEndFmt,
-            oldWeekday:      !empty($oldWeekdays) ? self::DAY_NAMES[reset($oldWeekdays)] : null,
-            newWeekday:      !empty($newWeekdays) ? self::DAY_NAMES[reset($newWeekdays)] : null,
+            oldStartTime: $oldStartTimeFmt,
+            newStartTime: $newStartFmt,
+            oldEndTime: $oldEndTimeFmt,
+            newEndTime: $newEndFmt,
+            oldWeekday: !empty($oldWeekdays) ? self::DAY_NAMES[reset($oldWeekdays)] : null,
+            newWeekday: !empty($newWeekdays) ? self::DAY_NAMES[reset($newWeekdays)] : null,
             oldLocationName: $oldLocationName,
             newLocationName: $newLocationName,
         );
 
         return new TrainingSeriesUpdateResult(
-            updatedCount:    $updatedCount,
-            changeSet:       $changeSet,
+            updatedCount: $updatedCount,
+            changeSet: $changeSet,
             oldSeriesEndDate: $oldSeriesEndDateStr,
             newSeriesEndDate: ($newSeriesEndDateStr !== $oldSeriesEndDateStr) ? $newSeriesEndDateStr : null,
         );
@@ -251,7 +264,7 @@ class TrainingSeriesUpdateService
     public function persistNewSeriesEvent(
         DateTimeImmutable $date,
         string $newTime,
-        ?\DateInterval $timeDiff,
+        ?DateInterval $timeDiff,
         ?DateTimeImmutable $originalEnd,
         CalendarEvent $sourceEvent,
         array $newWeekdays,

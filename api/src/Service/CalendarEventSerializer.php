@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\CalendarEvent;
-use App\Entity\CalendarEventPermission;
 use App\Entity\CalendarEventType;
 use App\Entity\TaskAssignment;
 use App\Entity\Tournament;
@@ -52,10 +51,10 @@ class CalendarEventSerializer
             : [];
         if ($participation && $participation->getStatus()) {
             $participationStatus = [
-                'id'    => $participation->getStatus()->getId(),
-                'name'  => $participation->getStatus()->getName(),
-                'code'  => $participation->getStatus()->getCode(),
-                'icon'  => $participation->getStatus()->getIcon(),
+                'id' => $participation->getStatus()->getId(),
+                'name' => $participation->getStatus()->getName(),
+                'code' => $participation->getStatus()->getCode(),
+                'icon' => $participation->getStatus()->getIcon(),
                 'color' => $participation->getStatus()->getColor(),
             ];
         }
@@ -66,71 +65,71 @@ class CalendarEventSerializer
         if ($taskAssignment && $taskAssignment->getTask()) {
             $task = $taskAssignment->getTask();
             $taskFromAssignment = [
-                'id'             => $task->getId(),
-                'isRecurring'    => $task->isRecurring(),
+                'id' => $task->getId(),
+                'isRecurring' => $task->isRecurring(),
                 'recurrenceMode' => $task->getRecurrenceMode(),
                 'recurrenceRule' => $task->getRecurrenceRule(),
-                'rotationUsers'  => $task->getRotationUsers()->map(fn ($u) => [
-                    'id'       => $u->getId(),
+                'rotationUsers' => $task->getRotationUsers()->map(fn ($u) => [
+                    'id' => $u->getId(),
                     'fullName' => $u->getFullName(),
                 ])->toArray(),
-                'rotationCount'  => $task->getRotationCount(),
-                'offset'         => $task->getOffsetDays(),
+                'rotationCount' => $task->getRotationCount(),
+                'offset' => $task->getOffsetDays(),
             ];
         }
 
         $eventArr = [
-            'id'                 => $calendarEvent->getId(),
-            'title'              => $calendarEvent->getTitle(),
-            'start'              => $calendarEvent->getStartDate()->format('Y-m-d\TH:i:s'),
-            'end'                => $endDate->format('Y-m-d\TH:i:s'),
-            'description'        => $calendarEvent->getDescription(),
+            'id' => $calendarEvent->getId(),
+            'title' => $calendarEvent->getTitle(),
+            'start' => $calendarEvent->getStartDate()->format('Y-m-d\TH:i:s'),
+            'end' => $endDate->format('Y-m-d\TH:i:s'),
+            'description' => $calendarEvent->getDescription(),
             'tournamentSettings' => $calendarEvent->getTournament()?->getSettings(),
-            'weatherData'        => [
+            'weatherData' => [
                 'weatherCode' => $calendarEvent->getWeatherData()?->getDailyWeatherData()['weathercode'][0] ?? null,
             ],
             'game' => $calendarEvent->getGame() ? [
-                'id'       => $calendarEvent->getGame()->getId(),
+                'id' => $calendarEvent->getGame()->getId(),
                 'homeTeam' => [
-                    'id'   => $calendarEvent->getGame()->getHomeTeam()?->getId(),
+                    'id' => $calendarEvent->getGame()->getHomeTeam()?->getId(),
                     'name' => $calendarEvent->getGame()->getHomeTeam()?->getName(),
                 ],
                 'awayTeam' => [
-                    'id'   => $calendarEvent->getGame()->getAwayTeam()?->getId(),
+                    'id' => $calendarEvent->getGame()->getAwayTeam()?->getId(),
                     'name' => $calendarEvent->getGame()->getAwayTeam()?->getName(),
                 ],
                 'gameType' => [
-                    'id'   => $calendarEvent->getGame()->getGameType()->getId(),
+                    'id' => $calendarEvent->getGame()->getGameType()->getId(),
                     'name' => $calendarEvent->getGame()->getGameType()->getName(),
                 ],
                 'league' => [
-                    'id'   => $calendarEvent->getGame()->getLeague()?->getId(),
+                    'id' => $calendarEvent->getGame()->getLeague()?->getId(),
                     'name' => $calendarEvent->getGame()->getLeague()?->getName(),
                 ],
                 'cup' => [
-                    'id'   => $calendarEvent->getGame()->getCup()?->getId(),
+                    'id' => $calendarEvent->getGame()->getCup()?->getId(),
                     'name' => $calendarEvent->getGame()->getCup()?->getName(),
                 ],
             ] : null,
-            'task'     => $taskFromAssignment,
-            'type'     => $calendarEvent->getCalendarEventType() ? [
-                'id'    => $calendarEvent->getCalendarEventType()->getId(),
-                'name'  => $calendarEvent->getCalendarEventType()->getName(),
+            'task' => $taskFromAssignment,
+            'type' => $calendarEvent->getCalendarEventType() ? [
+                'id' => $calendarEvent->getCalendarEventType()->getId(),
+                'name' => $calendarEvent->getCalendarEventType()->getName(),
                 'color' => $calendarEvent->getCalendarEventType()->getColor(),
             ] : null,
             'location' => $calendarEvent->getLocation() ? [
-                'id'        => $calendarEvent->getLocation()->getId(),
-                'name'      => $calendarEvent->getLocation()->getName(),
-                'latitude'  => $calendarEvent->getLocation()->getLatitude(),
+                'id' => $calendarEvent->getLocation()->getId(),
+                'name' => $calendarEvent->getLocation()->getName(),
+                'latitude' => $calendarEvent->getLocation()->getLatitude(),
                 'longitude' => $calendarEvent->getLocation()->getLongitude(),
-                'city'      => $calendarEvent->getLocation()->getCity(),
-                'address'   => $calendarEvent->getLocation()->getAddress(),
+                'city' => $calendarEvent->getLocation()->getCity(),
+                'address' => $calendarEvent->getLocation()->getAddress(),
             ] : null,
             'permissions' => [
-                'canCreate'    => $this->security->isGranted(CalendarEventVoter::CREATE, $calendarEvent->getGame() ?? null),
-                'canEdit'      => $this->security->isGranted(CalendarEventVoter::EDIT, $calendarEvent),
-                'canDelete'    => $this->security->isGranted(CalendarEventVoter::DELETE, $calendarEvent),
-                'canCancel'    => $this->security->isGranted(CalendarEventVoter::CANCEL, $calendarEvent),
+                'canCreate' => $this->security->isGranted(CalendarEventVoter::CREATE, $calendarEvent->getGame() ?? null),
+                'canEdit' => $this->security->isGranted(CalendarEventVoter::EDIT, $calendarEvent),
+                'canDelete' => $this->security->isGranted(CalendarEventVoter::DELETE, $calendarEvent),
+                'canCancel' => $this->security->isGranted(CalendarEventVoter::CANCEL, $calendarEvent),
                 'canViewRides' => $this->canUserViewRides($calendarEvent),
                 'canParticipate' => $this->canUserParticipate($calendarEvent),
             ],
@@ -150,13 +149,13 @@ class CalendarEventSerializer
 
                 return 'public';
             })(),
-            'trainingWeekdays'       => $calendarEvent->getTrainingWeekdays(),
-            'trainingSeriesEndDate'  => $calendarEvent->getTrainingSeriesEndDate(),
-            'trainingSeriesId'       => $calendarEvent->getTrainingSeriesId(),
-            'cancelled'              => $calendarEvent->isCancelled(),
-            'cancelReason'           => $calendarEvent->getCancelReason(),
-            'cancelledBy'            => $calendarEvent->getCancelledBy()?->getFullName(),
-            'participation_status'   => $participationStatus,
+            'trainingWeekdays' => $calendarEvent->getTrainingWeekdays(),
+            'trainingSeriesEndDate' => $calendarEvent->getTrainingSeriesEndDate(),
+            'trainingSeriesId' => $calendarEvent->getTrainingSeriesId(),
+            'cancelled' => $calendarEvent->isCancelled(),
+            'cancelReason' => $calendarEvent->getCancelReason(),
+            'cancelledBy' => $calendarEvent->getCancelledBy()?->getFullName(),
+            'participation_status' => $participationStatus,
         ];
 
         $isTournamentEvent = $calendarEvent->getCalendarEventType()?->getId() === $tournamentEventType?->getId();
@@ -169,17 +168,17 @@ class CalendarEventSerializer
             }
             if ($tournament) {
                 $eventArr['tournament'] = [
-                    'id'       => $tournament->getId(),
+                    'id' => $tournament->getId(),
                     'settings' => $tournament->getSettings(),
-                    'matches'  => array_map(static function ($match): array {
+                    'matches' => array_map(static function ($match): array {
                         return [
-                            'id'          => $match->getId(),
-                            'round'       => $match->getRound(),
-                            'slot'        => $match->getSlot(),
-                            'homeTeamId'  => $match->getHomeTeam()?->getId(),
-                            'awayTeamId'  => $match->getAwayTeam()?->getId(),
+                            'id' => $match->getId(),
+                            'round' => $match->getRound(),
+                            'slot' => $match->getSlot(),
+                            'homeTeamId' => $match->getHomeTeam()?->getId(),
+                            'awayTeamId' => $match->getAwayTeam()?->getId(),
                             'scheduledAt' => $match->getScheduledAt()?->format('Y-m-d\\TH:i:s'),
-                            'gameId'      => $match->getGame()?->getId(),
+                            'gameId' => $match->getGame()?->getId(),
                         ];
                     }, $tournament->getMatches()->toArray()),
                 ];

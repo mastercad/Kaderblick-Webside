@@ -51,7 +51,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
     public function onCalendarEventCreated(CalendarEventCreatedEvent $event): void
     {
         $calendarEvent = $event->getCalendarEvent();
-        $actor         = $event->getUser();
+        $actor = $event->getUser();
 
         if (!$calendarEvent->getId()) {
             return;
@@ -63,7 +63,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
 
         try {
             $normalRecipients = $this->teamMembershipService->resolveEventRecipients($calendarEvent, $actor);
-            $recipients       = $this->filterRecipientsByMode($normalRecipients);
+            $recipients = $this->filterRecipientsByMode($normalRecipients);
 
             if (0 === count($recipients)) {
                 return;
@@ -78,10 +78,10 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
                 $title,
                 $body,
                 [
-                    'eventId'    => $calendarEvent->getId(),
+                    'eventId' => $calendarEvent->getId(),
                     'eventTitle' => $calendarEvent->getTitle(),
-                    'createdBy'  => $actor->getFullName(),
-                    'url'        => '/calendar?eventId=' . $calendarEvent->getId(),
+                    'createdBy' => $actor->getFullName(),
+                    'url' => '/calendar?eventId=' . $calendarEvent->getId(),
                 ]
             );
         } catch (Exception $e) {
@@ -95,8 +95,8 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
     public function onCalendarEventUpdated(CalendarEventUpdatedEvent $event): void
     {
         $calendarEvent = $event->getCalendarEvent();
-        $actor         = $event->getUser();
-        $scope         = $event->getScope();
+        $actor = $event->getUser();
+        $scope = $event->getScope();
 
         if (!$calendarEvent->getId()) {
             return;
@@ -108,7 +108,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
 
         try {
             $normalRecipients = $this->teamMembershipService->resolveEventRecipients($calendarEvent, $actor);
-            $recipients       = $this->filterRecipientsByMode($normalRecipients);
+            $recipients = $this->filterRecipientsByMode($normalRecipients);
 
             if (0 === count($recipients)) {
                 return;
@@ -129,10 +129,10 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
                 $title,
                 $body,
                 [
-                    'eventId'    => $calendarEvent->getId(),
+                    'eventId' => $calendarEvent->getId(),
                     'eventTitle' => $calendarEvent->getTitle(),
-                    'updatedBy'  => $actor->getFullName(),
-                    'url'        => $url,
+                    'updatedBy' => $actor->getFullName(),
+                    'url' => $url,
                 ]
             );
         } catch (Exception $e) {
@@ -146,7 +146,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
     public function onCalendarEventDeleted(CalendarEventDeletedEvent $event): void
     {
         $calendarEvent = $event->getCalendarEvent();
-        $actor         = $event->getUser();
+        $actor = $event->getUser();
 
         if (SystemSettingService::PUSH_NOTIFICATIONS_MODE_DISABLED === $this->settingService->getPushNotificationsMode()) {
             return;
@@ -154,7 +154,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
 
         try {
             $normalRecipients = $this->teamMembershipService->resolveEventRecipients($calendarEvent, $actor);
-            $recipients       = $this->filterRecipientsByMode($normalRecipients);
+            $recipients = $this->filterRecipientsByMode($normalRecipients);
 
             if (0 === count($recipients)) {
                 return;
@@ -171,7 +171,7 @@ class CalendarEventNotificationSubscriber implements EventSubscriberInterface
                 $body,
                 [
                     'eventTitle' => $calendarEvent->getTitle(),
-                    'deletedBy'  => $actor->getFullName(),
+                    'deletedBy' => $actor->getFullName(),
                 ]
             );
         } catch (Exception $e) {

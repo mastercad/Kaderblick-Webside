@@ -12,6 +12,7 @@ use App\Enum\CalendarEventPermissionType;
 use App\Event\CalendarEventCreatedEvent;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventService;
+use DateTime;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -34,7 +35,7 @@ class CalendarEventWriteController extends AbstractController
     #[Route('/event', name: 'event_create', methods: ['POST'])]
     public function createEvent(Request $request, SerializerInterface $serializer): JsonResponse
     {
-        $data    = $request->getContent();
+        $data = $request->getContent();
         $context = ['groups' => ['calendar_event:write']];
 
         $calendarEvent = $serializer->deserialize($data, CalendarEvent::class, 'json', $context);
@@ -45,7 +46,7 @@ class CalendarEventWriteController extends AbstractController
 
         /** @var User $currentUser */
         $currentUser = $this->getUser();
-        $jsonData    = json_decode($data, true);
+        $jsonData = json_decode($data, true);
 
         $ownershipError = $this->calendarEventService->validateMatchTeamOwnership($jsonData, $currentUser);
         if (null !== $ownershipError) {
@@ -73,16 +74,16 @@ class CalendarEventWriteController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
-        $title       = $data['title'] ?? '';
-        $startDate   = $data['startDate'] ?? null;
-        $endDate     = $data['seriesEndDate'] ?? null;
-        $weekdays    = $data['weekdays'] ?? [];
+        $title = $data['title'] ?? '';
+        $startDate = $data['startDate'] ?? null;
+        $endDate = $data['seriesEndDate'] ?? null;
+        $weekdays = $data['weekdays'] ?? [];
         $eventTypeId = $data['eventTypeId'] ?? null;
-        $teamId      = $data['teamId'] ?? null;
-        $time        = $data['time'] ?? null;
-        $endTime     = $data['endTime'] ?? null;
-        $duration    = isset($data['duration']) ? (int) $data['duration'] : 90;
-        $locationId  = $data['locationId'] ?? null;
+        $teamId = $data['teamId'] ?? null;
+        $time = $data['time'] ?? null;
+        $endTime = $data['endTime'] ?? null;
+        $duration = isset($data['duration']) ? (int) $data['duration'] : 90;
+        $locationId = $data['locationId'] ?? null;
         $description = $data['description'] ?? '';
 
         if (!$title || !$startDate || !$endDate || empty($weekdays) || !$eventTypeId) {
@@ -93,19 +94,19 @@ class CalendarEventWriteController extends AbstractController
         $currentUser = $this->getUser();
 
         $eventType = $this->entityManager->getReference(CalendarEventType::class, (int) $eventTypeId);
-        $location  = $locationId ? $this->entityManager->getReference(Location::class, (int) $locationId) : null;
-        $team      = $teamId ? $this->entityManager->getReference(Team::class, (int) $teamId) : null;
+        $location = $locationId ? $this->entityManager->getReference(Location::class, (int) $locationId) : null;
+        $team = $teamId ? $this->entityManager->getReference(Team::class, (int) $teamId) : null;
 
         if ($team && !$this->isGranted(CalendarEventVoter::CREATE, $team)) {
             return $this->json(['error' => 'Keine Berechtigung für das ausgewählte Team.', 'success' => false], 403);
         }
 
-        $cursor  = new DateTimeImmutable($startDate);
-        $end     = new DateTimeImmutable($endDate);
-        $bytes   = random_bytes(16);
+        $cursor = new DateTimeImmutable($startDate);
+        $end = new DateTimeImmutable($endDate);
+        $bytes = random_bytes(16);
         $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
         $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
-        $seriesId     = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+        $seriesId = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
         $createdCount = 0;
 
         while ($cursor <= $end) {
@@ -125,12 +126,12 @@ class CalendarEventWriteController extends AbstractController
                 }
 
                 $startDt = $time
-                    ? new \DateTime($cursor->format('Y-m-d') . 'T' . $time . ':00')
-                    : new \DateTime($cursor->format('Y-m-d') . 'T00:00:00');
+                    ? new DateTime($cursor->format('Y-m-d') . 'T' . $time . ':00')
+                    : new DateTime($cursor->format('Y-m-d') . 'T00:00:00');
                 $event->setStartDate($startDt);
 
                 if ($endTime) {
-                    $event->setEndDate(new \DateTime($cursor->format('Y-m-d') . 'T' . $endTime . ':00'));
+                    $event->setEndDate(new DateTime($cursor->format('Y-m-d') . 'T' . $endTime . ':00'));
                 } elseif ($time && $duration > 0) {
                     $endDt = clone $startDt;
                     $endDt->modify('+' . $duration . ' minutes');

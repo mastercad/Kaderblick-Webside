@@ -9,6 +9,7 @@ use App\Entity\WeatherData;
 use App\Repository\CalendarEventRepository;
 use App\Security\Voter\CalendarEventVoter;
 use App\Service\CalendarEventSerializer;
+use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -27,11 +28,11 @@ class CalendarEventReadController extends AbstractController
     #[Route('/events', name: 'events', methods: ['GET'])]
     public function retrieveEvents(Request $request, CalendarEventRepository $calendarEventRepository): JsonResponse
     {
-        $start = new \DateTime($request->query->get('start'));
-        $end   = new \DateTime($request->query->get('end'));
+        $start = new DateTime($request->query->get('start'));
+        $end = new DateTime($request->query->get('end'));
 
         $unfilteredEvents = $calendarEventRepository->findBetweenDates($start, $end);
-        $calendarEvents   = array_filter(
+        $calendarEvents = array_filter(
             $unfilteredEvents,
             fn ($e) => $this->isGranted(CalendarEventVoter::VIEW, $e)
         );
@@ -84,16 +85,16 @@ class CalendarEventReadController extends AbstractController
 
         if (!$weatherData instanceof WeatherData) {
             return $this->json([
-                'dailyWeatherData'  => null,
+                'dailyWeatherData' => null,
                 'hourlyWeatherData' => null,
             ]);
         }
 
         $indexStart = $calendarEvent->getStartDate()->format('H');
-        $indexEnd   = 23 - (23 - ($calendarEvent->getEndDate() ? (int) $calendarEvent->getEndDate()->format('H') : 0));
+        $indexEnd = 23 - (23 - ($calendarEvent->getEndDate() ? (int) $calendarEvent->getEndDate()->format('H') : 0));
 
         $rawHourlyWeatherData = $weatherData->getHourlyWeatherData();
-        $hourlyWeatherData    = [];
+        $hourlyWeatherData = [];
 
         foreach ($rawHourlyWeatherData as $key => $information) {
             foreach ($information as $index => $value) {
@@ -105,7 +106,7 @@ class CalendarEventReadController extends AbstractController
         }
 
         return $this->json([
-            'dailyWeatherData'  => $weatherData->getDailyWeatherData() ?: [],
+            'dailyWeatherData' => $weatherData->getDailyWeatherData() ?: [],
             'hourlyWeatherData' => $hourlyWeatherData,
         ]);
     }

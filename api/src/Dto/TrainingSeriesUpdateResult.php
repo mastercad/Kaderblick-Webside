@@ -8,10 +8,10 @@ namespace App\Dto;
 final class TrainingSeriesUpdateResult
 {
     public function __construct(
-        public readonly int                    $updatedCount,
+        public readonly int $updatedCount,
         public readonly CalendarEventChangeSet $changeSet,
-        public readonly ?string                $oldSeriesEndDate,
-        public readonly ?string                $newSeriesEndDate,
+        public readonly ?string $oldSeriesEndDate,
+        public readonly ?string $newSeriesEndDate,
     ) {
     }
 }

@@ -44,23 +44,23 @@ class CalendarEventUpdateController extends AbstractController
             return $this->json(['error' => $ownershipError, 'success' => false], 403);
         }
 
-        $scope    = $data['trainingEditScope'] ?? 'single';
+        $scope = $data['trainingEditScope'] ?? 'single';
         $seriesId = $calendarEvent->getTrainingSeriesId();
 
         // Single event (or no series): update only the one event.
         if ('single' === $scope || null === $seriesId) {
-            $oldStartTime    = $calendarEvent->getStartDate()?->format('H:i');
-            $oldEndTime      = $calendarEvent->getEndDate()?->format('H:i');
+            $oldStartTime = $calendarEvent->getStartDate()?->format('H:i');
+            $oldEndTime = $calendarEvent->getEndDate()?->format('H:i');
             $oldLocationName = $calendarEvent->getLocation()?->getName();
 
             $this->calendarEventService->updateEventFromData($calendarEvent, $data);
             $this->entityManager->flush();
 
             $changeSet = new CalendarEventChangeSet(
-                oldStartTime:    $oldStartTime,
-                newStartTime:    $calendarEvent->getStartDate()?->format('H:i'),
-                oldEndTime:      $oldEndTime,
-                newEndTime:      $calendarEvent->getEndDate()?->format('H:i'),
+                oldStartTime: $oldStartTime,
+                newStartTime: $calendarEvent->getStartDate()?->format('H:i'),
+                oldEndTime: $oldEndTime,
+                newEndTime: $calendarEvent->getEndDate()?->format('H:i'),
                 oldLocationName: $oldLocationName,
                 newLocationName: $calendarEvent->getLocation()?->getName(),
             );

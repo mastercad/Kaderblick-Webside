@@ -38,7 +38,7 @@ class CalendarEventStatusController extends AbstractController
             return $this->json(['error' => 'Event ist bereits abgesagt.'], 400);
         }
 
-        $data   = json_decode($request->getContent(), true);
+        $data = json_decode($request->getContent(), true);
         $reason = trim($data['reason'] ?? '');
 
         if ('' === $reason) {
@@ -57,8 +57,8 @@ class CalendarEventStatusController extends AbstractController
 
         if (count($recipients) > 0) {
             $eventTitle = $calendarEvent->getTitle();
-            $startDate  = $calendarEvent->getStartDate()?->format('d.m.Y H:i') ?? '';
-            $location   = $calendarEvent->getLocation();
+            $startDate = $calendarEvent->getStartDate()?->format('d.m.Y H:i') ?? '';
+            $location = $calendarEvent->getLocation();
 
             $lines = [];
             if ('' !== $startDate) {
@@ -76,10 +76,10 @@ class CalendarEventStatusController extends AbstractController
                 'Absage: ' . $eventTitle,
                 implode("\n", $lines),
                 [
-                    'eventTitle'  => $eventTitle,
-                    'reason'      => $reason,
+                    'eventTitle' => $eventTitle,
+                    'reason' => $reason,
                     'cancelledBy' => $currentUser->getFullName(),
-                    'url'         => '/calendar?eventId=' . $calendarEvent->getId(),
+                    'url' => '/calendar?eventId=' . $calendarEvent->getId(),
                 ]
             );
         }
@@ -110,8 +110,8 @@ class CalendarEventStatusController extends AbstractController
 
         if (count($recipients) > 0) {
             $eventTitle = $calendarEvent->getTitle();
-            $startDate  = $calendarEvent->getStartDate()?->format('d.m.Y H:i') ?? '';
-            $location   = $calendarEvent->getLocation();
+            $startDate = $calendarEvent->getStartDate()?->format('d.m.Y H:i') ?? '';
+            $location = $calendarEvent->getLocation();
 
             $lines = [];
             if ('' !== $startDate) {
@@ -128,9 +128,9 @@ class CalendarEventStatusController extends AbstractController
                 'Reaktiviert: ' . $eventTitle,
                 implode("\n", $lines),
                 [
-                    'eventTitle'    => $eventTitle,
+                    'eventTitle' => $eventTitle,
                     'reactivatedBy' => $currentUser->getFullName(),
-                    'url'           => '/calendar?eventId=' . $calendarEvent->getId(),
+                    'url' => '/calendar?eventId=' . $calendarEvent->getId(),
                 ]
             );
         }
@@ -146,7 +146,7 @@ class CalendarEventStatusController extends AbstractController
         }
 
         $recipients = $this->calendarEventService->loadEventRecipients($calendarEvent);
-        $emails     = array_filter(array_map(fn (User $u) => $u->getEmail(), $recipients));
+        $emails = array_filter(array_map(fn (User $u) => $u->getEmail(), $recipients));
         $this->emailService->sendEventNotification($emails, $calendarEvent);
 
         $calendarEvent->setNotificationSent(true);
