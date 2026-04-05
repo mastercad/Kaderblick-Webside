@@ -20,6 +20,8 @@ import GroupWorkIcon from '@mui/icons-material/GroupWork';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
+import ChecklistIcon from '@mui/icons-material/Checklist';
+import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import { useTheme, alpha } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useNotifications } from '../../context/NotificationContext';
@@ -99,8 +101,10 @@ export default function NavMobileDrawer({ open, onClose, openMessages, onOpenQRS
             { key: 'reports',       label: 'Auswertungen', icon: <BarChartIcon sx={{ fontSize: 28 }} />,   color: navItemColorMap['reports'] },
             { key: 'news',          label: 'Neuigkeiten',  icon: <NewspaperIcon sx={{ fontSize: 28 }} />,  color: navItemColorMap['news'] },
             { key: 'surveys',       label: 'Umfragen',     icon: <PollIcon sx={{ fontSize: 28 }} />,       color: navItemColorMap['surveys'] },
-            { key: 'tasks',         label: 'Aufgaben',     icon: <AssignmentIcon sx={{ fontSize: 28 }} />, color: navItemColorMap['tasks'] },
-            { key: 'mein-feedback', label: 'Mein Feedback',icon: <FeedbackIcon sx={{ fontSize: 28 }} />,   color: navItemColorMap['mein-feedback'] },
+            { key: 'tasks',         label: 'Aufgaben',     icon: <AssignmentIcon sx={{ fontSize: 28 }} />,     color: navItemColorMap['tasks'] },
+            { key: 'mein-feedback', label: 'Mein Feedback',icon: <FeedbackIcon sx={{ fontSize: 28 }} />,       color: navItemColorMap['mein-feedback'] },
+            { key: 'mein-spieltag', label: 'Mein Spieltag', icon: <ChecklistIcon sx={{ fontSize: 28 }} />,      color: navItemColorMap['mein-spieltag'] },
+            { key: 'player-tips',   label: 'Spieler-Tipps', icon: <TipsAndUpdatesIcon sx={{ fontSize: 28 }} />, color: navItemColorMap['player-tips'] },
           ] as { key: string; label: string; icon: React.ReactElement; color: string }[]).map((tile) => {
             const isActive = active(tile.key);
             return (
