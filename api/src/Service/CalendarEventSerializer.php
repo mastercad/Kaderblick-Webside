@@ -152,6 +152,8 @@ class CalendarEventSerializer
             'trainingWeekdays' => $calendarEvent->getTrainingWeekdays(),
             'trainingSeriesEndDate' => $calendarEvent->getTrainingSeriesEndDate(),
             'trainingSeriesId' => $calendarEvent->getTrainingSeriesId(),
+            'meetingPoint' => $calendarEvent->getMeetingPoint(),
+            'meetingTime' => $calendarEvent->getMeetingTime()?->format('Y-m-d\TH:i:s'),
             'cancelled' => $calendarEvent->isCancelled(),
             'cancelReason' => $calendarEvent->getCancelReason(),
             'cancelledBy' => $calendarEvent->getCancelledBy()?->getFullName(),

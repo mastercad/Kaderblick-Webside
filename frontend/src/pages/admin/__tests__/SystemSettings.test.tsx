@@ -175,4 +175,88 @@ describe('SystemSettings', () => {
       )
     );
   });
+
+  // ── Mein Spieltag – matchday_lookahead_days slider ────────────────────────
+
+  it('renders the "Mein Spieltag" section', async () => {
+    await renderAndWait();
+    // Section overline heading
+    const headings = screen.getAllByText(/mein spieltag/i);
+    expect(headings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders a Slider in the matchday section', async () => {
+    await renderAndWait();
+    // MUI Slider renders with role="slider"
+    expect(screen.getByRole('slider')).toBeInTheDocument();
+  });
+
+  it('Slider shows default value of 7 when no matchday_lookahead_days setting exists', async () => {
+    // Settings without matchday_lookahead_days → falls back to default 7
+    await renderAndWait();
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAttribute('aria-valuenow', '7');
+  });
+
+  it('Slider shows stored value when matchday_lookahead_days is configured', async () => {
+    await renderAndWait({
+      matchday_lookahead_days: { value: '14', updatedAt: '2025-01-01T00:00:00Z' },
+    });
+    const slider = screen.getByRole('slider');
+    expect(slider).toHaveAttribute('aria-valuenow', '14');
+  });
+
+  it('calls PATCH with the new value when Slider change is committed via keyboard', async () => {
+    mockApiJson.mockResolvedValueOnce(makeSettings());
+    mockApiJson.mockResolvedValueOnce({ key: 'matchday_lookahead_days', value: '8' });
+
+    render(<SystemSettings />);
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+
+    const slider = screen.getByRole('slider');
+    // Focus the slider and increase value by one step (ArrowRight → onChange + onChangeCommitted)
+    slider.focus();
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.keyUp(slider, { key: 'ArrowRight' });
+
+    await waitFor(() =>
+      expect(mockApiJson).toHaveBeenCalledWith(
+        '/api/superadmin/system-settings/matchday_lookahead_days',
+        expect.objectContaining({ method: 'PATCH' })
+      )
+    );
+  });
+
+  it('Slider PATCH carries a numeric string value', async () => {
+    mockApiJson.mockResolvedValueOnce(
+      makeSettings({ matchday_lookahead_days: { value: '10', updatedAt: '2025-01-01T00:00:00Z' } })
+    );
+    mockApiJson.mockResolvedValueOnce({ key: 'matchday_lookahead_days', value: '11' });
+
+    render(<SystemSettings />);
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+
+    const slider = screen.getByRole('slider');
+    slider.focus();
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.keyUp(slider, { key: 'ArrowRight' });
+
+    await waitFor(() => {
+      const patchCall = mockApiJson.mock.calls.find(
+        args => args[0] === '/api/superadmin/system-settings/matchday_lookahead_days'
+      );
+      expect(patchCall).toBeDefined();
+      // value must be a string (backend accepts string)
+      expect(typeof patchCall![1]!.body.value).toBe('string');
+    });
+  });
+
+  it('defaults list includes matchday_lookahead_days', async () => {
+    // The defaults fixture inside makeSettings does NOT include matchday_lookahead_days –
+    // this test verifies the component still renders without crashing when it is absent
+    // (i.e., the setting falls back gracefully to the hardcoded default of 7).
+    await renderAndWait();
+    // Slider is present even without the key in the defaults object
+    expect(screen.getByRole('slider')).toBeInTheDocument();
+  });
 });

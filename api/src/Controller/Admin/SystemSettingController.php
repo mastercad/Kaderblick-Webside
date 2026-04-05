@@ -31,6 +31,7 @@ class SystemSettingController extends AbstractController
                 SystemSettingService::KEY_REGISTRATION_CONTEXT_ENABLED => 'true',
                 SystemSettingService::KEY_2FA_REQUIRED => 'false',
                 SystemSettingService::KEY_PUSH_NOTIFICATIONS_MODE => SystemSettingService::PUSH_NOTIFICATIONS_MODE_ALL,
+                SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS => (string) SystemSettingService::MATCHDAY_LOOKAHEAD_DAYS_DEFAULT,
             ],
         ]);
     }
@@ -54,6 +55,7 @@ class SystemSettingController extends AbstractController
             SystemSettingService::KEY_REGISTRATION_CONTEXT_ENABLED,
             SystemSettingService::KEY_2FA_REQUIRED,
             SystemSettingService::KEY_PUSH_NOTIFICATIONS_MODE,
+            SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS,
         ];
 
         if (!in_array($key, $allowedKeys, true)) {
@@ -61,6 +63,14 @@ class SystemSettingController extends AbstractController
         }
 
         $value = (string) $data['value'];
+
+        // KEY_MATCHDAY_LOOKAHEAD_DAYS must be a positive integer.
+        if (SystemSettingService::KEY_MATCHDAY_LOOKAHEAD_DAYS === $key) {
+            $intValue = (int) $value;
+            if ($intValue < 1 || $intValue > 90 || (string) $intValue !== $value) {
+                return $this->json(['error' => 'Value for matchday_lookahead_days must be an integer between 1 and 90.'], 400);
+            }
+        }
 
         // KEY_PUSH_NOTIFICATIONS_MODE only accepts the three defined modes.
         if (SystemSettingService::KEY_PUSH_NOTIFICATIONS_MODE === $key) {

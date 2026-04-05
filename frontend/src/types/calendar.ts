@@ -58,6 +58,8 @@ export type CalendarEvent = {
   cancelled?: boolean;
   cancelReason?: string;
   cancelledBy?: string;
+  meetingPoint?: string;
+  meetingTime?: string;
   // Externe Kalender-Events (importiert via iCal)
   isExternal?: boolean;
   externalCalendarId?: number;

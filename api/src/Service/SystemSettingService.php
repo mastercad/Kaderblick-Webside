@@ -38,6 +38,13 @@ class SystemSettingService
      */
     public const KEY_PUSH_NOTIFICATIONS_MODE = 'push_notifications_mode';
 
+    /**
+     * How many days ahead upcoming games are shown in "Mein Spieltag".
+     * Integer string, default 7.
+     */
+    public const KEY_MATCHDAY_LOOKAHEAD_DAYS = 'matchday_lookahead_days';
+    public const MATCHDAY_LOOKAHEAD_DAYS_DEFAULT = 7;
+
     /** Valid values for KEY_PUSH_NOTIFICATIONS_MODE. */
     public const PUSH_NOTIFICATIONS_MODE_ALL = 'all';
     public const PUSH_NOTIFICATIONS_MODE_ONLY_ME = 'only_me';
@@ -116,6 +123,17 @@ class SystemSettingService
     public function is2faRequired(): bool
     {
         return $this->getBool(self::KEY_2FA_REQUIRED, false);
+    }
+
+    /**
+     * How many days ahead upcoming games are fetched for "Mein Spieltag".
+     * Minimum 1, maximum 90.
+     */
+    public function getMatchdayLookaheadDays(): int
+    {
+        $value = (int) $this->get(self::KEY_MATCHDAY_LOOKAHEAD_DAYS, (string) self::MATCHDAY_LOOKAHEAD_DAYS_DEFAULT);
+
+        return max(1, min(90, $value));
     }
 
     /**

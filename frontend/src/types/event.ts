@@ -82,6 +82,9 @@ export interface EventData {
   enableLineups?: boolean;
   homeLineup?: string;
   awayLineup?: string;
+  // Meeting point / gathering info
+  meetingPoint?: string;
+  meetingTime?: string;   // HH:mm or ISO datetime string
 }
 
 export interface SelectOption {

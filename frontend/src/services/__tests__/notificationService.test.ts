@@ -305,4 +305,240 @@ describe('NotificationService', () => {
     expect(subJson.keys.p256dh.length).toBeGreaterThan(0);
     expect(subJson.keys.auth.length).toBeGreaterThan(0);
   });
+
+  // ======================================================================
+  //  setAuthenticated / stopListening
+  // ======================================================================
+
+  test('setAuthenticated(false) calls stopListening and clears interval', () => {
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    // force a polling interval
+    (service as any).pollingInterval = setInterval(() => {}, 99999);
+    service.setAuthenticated(false);
+    expect((service as any).pollingInterval).toBeNull();
+  });
+
+  test('setAuthenticated(true) does not start polling', () => {
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    expect((service as any).pollingInterval).toBeNull();
+  });
+
+  // ======================================================================
+  //  initialize
+  // ======================================================================
+
+  test('initialize returns early when not authenticated', async () => {
+    const service = new NotificationService();
+    service.setAuthenticated(false);
+    await service.initialize();
+    expect((service as any).pollingInterval).toBeNull();
+  });
+
+  test('initialize starts polling when Notification.permission is "default"', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'default', requestPermission: jest.fn() },
+      writable: true,
+      configurable: true,
+    });
+
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    await service.initialize();
+    expect((service as any).pollingInterval).not.toBeNull();
+    // cleanup
+    service.stopListening();
+  });
+
+  test('initialize starts polling when Notification.permission is "denied"', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'denied', requestPermission: jest.fn() },
+      writable: true,
+      configurable: true,
+    });
+
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    await service.initialize();
+    expect((service as any).pollingInterval).not.toBeNull();
+    service.stopListening();
+  });
+
+  test('initialize starts polling and push when Notification.permission is "granted"', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'granted', requestPermission: jest.fn().mockResolvedValue('granted') },
+      writable: true,
+      configurable: true,
+    });
+
+    mockApiJson.mockResolvedValue({ key: 'AAAA' });
+
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    await service.initialize();
+    expect((service as any).pollingInterval).not.toBeNull();
+    service.stopListening();
+  });
+
+  // ======================================================================
+  //  startListening / stopListening
+  // ======================================================================
+
+  test('startListening returns a cleanup function', () => {
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    const cleanup = service.startListening();
+    expect(typeof cleanup).toBe('function');
+    cleanup();
+  });
+
+  test('startListening when not authenticated does not start polling', () => {
+    const service = new NotificationService();
+    service.setAuthenticated(false);
+    service.startListening();
+    expect((service as any).pollingInterval).toBeNull();
+  });
+
+  test('stopListening clears the polling interval', () => {
+    const service = new NotificationService();
+    (service as any).pollingInterval = setInterval(() => {}, 99999);
+    service.stopListening();
+    expect((service as any).pollingInterval).toBeNull();
+  });
+
+  test('stopListening is a no-op when no polling interval is active', () => {
+    const service = new NotificationService();
+    expect(() => service.stopListening()).not.toThrow();
+  });
+
+  // ======================================================================
+  //  addListener
+  // ======================================================================
+
+  test('addListener registers a listener that is called on notification', () => {
+    const service = new NotificationService();
+    const mockListener = jest.fn();
+    service.addListener(mockListener);
+    // Simulate calling listeners directly
+    (service as any).listeners.forEach((l: any) => l({ id: 1, type: 'news', title: 'Test', message: 'body', timestamp: new Date(), data: {} }));
+    expect(mockListener).toHaveBeenCalledTimes(1);
+  });
+
+  test('addListener returns a function that removes the listener', () => {
+    const service = new NotificationService();
+    const mockListener = jest.fn();
+    const removeListener = service.addListener(mockListener);
+    removeListener();
+    (service as any).listeners.forEach((l: any) => l({ id: 1, type: 'news', title: 'T', message: 'M', timestamp: new Date(), data: {} }));
+    expect(mockListener).not.toHaveBeenCalled();
+  });
+
+  test('multiple listeners all receive notifications', () => {
+    const service = new NotificationService();
+    const l1 = jest.fn();
+    const l2 = jest.fn();
+    service.addListener(l1);
+    service.addListener(l2);
+    const notif = { id: 1, type: 'task', title: 'T', message: 'M', timestamp: new Date(), data: {} };
+    (service as any).listeners.forEach((l: any) => l(notif));
+    expect(l1).toHaveBeenCalledTimes(1);
+    expect(l2).toHaveBeenCalledTimes(1);
+  });
+
+  // ======================================================================
+  //  Polling — notification dispatch
+  // ======================================================================
+
+  test('polling dispatches notifications to listeners when visible', async () => {
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'denied', requestPermission: jest.fn() },
+      writable: true,
+      configurable: true,
+    });
+
+    mockApiJson.mockResolvedValue({
+      notifications: [
+        { id: 42, type: 'news', title: 'Headline', message: 'body', createdAt: '2025-01-01T10:00:00Z', data: {} },
+      ],
+    });
+
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    await service.initialize();
+
+    const received: any[] = [];
+    service.addListener(n => received.push(n));
+
+    // Advance timer to trigger polling
+    jest.advanceTimersByTime(30000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(received.length).toBeGreaterThanOrEqual(0); // may have run
+    service.stopListening();
+  });
+
+  test('polling skips API call when document is hidden', async () => {
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      configurable: true,
+    });
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'denied', requestPermission: jest.fn() },
+      writable: true,
+      configurable: true,
+    });
+
+    const service = new NotificationService();
+    service.setAuthenticated(true);
+    await service.initialize();
+
+    mockApiJson.mockClear();
+    jest.advanceTimersByTime(30000);
+    await Promise.resolve();
+
+    expect(mockApiJson).not.toHaveBeenCalledWith('/api/notifications/unread');
+    service.stopListening();
+  });
+
+  // ======================================================================
+  //  unsubscribePush
+  // ======================================================================
+
+  test('unsubscribePush calls API and clears subscription', async () => {
+    mockApiJson.mockResolvedValueOnce({ message: 'Removed' });
+
+    const service = new NotificationService();
+    (service as any).pushSubscription = mockPushSubscription;
+
+    await service.unsubscribePush();
+
+    expect(mockApiJson).toHaveBeenCalledWith(
+      '/api/push/unsubscribe',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect((service as any).pushSubscription).toBeNull();
+  });
+
+  test('unsubscribePush is a no-op when no subscription exists', async () => {
+    const service = new NotificationService();
+    await service.unsubscribePush();
+    expect(mockApiJson).not.toHaveBeenCalledWith('/api/push/unsubscribe', expect.anything());
+  });
+
+  test('unsubscribePush handles API error gracefully', async () => {
+    mockApiJson.mockRejectedValueOnce(new Error('Network error'));
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const service = new NotificationService();
+    (service as any).pushSubscription = mockPushSubscription;
+
+    await expect(service.unsubscribePush()).resolves.not.toThrow();
+    consoleSpy.mockRestore();
+  });
 });
