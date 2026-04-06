@@ -107,6 +107,29 @@ class MessageVoterTest extends TestCase
         $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
     }
 
+    public function testDeleteAsSuperAdminReturnsTrue(): void
+    {
+        $superAdmin = $this->createUser(1, ['ROLE_SUPERADMIN']);
+        $message = $this->createMessage(2, []);
+        $token = $this->createToken($superAdmin);
+
+        $result = $this->voter->vote($token, $message, [MessageVoter::DELETE]);
+
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+    }
+
+    public function testVoteReturnsDeniedWhenTokenUserIsNotUserInstance(): void
+    {
+        $message = $this->createMessage(1, []);
+
+        $token = $this->createMock(TokenInterface::class);
+        $token->method('getUser')->willReturn(null);
+
+        $result = $this->voter->vote($token, $message, [MessageVoter::VIEW]);
+
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+    }
+
     /**
      * @param array<string> $roles
      */

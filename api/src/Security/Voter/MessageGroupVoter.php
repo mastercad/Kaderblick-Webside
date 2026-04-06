@@ -37,7 +37,12 @@ final class MessageGroupVoter extends Voter
 
         switch ($attribute) {
             case self::VIEW:
-                // Alle Gruppenmitglieder können die Gruppe sehen
+                // Owner can always view their own group
+                if ($messageGroup->getOwner() === $user) {
+                    return true;
+                }
+
+                // All group members can view the group
                 foreach ($messageGroup->getMembers() as $member) {
                     if ($member === $user) {
                         return true;

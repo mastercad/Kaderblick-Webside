@@ -2,10 +2,15 @@
 
 namespace App\Controller;
 
+use App\Entity\Club;
 use App\Entity\Message;
 use App\Entity\MessageGroup;
+use App\Entity\Team;
 use App\Entity\User;
+use App\Repository\ClubRepository;
+use App\Repository\TeamRepository;
 use App\Security\Voter\MessageVoter;
+use App\Service\BulkRecipientResolverService;
 use App\Service\NotificationService;
 use App\Service\UserContactService;
 use Doctrine\Common\Collections\Criteria;
@@ -21,7 +26,10 @@ class MessageController extends AbstractController
     public function __construct(
         private EntityManagerInterface $entityManager,
         private NotificationService $notificationService,
-        private UserContactService $userContactService
+        private UserContactService $userContactService,
+        private BulkRecipientResolverService $bulkResolver,
+        private TeamRepository $teamRepository,
+        private ClubRepository $clubRepository,
     ) {
     }
 
@@ -55,11 +63,14 @@ class MessageController extends AbstractController
             'messages' => array_map(fn (Message $message) => [
                 'id' => $message->getId(),
                 'subject' => $message->getSubject(),
+                'snippet' => $message->getSnippet(),
                 'sender' => $message->getSender()->getFullName(),
                 'senderId' => $message->getSender()->getId(),
                 'senderIsSuperAdmin' => in_array('ROLE_SUPERADMIN', $message->getSender()->getRoles(), true),
                 'sentAt' => $message->getSentAt()->format('Y-m-d H:i:s'),
                 'isRead' => $message->isReadBy($user),
+                'parentId' => $message->getParent()?->getId(),
+                'threadId' => $message->getThread()?->getId(),
             ], $messages),
         ]);
     }
@@ -118,6 +129,7 @@ class MessageController extends AbstractController
                 'id' => $u->getId(),
                 'name' => $u->getFullName(),
             ], $message->getRecipients()->toArray()),
+            'recipientLabels' => $this->buildRecipientLabels($message),
             'sentAt' => $message->getSentAt()->format('Y-m-d H:i:s'),
             'isRead' => $message->isReadBy($user),
         ]);
@@ -155,6 +167,15 @@ class MessageController extends AbstractController
         $message->setSubject($data['subject']);
         $message->setContent($data['content']);
 
+        if (!empty($data['parentId'])) {
+            $parent = $this->entityManager->getRepository(Message::class)->find((int) $data['parentId']);
+            if (null !== $parent && $this->isGranted(MessageVoter::VIEW, $parent)) {
+                $message->setParent($parent);
+                // Thread root = parent's thread if it exists, otherwise parent itself
+                $message->setThread($parent->getThread() ?? $parent);
+            }
+        }
+
         if (!empty($data['recipientIds'])) {
             $criteria = Criteria::create()
                 ->where(Criteria::expr()->in('id', $data['recipientIds']));
@@ -165,12 +186,11 @@ class MessageController extends AbstractController
             foreach ($recipients as $recipient) {
                 $message->addRecipient($recipient);
             }
+
+            $message->setDirectRecipientIds(array_values(array_map('intval', $data['recipientIds'])));
         }
 
         if (!empty($data['groupId'])) {
-            $criteria = Criteria::create()
-                ->where(Criteria::expr()->in('id', $data['recipientIds']));
-
             $group = $this->entityManager->getRepository(MessageGroup::class)
                 ->find($data['groupId']);
 
@@ -178,7 +198,34 @@ class MessageController extends AbstractController
                 foreach ($group->getMembers() as $member) {
                     $message->addRecipient($member);
                 }
+                $message->setGroup($group);
             }
+        }
+
+        if (!empty($data['teamTargets'])) {
+            $teamIds = array_unique(array_column($data['teamTargets'], 'teamId'));
+            $teams = $this->teamRepository->findBy(['id' => $teamIds]);
+            $teamIndex = [];
+            foreach ($teams as $team) {
+                $teamIndex[$team->getId()] = $team;
+            }
+            foreach ($this->bulkResolver->resolveTeamTargets($data['teamTargets'], $teamIndex) as $u) {
+                $message->addRecipient($u);
+            }
+            $message->setTeamTargets($data['teamTargets']);
+        }
+
+        if (!empty($data['clubTargets'])) {
+            $clubIds = array_unique(array_column($data['clubTargets'], 'clubId'));
+            $clubs = $this->clubRepository->findBy(['id' => $clubIds]);
+            $clubIndex = [];
+            foreach ($clubs as $club) {
+                $clubIndex[$club->getId()] = $club;
+            }
+            foreach ($this->bulkResolver->resolveClubTargets($data['clubTargets'], $clubIndex) as $u) {
+                $message->addRecipient($u);
+            }
+            $message->setClubTargets($data['clubTargets']);
         }
 
         $this->entityManager->persist($message);
@@ -218,6 +265,7 @@ class MessageController extends AbstractController
             'messages' => array_map(fn (Message $message) => [
                 'id' => $message->getId(),
                 'subject' => $message->getSubject(),
+                'snippet' => $message->getSnippet(),
                 'sender' => $message->getSender()->getFullName(),
                 'sentAt' => $message->getSentAt()->format('Y-m-d H:i:s'),
                 'isRead' => $message->isReadBy($user),
@@ -225,8 +273,70 @@ class MessageController extends AbstractController
                     fn (User $u) => ['id' => $u->getId(), 'name' => $u->getFullName()],
                     $message->getRecipients()->toArray()
                 ),
+                'recipientLabels' => $this->buildRecipientLabels($message),
+                'parentId' => $message->getParent()?->getId(),
+                'threadId' => $message->getThread()?->getId(),
             ], $messages),
         ]);
+    }
+
+    /**
+     * PATCH /api/messages/{id}/unread
+     * Marks a message as unread for the currently authenticated user.
+     */
+    #[Route('/api/messages/{id}/unread', name: 'api_messages_mark_unread', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    public function markAsUnread(Message $message): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        if (!$user) {
+            return $this->json(['message' => 'Unauthorized'], 401);
+        }
+
+        if (!$this->isGranted(MessageVoter::VIEW, $message)) {
+            return $this->json(['error' => 'Zugriff verweigert'], 403);
+        }
+
+        $message->markAsUnread($user);
+        $this->entityManager->flush();
+
+        return $this->json(['success' => true]);
+    }
+
+    /**
+     * PATCH /api/messages/read-all
+     * Marks all inbox messages as read for the currently authenticated user.
+     */
+    #[Route('/api/messages/read-all', name: 'api_messages_read_all', methods: ['PATCH'])]
+    public function markAllAsRead(): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        if (!$user) {
+            return $this->json(['message' => 'Unauthorized'], 401);
+        }
+
+        /** @var Message[] $messages */
+        $messages = $this->entityManager->getRepository(Message::class)
+            ->createQueryBuilder('m')
+            ->where(':user MEMBER OF m.recipients')
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getResult();
+
+        $changed = 0;
+        foreach ($messages as $message) {
+            if (!$message->isReadBy($user)) {
+                $message->markAsRead($user);
+                ++$changed;
+            }
+        }
+
+        if ($changed > 0) {
+            $this->entityManager->flush();
+        }
+
+        return $this->json(['marked' => $changed]);
     }
 
     /**
@@ -262,5 +372,87 @@ class MessageController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['message' => 'Nachricht gelöscht'], 200);
+    }
+
+    /**
+     * Builds a human-readable recipient label list from the stored context.
+     *
+     * Returns an array of entries like:
+     *   ['type' => 'team',  'label' => 'U17',              'detail' => 'Alle Mitglieder']
+     *   ['type' => 'club',  'label' => 'FC Kaderblick',    'detail' => 'Nur Trainer']
+     *   ['type' => 'group', 'label' => 'Trainer-Runde']
+     *   ['type' => 'user',  'label' => 'Max Mustermann']
+     *
+     * Falls back to null when no context was stored (older messages).
+     *
+     * @return list<array{type: string, label: string, detail?: string}>|null
+     */
+    private function buildRecipientLabels(Message $message): ?array
+    {
+        $roleLabel = static function (string $role): string {
+            return match ($role) {
+                'players' => 'Nur Spieler',
+                'coaches' => 'Nur Trainer',
+                'parents' => 'Nur Eltern',
+                default => 'Alle Mitglieder',
+            };
+        };
+
+        $hasContext = null !== $message->getTeamTargets()
+            || null !== $message->getClubTargets()
+            || null !== $message->getGroup()
+            || null !== $message->getDirectRecipientIds();
+
+        if (!$hasContext) {
+            return null;
+        }
+
+        $labels = [];
+        /** @var array<int, true> tracks user IDs already added to avoid duplicates */
+        $seenUserIds = [];
+
+        foreach ($message->getTeamTargets() ?? [] as $t) {
+            $teamId = (int) ($t['teamId'] ?? 0);
+            $team = $teamId ? $this->teamRepository->find($teamId) : null;
+            $labels[] = [
+                'type' => 'team',
+                'label' => $team ? $team->getName() : "Team #{$teamId}",
+                'detail' => $roleLabel($t['role'] ?? 'all'),
+            ];
+        }
+
+        foreach ($message->getClubTargets() ?? [] as $c) {
+            $clubId = (int) ($c['clubId'] ?? 0);
+            $club = $clubId ? $this->clubRepository->find($clubId) : null;
+            $labels[] = [
+                'type' => 'club',
+                'label' => $club ? $club->getName() : "Verein #{$clubId}",
+                'detail' => $roleLabel($c['role'] ?? 'all'),
+            ];
+        }
+
+        if (null !== $message->getGroup()) {
+            foreach ($message->getGroup()->getMembers() as $member) {
+                $uid = (int) $member->getId();
+                if (!isset($seenUserIds[$uid])) {
+                    $seenUserIds[$uid] = true;
+                    $labels[] = ['type' => 'user', 'label' => $member->getFullName()];
+                }
+            }
+        }
+
+        foreach ($message->getDirectRecipientIds() ?? [] as $userId) {
+            $uid = (int) $userId;
+            if (isset($seenUserIds[$uid])) {
+                continue;
+            }
+            $u = $this->entityManager->getRepository(User::class)->find($uid);
+            if ($u) {
+                $seenUserIds[$uid] = true;
+                $labels[] = ['type' => 'user', 'label' => $u->getFullName()];
+            }
+        }
+
+        return $labels;
     }
 }

@@ -62,7 +62,17 @@ class MessageGroupController extends AbstractController
         $this->entityManager->persist($group);
         $this->entityManager->flush();
 
-        return $this->json(['message' => 'Gruppe erstellt']);
+        return $this->json(['message' => 'Gruppe erstellt', 'group' => $this->serializeGroup($group)]);
+    }
+
+    #[Route('/{id}', name: 'api_message_groups_show', methods: ['GET'])]
+    public function show(MessageGroup $group): JsonResponse
+    {
+        if (!$this->isGranted(MessageGroupVoter::VIEW, $group)) {
+            return $this->json(['message' => 'Nicht berechtigt'], 403);
+        }
+
+        return $this->json(['group' => $this->serializeGroup($group)]);
     }
 
     #[Route('/{id}', name: 'api_message_groups_update', methods: ['PUT'])]
@@ -89,7 +99,7 @@ class MessageGroupController extends AbstractController
 
         $this->entityManager->flush();
 
-        return $this->json(['message' => 'Gruppe aktualisiert']);
+        return $this->json(['message' => 'Gruppe aktualisiert', 'group' => $this->serializeGroup($group)]);
     }
 
     #[Route('/{id}', name: 'api_message_groups_delete', methods: ['DELETE'])]
@@ -103,5 +113,21 @@ class MessageGroupController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['message' => 'Gruppe gelöscht']);
+    }
+
+    /** @return array<string, mixed> */
+    private function serializeGroup(MessageGroup $group): array
+    {
+        return [
+            'id' => $group->getId(),
+            'name' => $group->getName(),
+            'memberCount' => $group->getMembers()->count(),
+            'members' => array_map(fn (User $u) => [
+                'id' => $u->getId(),
+                'firstName' => $u->getFirstName(),
+                'lastName' => $u->getLastName(),
+                'fullName' => $u->getFullName(),
+            ], $group->getMembers()->toArray()),
+        ];
     }
 }

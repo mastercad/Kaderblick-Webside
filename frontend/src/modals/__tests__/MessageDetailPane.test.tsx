@@ -25,10 +25,19 @@ jest.mock('@mui/material/styles', () => ({
 jest.mock('@mui/icons-material/ArrowBack',       () => () => <span>back</span>);
 jest.mock('@mui/icons-material/DeleteOutline',   () => () => <span>delete-icon</span>);
 jest.mock('@mui/icons-material/ForwardToInbox',  () => () => <span>forward-icon</span>);
+jest.mock('@mui/icons-material/Group',           () => () => <span>group-icon</span>);
+jest.mock('@mui/icons-material/Mail',            () => () => <span>mail-big-icon</span>);
 jest.mock('@mui/icons-material/MailOutline',     () => () => <span>mail-icon</span>);
+jest.mock('@mui/icons-material/MarkEmailUnread', () => () => <span>unread-icon</span>);
+jest.mock('@mui/icons-material/Person',          () => () => <span>person-icon</span>);
 jest.mock('@mui/icons-material/Reply',           () => () => <span>reply-icon</span>);
 jest.mock('@mui/icons-material/ReplyAll',        () => () => <span>reply-all-icon</span>);
 jest.mock('@mui/icons-material/Send',            () => () => <span>send-icon</span>);
+jest.mock('@mui/icons-material/Sports',          () => () => <span>sports-icon</span>);
+
+jest.mock('@mui/material/Chip',    () => ({ label, icon: _icon, size: _s, variant: _v }: any) => <span>{label}</span>);
+jest.mock('@mui/material/Divider', () => () => <hr />);
+jest.mock('@mui/material/Tooltip', () => ({ children }: any) => <>{children}</>);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -57,12 +66,13 @@ const defaultProps = {
   isMobile: false,
   isOutbox: false,
   canReply: true,
-  onBack:    jest.fn(),
-  onReply:   jest.fn(),
-  onReplyAll: jest.fn(),
-  onResend:  jest.fn(),
-  onForward: jest.fn(),
-  onDelete:  jest.fn(),
+  onBack:           jest.fn(),
+  onReply:          jest.fn(),
+  onReplyAll:       jest.fn(),
+  onResend:         jest.fn(),
+  onForward:        jest.fn(),
+  onDelete:         jest.fn(),
+  onMarkAsUnread:   jest.fn(),
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -160,5 +170,126 @@ describe('MessageDetailPane – Leere Zustände', () => {
     render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} loading={true} />);
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     expect(screen.queryByText('Antworten')).not.toBeInTheDocument();
+  });
+});
+
+describe('MessageDetailPane – Mobile Zurück-Button', () => {
+  it('zeigt "Zurück"-Button wenn isMobile=true', () => {
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isMobile={true} />);
+    expect(screen.getByText('Zurück')).toBeInTheDocument();
+  });
+
+  it('zeigt keinen "Zurück"-Button wenn isMobile=false', () => {
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isMobile={false} />);
+    expect(screen.queryByText('Zurück')).not.toBeInTheDocument();
+  });
+
+  it('ruft onBack auf wenn "Zurück" geklickt wird', () => {
+    const onBack = jest.fn();
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isMobile={true} onBack={onBack} />);
+    fireEvent.click(screen.getByText('Zurück'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MessageDetailPane – Ungelesen-Button', () => {
+  it('zeigt "Ungelesen"-Button wenn isOutbox=false', () => {
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isOutbox={false} />);
+    expect(screen.getByTestId('btn-mark-unread')).toBeInTheDocument();
+    expect(screen.getByText('Ungelesen')).toBeInTheDocument();
+  });
+
+  it('zeigt keinen "Ungelesen"-Button wenn isOutbox=true', () => {
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isOutbox={true} />);
+    expect(screen.queryByTestId('btn-mark-unread')).not.toBeInTheDocument();
+  });
+
+  it('ruft onMarkAsUnread auf wenn "Ungelesen" geklickt wird', () => {
+    const onMarkAsUnread = jest.fn();
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} isOutbox={false} onMarkAsUnread={onMarkAsUnread} />);
+    fireEvent.click(screen.getByTestId('btn-mark-unread'));
+    expect(onMarkAsUnread).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MessageDetailPane – Weiterleiten Button', () => {
+  it('ruft onForward mit "Fw:"-Betreff auf', () => {
+    const onForward = jest.fn();
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} onForward={onForward} />);
+    fireEvent.click(screen.getByText('Weiterleiten'));
+    expect(onForward).toHaveBeenCalledWith({
+      subject: 'Fw: Trainingsplan',
+      content: 'Bitte kommt pünktlich.',
+    });
+  });
+});
+
+describe('MessageDetailPane – Zitat (Quote) in Nachrichteninhalt', () => {
+  const QUOTE_SEPARATOR = '─────────────────────';
+
+  const MESSAGE_WITH_QUOTE: Message = {
+    ...BASE_MESSAGE,
+    id: '44',
+    content: `Meine Antwort\n\n${QUOTE_SEPARATOR}\nVon: Trainer\nDatum: ...\n\nOriginalnachricht`,
+  };
+
+  it('zeigt "Ursprüngliche Nachricht" bei Inhalt mit Zitat-Trenner', () => {
+    render(<MessageDetailPane {...defaultProps} message={MESSAGE_WITH_QUOTE} />);
+    expect(screen.getByText('Ursprüngliche Nachricht')).toBeInTheDocument();
+  });
+
+  it('zeigt Nachrichtentext ohne Zitat-Trenner-Abschnitt wenn kein Zitat vorhanden', () => {
+    render(<MessageDetailPane {...defaultProps} message={BASE_MESSAGE} />);
+    expect(screen.queryByText('Ursprüngliche Nachricht')).not.toBeInTheDocument();
+  });
+});
+
+describe('MessageDetailPane – recipientLabels', () => {
+  const makeMsg = (recipientLabels: any): Message => ({
+    ...BASE_MESSAGE,
+    recipients: [{ id: '99', name: 'Anna Schmidt' }],
+    recipientLabels,
+  } as any);
+
+  it('zeigt Team-Empfänger-Label mit "Team:"-Präfix', () => {
+    const msg = makeMsg([{ type: 'team', label: 'U17', detail: 'Alle Mitglieder' }]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('Team: U17 · Alle Mitglieder')).toBeInTheDocument();
+  });
+
+  it('zeigt Verein-Empfänger-Label mit "Verein:"-Präfix', () => {
+    const msg = makeMsg([{ type: 'club', label: 'FC Nord', detail: 'Nur Trainer' }]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('Verein: FC Nord · Nur Trainer')).toBeInTheDocument();
+  });
+
+  it('zeigt Gruppen-Empfänger-Label mit "Gruppe:"-Präfix', () => {
+    const msg = makeMsg([{ type: 'group', label: 'Trainer-Runde' }]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('Gruppe: Trainer-Runde')).toBeInTheDocument();
+  });
+
+  it('zeigt User-Empfänger-Label ohne Präfix', () => {
+    const msg = makeMsg([{ type: 'user', label: 'Max Mustermann' }]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('Max Mustermann')).toBeInTheDocument();
+  });
+
+  it('zeigt Label ohne Detail wenn kein Detail angegeben', () => {
+    const msg = makeMsg([{ type: 'team', label: 'Junioren' }]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('Team: Junioren')).toBeInTheDocument();
+  });
+
+  it('fällt auf Legacy-Format zurück wenn recipientLabels null', () => {
+    const msg = { ...BASE_MESSAGE, recipientLabels: undefined };
+    render(<MessageDetailPane {...defaultProps} message={msg as any} />);
+    expect(screen.getByText('An: Anna Schmidt')).toBeInTheDocument();
+  });
+
+  it('fällt auf Legacy-Format zurück wenn recipientLabels leeres Array', () => {
+    const msg = makeMsg([]);
+    render(<MessageDetailPane {...defaultProps} message={msg} />);
+    expect(screen.getByText('An: Anna Schmidt')).toBeInTheDocument();
   });
 });
