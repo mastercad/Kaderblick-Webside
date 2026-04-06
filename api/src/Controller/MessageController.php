@@ -8,6 +8,8 @@ use App\Entity\MessageGroup;
 use App\Entity\Team;
 use App\Entity\User;
 use App\Repository\ClubRepository;
+use App\Repository\MessageRepository;
+use App\Repository\NotificationRepository;
 use App\Repository\TeamRepository;
 use App\Security\Voter\MessageVoter;
 use App\Service\BulkRecipientResolverService;
@@ -26,10 +28,12 @@ class MessageController extends AbstractController
     public function __construct(
         private EntityManagerInterface $entityManager,
         private NotificationService $notificationService,
+        private NotificationRepository $notificationRepository,
         private UserContactService $userContactService,
         private BulkRecipientResolverService $bulkResolver,
         private TeamRepository $teamRepository,
         private ClubRepository $clubRepository,
+        private MessageRepository $messageRepository,
     ) {
     }
 
@@ -39,8 +43,13 @@ class MessageController extends AbstractController
         return $this->render('messages/index.html.twig');
     }
 
+    /**
+     * GET /api/messages?page=1&limit=30.
+     *
+     * Returns paginated thread-root inbox messages (parent IS NULL) with reply counts.
+     */
     #[Route('/api/messages', name: 'api_messages_index', methods: ['GET'])]
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         /** @var User|null $user */
         $user = $this->getUser();
@@ -49,15 +58,14 @@ class MessageController extends AbstractController
         }
 
         /** @var User $user */
-        $messages = $this->entityManager->getRepository(Message::class)
-            ->createQueryBuilder('m')
-            ->where(':user MEMBER OF m.recipients')
-            ->setParameter('user', $user)
-            ->orderBy('m.sentAt', 'DESC')
-            ->getQuery()
-            ->getResult();
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 30)));
 
-        $messages = array_filter($messages, fn ($m) => $this->isGranted(MessageVoter::VIEW, $m));
+        ['messages' => $roots, 'total' => $total, 'hasMore' => $hasMore] =
+            $this->messageRepository->findInboxRoots($user, $page, $limit);
+
+        $rootIds = array_map(fn (Message $m) => (int) $m->getId(), $roots);
+        $replyCounts = $this->messageRepository->countRepliesForRoots($rootIds);
 
         return $this->json([
             'messages' => array_map(fn (Message $message) => [
@@ -71,7 +79,15 @@ class MessageController extends AbstractController
                 'isRead' => $message->isReadBy($user),
                 'parentId' => $message->getParent()?->getId(),
                 'threadId' => $message->getThread()?->getId(),
-            ], $messages),
+                'replyCount' => $replyCounts[(int) $message->getId()] ?? 0,
+            ], $roots),
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => (int) ceil($total / $limit),
+                'hasMore' => $hasMore,
+            ],
         ]);
     }
 
@@ -116,6 +132,15 @@ class MessageController extends AbstractController
         if (!$message->isReadBy($user)) {
             $message->markAsRead($user);
             $this->entityManager->flush();
+        }
+
+        // Mark related message-type notifications as read so the bell/profile badge clears.
+        $relatedNotifications = $this->notificationRepository->findUnreadMessageNotificationsByMessageId(
+            $user,
+            $message->getId()
+        );
+        if (!empty($relatedNotifications)) {
+            $this->notificationService->markAsReadBatch($relatedNotifications);
         }
 
         return $this->json([
@@ -231,6 +256,10 @@ class MessageController extends AbstractController
         $this->entityManager->persist($message);
         $this->entityManager->flush();
 
+        // Sender automatically counts their own message as read (they just wrote it)
+        $message->markAsRead($user);
+        $this->entityManager->flush();
+
         // Create notifications for message recipients
         foreach ($message->getRecipients() as $recipient) {
             $this->notificationService->createMessageNotification(
@@ -244,22 +273,29 @@ class MessageController extends AbstractController
         return $this->json(['message' => 'Nachricht gesendet']);
     }
 
+    /**
+     * GET /api/messages/outbox?page=1&limit=30.
+     *
+     * Returns paginated thread-root outbox messages (parent IS NULL) with reply counts.
+     */
     #[Route('/api/messages/outbox', name: 'api_messages_outbox', methods: ['GET'])]
-    public function retrieveSendMessage(): JsonResponse
+    public function retrieveSendMessage(Request $request): JsonResponse
     {
+        /** @var User|null $user */
         $user = $this->getUser();
         if (!$user) {
             return $this->json(['message' => 'Unauthorized'], 401);
         }
 
         /** @var User $user */
-        $messages = $this->entityManager->getRepository(Message::class)
-            ->createQueryBuilder('m')
-            ->where('m.sender = :user')
-            ->setParameter('user', $user)
-            ->orderBy('m.sentAt', 'DESC')
-            ->getQuery()
-            ->getResult();
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 30)));
+
+        ['messages' => $roots, 'total' => $total, 'hasMore' => $hasMore] =
+            $this->messageRepository->findOutboxRoots($user, $page, $limit);
+
+        $rootIds = array_map(fn (Message $m) => (int) $m->getId(), $roots);
+        $replyCounts = $this->messageRepository->countRepliesForRoots($rootIds);
 
         return $this->json([
             'messages' => array_map(fn (Message $message) => [
@@ -276,7 +312,130 @@ class MessageController extends AbstractController
                 'recipientLabels' => $this->buildRecipientLabels($message),
                 'parentId' => $message->getParent()?->getId(),
                 'threadId' => $message->getThread()?->getId(),
-            ], $messages),
+                'replyCount' => $replyCounts[(int) $message->getId()] ?? 0,
+            ], $roots),
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => (int) ceil($total / $limit),
+                'hasMore' => $hasMore,
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/messages/conversations?page=1&limit=30.
+     *
+     * Returns paginated unified conversation roots (parent IS NULL) where the user
+     * is either sender OR recipient — combining inbox + outbox for the thread view.
+     */
+    #[Route('/api/messages/conversations', name: 'api_messages_conversations', methods: ['GET'])]
+    public function conversations(Request $request): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        if (!$user) {
+            return $this->json(['message' => 'Unauthorized'], 401);
+        }
+
+        /** @var User $user */
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 30)));
+
+        ['messages' => $roots, 'total' => $total, 'hasMore' => $hasMore] =
+            $this->messageRepository->findConversationRoots($user, $page, $limit);
+
+        $rootIds = array_map(fn (Message $m) => (int) $m->getId(), $roots);
+        $replyCounts = $this->messageRepository->countRepliesForRoots($rootIds);
+        $unreadReplyCounts = $this->messageRepository->countUnreadRepliesForRoots($user, $rootIds);
+
+        return $this->json([
+            'messages' => array_map(fn (Message $message) => [
+                'id' => $message->getId(),
+                'subject' => $message->getSubject(),
+                'snippet' => $message->getSnippet(),
+                'sender' => $message->getSender()->getFullName(),
+                'senderId' => $message->getSender()->getId(),
+                'senderIsSuperAdmin' => in_array('ROLE_SUPERADMIN', $message->getSender()->getRoles(), true),
+                'sentAt' => $message->getSentAt()->format('Y-m-d H:i:s'),
+                'isRead' => $message->isReadBy($user),
+                'recipients' => array_map(
+                    fn (User $u) => ['id' => $u->getId(), 'name' => $u->getFullName()],
+                    $message->getRecipients()->toArray()
+                ),
+                'recipientLabels' => $this->buildRecipientLabels($message),
+                'parentId' => $message->getParent()?->getId(),
+                'threadId' => $message->getThread()?->getId(),
+                'replyCount' => $replyCounts[(int) $message->getId()] ?? 0,
+                'hasUnreadReplies' => $unreadReplyCounts[(int) $message->getId()] ?? false,
+            ], $roots),
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => (int) ceil($total / $limit),
+                'hasMore' => $hasMore,
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/messages/thread/{threadId}.
+     *
+     * Returns all messages in a thread (root + all replies), sorted oldest-first.
+     * Access: user must be sender or recipient of the thread root.
+     */
+    #[Route('/api/messages/thread/{threadId}', name: 'api_messages_thread', methods: ['GET'], requirements: ['threadId' => '\d+'])]
+    public function thread(int $threadId): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        if (!$user) {
+            return $this->json(['message' => 'Unauthorized'], 401);
+        }
+
+        /** @var User $user */
+        $threadRoot = $this->messageRepository->find($threadId);
+        if (!$threadRoot) {
+            return $this->json(['message' => 'Nicht gefunden'], 404);
+        }
+
+        // Thread root must be an actual root (parent IS NULL)
+        if (null !== $threadRoot->getParent()) {
+            return $this->json(['message' => 'Nicht gefunden'], 404);
+        }
+
+        // Access control: user must be able to view the root message
+        if (!$this->isGranted(MessageVoter::VIEW, $threadRoot)) {
+            return $this->json(['error' => 'Zugriff verweigert'], 403);
+        }
+
+        $allMessages = $this->messageRepository->findThreadMessages($threadRoot);
+
+        // Filter to only messages the user may see
+        $visible = array_filter(
+            $allMessages,
+            fn (Message $m) => $this->isGranted(MessageVoter::VIEW, $m)
+        );
+
+        return $this->json([
+            'messages' => array_values(array_map(fn (Message $message) => [
+                'id' => $message->getId(),
+                'subject' => $message->getSubject(),
+                'snippet' => $message->getSnippet(),
+                'sender' => $message->getSender()->getFullName(),
+                'senderId' => $message->getSender()->getId(),
+                'senderIsSuperAdmin' => in_array('ROLE_SUPERADMIN', $message->getSender()->getRoles(), true),
+                'sentAt' => $message->getSentAt()->format('Y-m-d H:i:s'),
+                'isRead' => $message->isReadBy($user),
+                'recipients' => array_map(
+                    fn (User $u) => ['id' => $u->getId(), 'name' => $u->getFullName()],
+                    $message->getRecipients()->toArray()
+                ),
+                'parentId' => $message->getParent()?->getId(),
+                'threadId' => $message->getThread()?->getId(),
+            ], $visible)),
         ]);
     }
 

@@ -296,7 +296,9 @@ class MessageThreadTest extends WebTestCase
         $this->postMessage($recipient, [$sender->getId()], 'thread-test-IdxReply2', 'Antwort', $root->getId());
         $this->assertResponseIsSuccessful();
 
-        // Absender liest seine Inbox (enthält die Antwort)
+        // Im chrono/flat Inbox erscheinen alle empfangenen Nachrichten, auch Antworten.
+        // Wir prüfen, dass die Antwort in der Inbox des Empfängers (sender) erscheint
+        // und dort korrekte parentId/threadId liefert.
         $this->authenticateAs($sender);
         $this->client->request('GET', '/api/messages');
         $this->assertResponseIsSuccessful();
@@ -304,7 +306,7 @@ class MessageThreadTest extends WebTestCase
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         $replyMsg = $this->findMessageInList($data['messages'], 'thread-test-IdxReply2');
 
-        $this->assertNotNull($replyMsg, 'Antwort muss in Inbox des Absenders erscheinen');
+        $this->assertNotNull($replyMsg, 'Antwort muss im chrono Inbox des Empfängers erscheinen');
         $this->assertSame($root->getId(), $replyMsg['parentId'], 'parentId muss Id der Wurzelnachricht sein');
         $this->assertSame($root->getId(), $replyMsg['threadId'], 'threadId muss Id der Wurzelnachricht sein');
     }
@@ -365,14 +367,26 @@ class MessageThreadTest extends WebTestCase
         $this->postMessage($userB, [$userA->getId()], 'thread-test-OutboxReply', 'Antwort', $root->getId());
         $this->assertResponseIsSuccessful();
 
-        // Postausgang von userB (Token bleibt aktiv via setServerParameter)
+        // Mit der neuen paginierten Architektur liefert GET /api/messages/outbox nur noch
+        // Roots (parent IS NULL). Die Antwort von userB hat einen parent und erscheint daher
+        // NICHT im Outbox-Root-Index von userB.
         $this->client->request('GET', '/api/messages/outbox');
         $this->assertResponseIsSuccessful();
 
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $replyMsg = $this->findMessageInList($data['messages'], 'thread-test-OutboxReply');
+        $replyInOutboxRoots = $this->findMessageInList($data['messages'], 'thread-test-OutboxReply');
+        $this->assertNull($replyInOutboxRoots, 'Antwort darf nicht als Root im Outbox-Index erscheinen');
 
-        $this->assertNotNull($replyMsg, 'Antwort muss im Postausgang des Antwortenden erscheinen');
+        // Die Antwort muss im Thread-Endpoint des Threads korrekte parentId/threadId haben.
+        // userA kann den Thread öffnen (ist Sender des Roots).
+        $this->authenticateAs($userA);
+        $this->client->request('GET', '/api/messages/thread/' . $root->getId());
+        $this->assertResponseIsSuccessful();
+
+        $threadData = json_decode((string) $this->client->getResponse()->getContent(), true);
+        $replyMsg = $this->findMessageInList($threadData['messages'], 'thread-test-OutboxReply');
+
+        $this->assertNotNull($replyMsg, 'Antwort muss im Thread-Endpoint erscheinen');
         $this->assertSame($root->getId(), $replyMsg['parentId']);
         $this->assertSame($root->getId(), $replyMsg['threadId']);
     }

@@ -5,6 +5,19 @@ export interface RecipientLabel {
   detail?: string;
 }
 
+export interface Pagination {
+  page:    number;
+  limit:   number;
+  total:   number;
+  pages:   number;
+  hasMore: boolean;
+}
+
+export interface PagedResponse<T> {
+  messages:   T[];
+  pagination: Pagination;
+}
+
 export interface Message {
   id: string;
   subject: string;
@@ -28,6 +41,9 @@ export interface Message {
   parentId?: string;
   /** Gemeinsame Thread-ID aller Nachrichten einer Konversation */
   threadId?: string;
+  /** Anzahl der Antworten in diesem Thread (nur auf Root-Nachrichten in der List-Antwort) */
+  replyCount?: number;
+  hasUnreadReplies?: boolean;
 }
 
 export interface User {
@@ -81,5 +97,7 @@ export interface MessagesModalProps {
   initialMessageId?: string;
 }
 
-export type View    = 'list' | 'detail' | 'compose';
-export type Folder  = 0 | 1; // 0 = Posteingang, 1 = Gesendet
+export type View     = 'list' | 'detail' | 'compose';
+export type Folder   = 0 | 1; // 0 = Posteingang, 1 = Gesendet
+/** chrono = Posteingang/Postausgang getrennt | thread = vereinte Konversationsansicht */
+export type ViewMode = 'chrono' | 'thread';

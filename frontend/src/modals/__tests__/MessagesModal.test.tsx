@@ -35,12 +35,29 @@ import { apiJson } from '../../utils/api';
 jest.mock('@mui/material/useMediaQuery', () => jest.fn().mockReturnValue(false));
 import useMediaQuery from '@mui/material/useMediaQuery';
 
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 1 } }),
+}));
+
+const mockMarkNotificationAsRead = jest.fn();
+jest.mock('../../context/NotificationContext', () => ({
+  useNotifications: () => ({
+    notifications: [
+      { id: 'notif-1', type: 'message', read: false, data: { messageId: 1 } },
+    ],
+    markAsRead: mockMarkNotificationAsRead,
+  }),
+}));
+
 // Sub-panes als leichte Stubs – Props bleiben testbar
 jest.mock('../messages/MessageListPane', () => ({
-  MessageListPane: ({ messages, search, onSearch, folder, loading, onMessageClick, onMarkAllRead }: any) => (
-    <div data-testid="MessageListPane" data-folder={folder} data-loading={String(loading)} data-search={search}>
+  MessageListPane: ({
+    messages, search, onSearch, folder, loading, onMessageClick, onMarkAllRead,
+    hasMore, loadingMore, onLoadMore, onExpandThread, unreadCount, onViewModeChange,
+  }: any) => (
+    <div data-testid="MessageListPane" data-folder={folder} data-loading={String(loading)} data-search={search} data-unread-count={String(unreadCount ?? 0)}>
       {messages.map((m: any) => (
-        <button key={m.id} data-testid={`msg-${m.id}`} onClick={() => onMessageClick(m)}>
+        <button key={m.id} data-testid={`msg-${m.id}`} data-has-unread-replies={String(m.hasUnreadReplies ?? false)} onClick={() => onMessageClick(m)}>
           {m.subject}
         </button>
       ))}
@@ -50,13 +67,20 @@ jest.mock('../messages/MessageListPane', () => ({
         onChange={e => onSearch(e.target.value)}
       />
       <button data-testid="btn-mark-all-read" onClick={onMarkAllRead}>markAllRead</button>
+      {hasMore && (
+        <button data-testid="btn-load-more" onClick={onLoadMore} disabled={loadingMore}>
+          {loadingMore ? 'Laden…' : 'Weitere laden'}
+        </button>
+      )}
+      <button data-testid="btn-expand-thread" onClick={() => onExpandThread?.('42')}>expandThread</button>
+      <button data-testid="btn-switch-to-thread" onClick={() => onViewModeChange?.('thread')}>switchToThread</button>
     </div>
   ),
 }));
 
 jest.mock('../messages/MessageDetailPane', () => ({
-  MessageDetailPane: ({ message, onBack, onReply, onReplyAll, onResend, onForward, onDelete, onMarkAsUnread }: any) => (
-    <div data-testid="MessageDetailPane">
+  MessageDetailPane: ({ message, onBack, onReply, onReplyAll, onResend, onForward, onDelete, onMarkAsUnread, isOutbox }: any) => (
+    <div data-testid="MessageDetailPane" data-isoutbox={String(isOutbox ?? false)}>
       {message && <span data-testid="detail-subject">{message.subject}</span>}
       <button data-testid="btn-back" onClick={onBack}>back</button>
       <button data-testid="btn-reply" onClick={onReply}>reply</button>
@@ -143,24 +167,37 @@ const CLUBS_DATA: any[] = [
   { id: 'c1', name: 'Verein Nord' },
 ];
 
+const INBOX_PAGINATION = { page: 1, limit: 30, total: 2, pages: 1, hasMore: false };
+const OUTBOX_PAGINATION = { page: 1, limit: 30, total: 1, pages: 1, hasMore: false };
+
 /** Standard-API-Mock: alle Endpoints liefern Fixtures */
 function setupApiMock(overrides: Partial<Record<string, any>> = {}) {
   (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
+    // Exact override match
     if (url in overrides) {
       const val = overrides[url];
       if (val instanceof Error) throw val;
       return val;
     }
-    if (url === '/api/messages')          return { messages: MSG_INBOX };
-    if (url === '/api/messages/outbox')   return { messages: MSG_OUTBOX };
-    if (url === '/api/users/contacts')    return { users: USERS };
-    if (url === '/api/message-groups')    return { groups: GROUPS };
-    if (url === '/api/messaging/teams')   return { teams: TEAMS_DATA };
-    if (url === '/api/messaging/clubs')   return { clubs: CLUBS_DATA };
+    // Paginated inbox (new URL format) or legacy exact match
+    const isInbox = (url === '/api/messages' || url.startsWith('/api/messages?'))
+      && !url.includes('/outbox') && !url.includes('/thread');
+    if (isInbox)                            return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+    // Paginated outbox
+    const isOutbox = url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?');
+    if (isOutbox)                           return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+    // Unified conversations (thread view)
+    const isConversations = url === '/api/messages/conversations' || url.startsWith('/api/messages/conversations?');
+    if (isConversations)                    return { messages: [...MSG_INBOX, ...MSG_OUTBOX], pagination: { page: 1, limit: 30, total: 3, pages: 1, hasMore: false } };
+    if (url === '/api/users/contacts')      return { users: USERS };
+    if (url === '/api/message-groups')      return { groups: GROUPS };
+    if (url === '/api/messaging/teams')     return { teams: TEAMS_DATA };
+    if (url === '/api/messaging/clubs')     return { clubs: CLUBS_DATA };
+    if (url.startsWith('/api/messages/thread/')) return { messages: [] };
     if (url.startsWith('/api/messages/') && opts?.method === 'DELETE') return {};
     if (url.startsWith('/api/messages/') && opts?.method === 'POST') return { id: '99' };
     if (url.startsWith('/api/messages/')) {
-      const id = url.split('/').pop();
+      const id = url.replace('/api/messages/', '');
       return MSG_INBOX.find(m => m.id === id) ?? MSG_OUTBOX.find(m => m.id === id) ?? {};
     }
     return {};
@@ -189,6 +226,7 @@ describe('MessagesModal', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     setupApiMock();
   });
 
@@ -206,8 +244,9 @@ describe('MessagesModal', () => {
 
     expect(screen.getByTestId('BaseModal')).toBeInTheDocument();
     expect(screen.getByText('Nachrichten')).toBeInTheDocument();
-    expect(apiJson).toHaveBeenCalledWith('/api/messages');
-    expect(apiJson).toHaveBeenCalledWith('/api/messages/outbox');
+    expect(apiJson).toHaveBeenCalledWith('/api/messages?page=1&limit=30');
+    expect(apiJson).toHaveBeenCalledWith('/api/messages/outbox?page=1&limit=30');
+    expect(apiJson).toHaveBeenCalledWith('/api/messages/conversations?page=1&limit=30');
     expect(apiJson).toHaveBeenCalledWith('/api/users/contacts');
     expect(apiJson).toHaveBeenCalledWith('/api/message-groups');
     expect(apiJson).toHaveBeenCalledWith('/api/messaging/teams');
@@ -381,8 +420,8 @@ describe('MessagesModal', () => {
   it('zeigt Fehler bei fehlgeschlagenem Senden', async () => {
     (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
       if (url === '/api/messages' && opts?.method === 'POST') throw new Error('500');
-      if (url === '/api/messages')        return { messages: MSG_INBOX };
-      if (url === '/api/messages/outbox') return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))        return { messages: MSG_INBOX };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))   return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')  return { users: USERS };
       if (url === '/api/message-groups')  return { groups: GROUPS };
       if (url.startsWith('/api/messages/')) {
@@ -431,8 +470,8 @@ describe('MessagesModal', () => {
     const reMsg = { ...MSG_INBOX[0], id: '1', subject: 'Re: Original' };
     setupApiMock({ '/api/messages/1': reMsg });
     (apiJson as jest.Mock).mockImplementation(async (url: string) => {
-      if (url === '/api/messages')        return { messages: [reMsg, MSG_INBOX[1]] };
-      if (url === '/api/messages/outbox') return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))        return { messages: [reMsg, MSG_INBOX[1]] };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))   return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')  return { users: USERS };
       if (url === '/api/message-groups')  return { groups: GROUPS };
       if (url === '/api/messages/1')      return reMsg;
@@ -506,8 +545,8 @@ describe('MessagesModal', () => {
 
   it('zeigt Fehler wenn Löschen fehlschlägt', async () => {
     (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
-      if (url === '/api/messages')        return { messages: MSG_INBOX };
-      if (url === '/api/messages/outbox') return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))        return { messages: MSG_INBOX };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))   return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')  return { users: USERS };
       if (url === '/api/message-groups')  return { groups: GROUPS };
       if (url === '/api/messages/1' && !opts?.method) return MSG_INBOX[0];
@@ -795,8 +834,8 @@ describe('MessagesModal', () => {
       (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
         if (url === '/api/messaging/teams') throw new Error('network');
         if (url === '/api/messaging/clubs') throw new Error('network');
-        if (url === '/api/messages')        return { messages: MSG_INBOX };
-        if (url === '/api/messages/outbox') return { messages: MSG_OUTBOX };
+        if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))        return { messages: MSG_INBOX };
+        if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))   return { messages: MSG_OUTBOX };
         if (url === '/api/users/contacts')  return { users: USERS };
         if (url === '/api/message-groups')  return { groups: GROUPS };
         return {};
@@ -832,8 +871,8 @@ describe('MessagesModal', () => {
 
     function setupApiMockExtended() {
       (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
-        if (url === '/api/messages')          return { messages: [MSG_WITH_RECIPIENT, ...MSG_INBOX] };
-        if (url === '/api/messages/outbox')   return { messages: MSG_OUTBOX };
+        if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))          return { messages: [MSG_WITH_RECIPIENT, ...MSG_INBOX] };
+        if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))     return { messages: MSG_OUTBOX };
         if (url === '/api/users/contacts')    return { users: USERS };
         if (url === '/api/message-groups')    return { groups: GROUPS };
         if (url === '/api/messaging/teams')   return { teams: TEAMS_DATA };
@@ -987,8 +1026,8 @@ describe('MessagesModal', () => {
 
   it('zeigt Fehler wenn Markieren als ungelesen fehlschlägt', async () => {
     (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
-      if (url === '/api/messages')          return { messages: MSG_INBOX };
-      if (url === '/api/messages/outbox')   return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))          return { messages: MSG_INBOX };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))     return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')    return { users: USERS };
       if (url === '/api/message-groups')    return { groups: GROUPS };
       if (url === '/api/messaging/teams')   return { teams: TEAMS_DATA };
@@ -1012,8 +1051,8 @@ describe('MessagesModal', () => {
 
   it('zeigt Fehler wenn Alle als gelesen markieren fehlschlägt', async () => {
     (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
-      if (url === '/api/messages')          return { messages: MSG_INBOX };
-      if (url === '/api/messages/outbox')   return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))          return { messages: MSG_INBOX };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))     return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')    return { users: USERS };
       if (url === '/api/message-groups')    return { groups: GROUPS };
       if (url === '/api/messaging/teams')   return { teams: TEAMS_DATA };
@@ -1131,8 +1170,8 @@ describe('MessagesModal', () => {
 
   it('verwendet leere Arrays als Fallback wenn API-Response keine Eigenschaften hat', async () => {
     setupApiMock({
-      '/api/messages':        {},
-      '/api/messages/outbox': {},
+      '/api/messages?page=1&limit=30':        {},
+      '/api/messages/outbox?page=1&limit=30': {},
       '/api/users/contacts':  {},
       '/api/message-groups':  {},
       '/api/messaging/teams': {},
@@ -1211,8 +1250,8 @@ describe('MessagesModal', () => {
       recipients: [],
     };
     (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
-      if (url === '/api/messages')          return { messages: [MSG_UNKNOWN_SENDER, ...MSG_INBOX] };
-      if (url === '/api/messages/outbox')   return { messages: MSG_OUTBOX };
+      if ((url === '/api/messages' || url.startsWith('/api/messages?')) && !url.includes('/outbox') && !url.includes('/thread'))          return { messages: [MSG_UNKNOWN_SENDER, ...MSG_INBOX] };
+      if (url === '/api/messages/outbox' || url.startsWith('/api/messages/outbox?'))     return { messages: MSG_OUTBOX };
       if (url === '/api/users/contacts')    return { users: USERS };
       if (url === '/api/message-groups')    return { groups: GROUPS };
       if (url === '/api/messaging/teams')   return { teams: TEAMS_DATA };
@@ -1259,6 +1298,475 @@ describe('MessagesModal', () => {
       expect(postCall).toBeDefined();
       // roles: [] → fallback to ['all'] → single entry with role: 'all'
       expect(postCall![1].body.teamTargets).toEqual([{ teamId: 't1', role: 'all' }]);
+    });
+  });
+
+  // ─── Pagination & Thread lazy-load ────────────────────────────────────────
+
+  it('übergibt hasMore=true und zeigt btn-load-more wenn Backend weitere Seiten meldet', async () => {
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: { page: 1, limit: 30, total: 60, pages: 2, hasMore: true } };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    expect(screen.getByTestId('btn-load-more')).toBeInTheDocument();
+  });
+
+  it('btn-load-more nicht sichtbar wenn keine weiteren Seiten vorhanden', async () => {
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    expect(screen.queryByTestId('btn-load-more')).not.toBeInTheDocument();
+  });
+
+  it('lädt zweite Inbox-Seite via btn-load-more', async () => {
+    const PAGE2_MSG = { id: '99', subject: 'Seite 2 Nachricht', sender: 'Jemand', senderId: 'u99', sentAt: new Date().toISOString(), isRead: true, content: 'x', recipients: [] };
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: { page: 1, limit: 30, total: 60, pages: 2, hasMore: true } };
+      if (url === '/api/messages?page=2&limit=30')
+        return { messages: [PAGE2_MSG], pagination: { page: 2, limit: 30, total: 60, pages: 2, hasMore: false } };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-load-more'));
+    });
+
+    await waitFor(() => {
+      expect(apiJson).toHaveBeenCalledWith('/api/messages?page=2&limit=30');
+      expect(screen.getByTestId('msg-99')).toBeInTheDocument();
+    });
+    // Nach letzter Seite: btn-load-more nicht mehr sichtbar
+    expect(screen.queryByTestId('btn-load-more')).not.toBeInTheDocument();
+  });
+
+  it('lädt zweite Outbox-Seite via btn-load-more im Postausgang-Tab', async () => {
+    const PAGE2_OUT = { id: '88', subject: 'Outbox Seite 2', sender: 'Ich', senderId: 'u1', sentAt: new Date().toISOString(), isRead: true, content: 'y', recipients: [] };
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: { page: 1, limit: 30, total: 60, pages: 2, hasMore: true } };
+      if (url === '/api/messages/outbox?page=2&limit=30')
+        return { messages: [PAGE2_OUT], pagination: { page: 2, limit: 30, total: 60, pages: 2, hasMore: false } };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    // Wechsel zu Postausgang
+    const outboxTab = screen.getByRole('tab', { name: /Gesendet/i });
+    await act(async () => { fireEvent.click(outboxTab); });
+
+    expect(screen.getByTestId('btn-load-more')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-load-more'));
+    });
+
+    await waitFor(() => {
+      expect(apiJson).toHaveBeenCalledWith('/api/messages/outbox?page=2&limit=30');
+      expect(screen.getByTestId('msg-88')).toBeInTheDocument();
+    });
+  });
+
+  it('zeigt Fehler wenn load-more für Inbox fehlschlägt', async () => {
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: { page: 1, limit: 30, total: 60, pages: 2, hasMore: true } };
+      if (url === '/api/messages?page=2&limit=30')
+        throw new Error('net error');
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-load-more'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fehler beim Laden weiterer Nachrichten')).toBeInTheDocument();
+    });
+  });
+
+  it('ruft onExpandThread→loadThread auf und zeigt Thread-Nachrichten', async () => {
+    const THREAD_REPLY = { id: '10', subject: 'Re: Willkommen', sender: 'Trainer', senderId: 'u50', sentAt: new Date().toISOString(), isRead: true, content: 'Antwort', recipients: [], parentId: '1', threadId: '1' };
+
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      if (url === '/api/messages/thread/1')
+        return { messages: [MSG_INBOX[0], THREAD_REPLY] };
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    // Trigger thread expand (the stub calls onExpandThread('42') but we override to '1')
+    // btn-expand-thread calls onExpandThread('42'); use direct API check
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-expand-thread'));
+    });
+
+    await waitFor(() => {
+      expect(apiJson).toHaveBeenCalledWith('/api/messages/thread/42');
+    });
+  });
+
+  it('zeigt Fehler wenn loadThread fehlschlägt', async () => {
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      if (url.startsWith('/api/messages/thread/')) throw new Error('thread error');
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-expand-thread'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fehler beim Laden des Threads')).toBeInTheDocument();
+    });
+  });
+
+  it('Thread-Cache wird bei vollem Reload geleert', async () => {
+    let threadCallCount = 0;
+    (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/messages?page=1&limit=30')
+        return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+      if (url === '/api/messages/outbox?page=1&limit=30')
+        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+      if (url === '/api/users/contacts')  return { users: USERS };
+      if (url === '/api/message-groups')  return { groups: GROUPS };
+      if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+      if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+      if (url.startsWith('/api/messages/thread/')) { threadCallCount++; return { messages: [] }; }
+      return {};
+    });
+
+    await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+    // First expand
+    await act(async () => { fireEvent.click(screen.getByTestId('btn-expand-thread')); });
+    await waitFor(() => expect(threadCallCount).toBe(1));
+
+    // Clicking again won't call again (cached)
+    await act(async () => { fireEvent.click(screen.getByTestId('btn-expand-thread')); });
+    // Still just 1 call because thread is cached  
+    expect(threadCallCount).toBe(1);
+  });
+
+  // ─── Notifications werden beim Öffnen einer Nachricht als gelesen markiert ──
+
+  describe('Notifications beim Öffnen einer Nachricht als gelesen markieren', () => {
+    beforeEach(() => { mockMarkNotificationAsRead.mockClear(); });
+
+    it('markiert die passende Notification als gelesen wenn eine Nachricht geöffnet wird', async () => {
+      // MSG_INBOX[0] hat id='1' – die notif-1 Notification gehört zu messageId=1
+      (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+        if (url === '/api/messages?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/messages/outbox?page=1&limit=30')
+          return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url === '/api/users/contacts')  return { users: USERS };
+        if (url === '/api/message-groups')  return { groups: GROUPS };
+        if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/1')      return { ...MSG_INBOX[0], content: 'Volltext' };
+        return {};
+      });
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-1')); });
+
+      await waitFor(() => {
+        expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('notif-1');
+      });
+    });
+
+    it('markiert keine Notification wenn keine passende messageId existiert', async () => {
+      // msg-2 hat id='2' – keine Notification mit messageId=2 vorhanden
+      (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+        if (url === '/api/messages?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/messages/outbox?page=1&limit=30')
+          return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url === '/api/users/contacts')  return { users: USERS };
+        if (url === '/api/message-groups')  return { groups: GROUPS };
+        if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/2')      return { ...MSG_INBOX[1], content: 'Volltext' };
+        return {};
+      });
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-2')); });
+
+      await waitFor(() => {
+        expect(mockMarkNotificationAsRead).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ─── Lese-Status Hervorhebung ─────────────────────────────────────────────
+
+  describe('Lese-Status Hervorhebung', () => {
+    const buildApiMock = (showOverride?: any, unreadEndpointFn?: (url: string, opts?: any) => any) =>
+      (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
+        if (url === '/api/messages?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/messages/outbox?page=1&limit=30')
+          return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url === '/api/messages/conversations?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/users/contacts')  return { users: USERS };
+        if (url === '/api/message-groups')  return { groups: GROUPS };
+        if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/1' && !opts?.method)
+          return showOverride ?? { ...MSG_INBOX[0], isRead: true, content: 'Volltext' };
+        if (unreadEndpointFn) return unreadEndpointFn(url, opts);
+        return {};
+      });
+
+    it('entfernt Ungelesen-Hervorhebung nachdem die API die Nachricht bestätigt hat', async () => {
+      buildApiMock();
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      // Vor dem Klick: msg-1 ist ungelesen → unreadCount = 1
+      expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '1');
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-1')); });
+
+      await waitFor(() => {
+        // Nach API-Antwort: msg-1 ist gelesen → unreadCount = 0
+        expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '0');
+      });
+    });
+
+    it('ändert unreadCount nicht beim Klick auf bereits gelesene Nachricht', async () => {
+      buildApiMock({ ...MSG_INBOX[1], isRead: true, content: 'Volltext' });
+      (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
+        if (url === '/api/messages?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/messages/outbox?page=1&limit=30')
+          return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url === '/api/messages/conversations?page=1&limit=30')
+          return { messages: MSG_INBOX, pagination: INBOX_PAGINATION };
+        if (url === '/api/users/contacts')  return { users: USERS };
+        if (url === '/api/message-groups')  return { groups: GROUPS };
+        if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/2' && !opts?.method)
+          return { ...MSG_INBOX[1], isRead: true, content: 'Volltext' };
+        return {};
+      });
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      // msg-2 ist bereits gelesen; unreadCount bleibt bei 1 (nur msg-1 ist ungelesen)
+      expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '1');
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-2')); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '1');
+      });
+    });
+
+    it('stellt Ungelesen-Hervorhebung nach "Als ungelesen markieren" sofort wieder her', async () => {
+      buildApiMock(
+        { ...MSG_INBOX[0], isRead: true, content: 'Volltext' },
+        (url: string, opts?: any) => {
+          if (url === '/api/messages/1/unread' && opts?.method === 'PATCH') return {};
+          return {};
+        },
+      );
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      // Nachricht öffnen → markiert als gelesen
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-1')); });
+      await waitFor(() => {
+        expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '0');
+      });
+
+      // Als ungelesen markieren
+      await act(async () => { fireEvent.click(screen.getByTestId('btn-mark-unread')); });
+
+      await waitFor(() => {
+        // unreadCount steigt wieder auf 1
+        expect(screen.getByTestId('MessageListPane')).toHaveAttribute('data-unread-count', '1');
+      });
+    });
+  });
+
+  // ─── hasUnreadReplies in Konversations-Thread-Roots ────────────────────────
+
+  describe('hasUnreadReplies in Thread-Root', () => {
+    const ROOT_WITH_UNREAD = {
+      id: '100', subject: 'Thread Root', sender: 'Admin', senderId: 'u99',
+      sentAt: new Date().toISOString(), isRead: false, content: 'Root Inhalt',
+      recipients: [], hasUnreadReplies: true,
+    };
+    const REPLY_MSG = {
+      id: '101', subject: 'Re: Thread Root', sender: 'Trainer', senderId: 'u50',
+      sentAt: new Date().toISOString(), isRead: false, content: 'Antwort',
+      recipients: [], parentId: '100', threadId: '100',
+    };
+
+    beforeEach(() => {
+      (apiJson as jest.Mock).mockImplementation(async (url: string, opts?: any) => {
+        if (url.startsWith('/api/messages/conversations')) return { messages: [ROOT_WITH_UNREAD], pagination: { page: 1, limit: 30, total: 1, pages: 1, hasMore: false } };
+        if (url.startsWith('/api/messages/outbox'))        return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url.startsWith('/api/messages?') || url === '/api/messages') return { messages: [REPLY_MSG, ...MSG_INBOX], pagination: { ...INBOX_PAGINATION, total: 3 } };
+        if (url === '/api/users/contacts')   return { users: USERS };
+        if (url === '/api/message-groups')   return { groups: GROUPS };
+        if (url === '/api/messaging/teams')  return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs')  return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/101' && !opts?.method) return { ...REPLY_MSG, isRead: true, content: 'Antwort volltext' };
+        if (url.startsWith('/api/messages/') && !opts?.method) {
+          const id = url.replace('/api/messages/', '');
+          return MSG_INBOX.find((m: any) => m.id === id) ?? {};
+        }
+        return {};
+      });
+    });
+
+    it('zeigt hasUnreadReplies=true auf Root-Nachricht in Thread-Ansicht', async () => {
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      // Switch to thread view
+      await act(async () => { fireEvent.click(screen.getByTestId('btn-switch-to-thread')); });
+
+      await waitFor(() => {
+        const btn = screen.getByTestId('msg-100');
+        expect(btn).toHaveAttribute('data-has-unread-replies', 'true');
+      });
+    });
+
+    it('löscht hasUnreadReplies auf Root wenn eine Antwort gelesen wird', async () => {
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      // Click the reply in chrono/inbox view — triggers doMessageClick with full.parentId='100', full.threadId='100'
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-101')); });
+
+      // Wait for doMessageClick to finish (API call → state update)
+      await waitFor(() => expect(screen.getByTestId('detail-subject')).toBeInTheDocument());
+
+      // On desktop both panes render simultaneously — btn-switch-to-thread lives in the list pane
+      await act(async () => { fireEvent.click(screen.getByTestId('btn-switch-to-thread')); });
+
+      await waitFor(() => {
+        const btn = screen.getByTestId('msg-100');
+        expect(btn).toHaveAttribute('data-has-unread-replies', 'false');
+      });
+    });
+  });
+
+  // ─── isOutbox-Prop für eigene Nachrichten ─────────────────────────────────
+
+  describe('isOutbox-Prop bei eigenen gesendeten Nachrichten', () => {
+    // useAuth Mock liefert { user: { id: 1 } }
+
+    it('isOutbox ist false für empfangene Nachrichten (senderId ungleich authUser.id)', async () => {
+      // MSG_INBOX[0] hat senderId='u99' → nicht gleich authUser.id (1)
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-1')); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('MessageDetailPane')).toHaveAttribute('data-isoutbox', 'false');
+      });
+    });
+
+    it('isOutbox ist true wenn senderId mit authUser.id übereinstimmt', async () => {
+      const MSG_OWN: any = {
+        id: '7', subject: 'Eigene gesendete Nachricht',
+        sender: 'Ich', senderId: 1,   // matcht authUser.id=1
+        sentAt: new Date().toISOString(), isRead: true,
+        content: 'Inhalt', recipients: [],
+      };
+      (apiJson as jest.Mock).mockImplementation(async (url: string) => {
+        if (url === '/api/messages?page=1&limit=30')
+          return { messages: [MSG_OWN, ...MSG_INBOX], pagination: INBOX_PAGINATION };
+        if (url === '/api/messages/outbox?page=1&limit=30')
+          return { messages: MSG_OUTBOX, pagination: OUTBOX_PAGINATION };
+        if (url === '/api/users/contacts')  return { users: USERS };
+        if (url === '/api/message-groups')  return { groups: GROUPS };
+        if (url === '/api/messaging/teams') return { teams: TEAMS_DATA };
+        if (url === '/api/messaging/clubs') return { clubs: CLUBS_DATA };
+        if (url === '/api/messages/7')      return MSG_OWN;
+        return {};
+      });
+
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-7')); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('MessageDetailPane')).toHaveAttribute('data-isoutbox', 'true');
+      });
+    });
+
+    it('isOutbox ist auch true im Postausgang-Tab (folder=1, viewMode=chrono)', async () => {
+      // Klassischer Pfad: Gesendet-Tab → isOutbox via folder===1 && viewMode==='chrono'
+      await act(async () => { render(<MessagesModal {...defaultProps} />); });
+
+      const outboxTab = screen.getByRole('tab', { name: /Gesendet/i });
+      await act(async () => { fireEvent.click(outboxTab); });
+
+      await act(async () => { fireEvent.click(screen.getByTestId('msg-3')); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('MessageDetailPane')).toHaveAttribute('data-isoutbox', 'true');
+      });
     });
   });
 });

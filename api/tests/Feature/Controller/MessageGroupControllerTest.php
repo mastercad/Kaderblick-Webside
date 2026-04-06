@@ -365,7 +365,8 @@ class MessageGroupControllerTest extends WebTestCase
 
         // Remove group membership rows first (junction table, name may vary)
         $conn->executeStatement(
-            'DELETE FROM message_group_members WHERE message_group_id IN (SELECT id FROM message_groups WHERE name LIKE :prefix OR owner_id IN (SELECT id FROM users WHERE email LIKE :prefix))',
+            'DELETE FROM message_group_members WHERE message_group_id IN (SELECT id 
+                FROM message_groups WHERE name LIKE :prefix OR owner_id IN (SELECT id FROM users WHERE email LIKE :prefix))',
             ['prefix' => self::PREFIX . '%']
         );
         $conn->executeStatement(

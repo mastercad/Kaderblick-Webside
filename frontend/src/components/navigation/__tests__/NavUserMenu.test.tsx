@@ -10,6 +10,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import NavUserMenu from '../NavUserMenu';
 import { useAuth } from '../../../context/AuthContext';
 import { useNotifications } from '../../../context/NotificationContext';
+import * as unreadHook from '../../../hooks/useUnreadMessageCount';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -19,6 +20,11 @@ jest.mock('../../../context/AuthContext', () => ({
 
 jest.mock('../../../context/NotificationContext', () => ({
   useNotifications: jest.fn(),
+}));
+
+jest.mock('../../../hooks/useUnreadMessageCount', () => ({
+  useUnreadMessageCount: jest.fn().mockReturnValue(0),
+  requestRefreshUnreadMessageCount: jest.fn(),
 }));
 
 const mockUseAuth          = useAuth          as jest.MockedFunction<typeof useAuth>;
@@ -180,25 +186,13 @@ describe('menu item actions', () => {
 
 describe('unread message badge', () => {
   it('shows badge count when there are unread messages', () => {
-    mockUseNotifications.mockReturnValue({
-      ...baseContext,
-      notifications: [
-        { id: '1', type: 'message', title: 'Hi', message: '', timestamp: new Date(), read: false },
-        { id: '2', type: 'message', title: 'Hi', message: '', timestamp: new Date(), read: false },
-        { id: '3', type: 'message', title: 'Hi', message: '', timestamp: new Date(), read: true },
-      ],
-    });
+    jest.spyOn(unreadHook, 'useUnreadMessageCount').mockReturnValue(2);
     renderMenu();
     expect(screen.getByText('2')).toBeInTheDocument();
   });
 
   it('does not show badge when all messages are read', () => {
-    mockUseNotifications.mockReturnValue({
-      ...baseContext,
-      notifications: [
-        { id: '1', type: 'message', title: 'Hi', message: '', timestamp: new Date(), read: true },
-      ],
-    });
+    jest.spyOn(unreadHook, 'useUnreadMessageCount').mockReturnValue(0);
     renderMenu();
     expect(screen.queryByText('1')).not.toBeInTheDocument();
   });

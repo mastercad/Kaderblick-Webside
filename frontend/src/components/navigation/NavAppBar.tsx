@@ -15,6 +15,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useAuth } from '../../context/AuthContext';
 import { useHomeScroll } from '../../context/HomeScrollContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount';
 import { isPublicSeoPath } from '../../seo/siteConfig';
 import UserAvatar from '../UserAvatar';
 
@@ -28,6 +29,7 @@ export default function NavAppBar({ onOpenAuth, onOpenNotifications, onOpenUserM
   const { user, isAuthenticated } = useAuth();
   const { isOnHeroSection } = useHomeScroll();
   const { unreadCount } = useNotifications();
+  const unreadMessageCount = useUnreadMessageCount();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
@@ -94,15 +96,23 @@ export default function NavAppBar({ onOpenAuth, onOpenNotifications, onOpenUserM
               onClick={onOpenUserMenu}
               sx={{ color: isHome ? '#fff' : theme.palette.primary.contrastText, p: 0.5 }}
             >
-              <UserAvatar
-                icon={(user?.useGoogleAvatar && user?.googleAvatarUrl) ? user.googleAvatarUrl : (user?.avatarFile || undefined)}
-                name=""
-                avatarSize={32}
-                fontSize={16}
-                titleObj={user?.title?.hasTitle ? user.title : undefined}
-                svgFrameOffsetY={0}
-                level={user?.level?.level}
-              />
+              <Badge
+                variant="dot"
+                color="error"
+                invisible={unreadMessageCount === 0}
+                overlap="circular"
+                sx={{ '& .MuiBadge-dot': { width: 8, height: 8, border: '1.5px solid', borderColor: isHome ? 'transparent' : theme.palette.primary.main } }}
+              >
+                <UserAvatar
+                  icon={(user?.useGoogleAvatar && user?.googleAvatarUrl) ? user.googleAvatarUrl : (user?.avatarFile || undefined)}
+                  name=""
+                  avatarSize={32}
+                  fontSize={16}
+                  titleObj={user?.title?.hasTitle ? user.title : undefined}
+                  svgFrameOffsetY={0}
+                  level={user?.level?.level}
+                />
+              </Badge>
             </IconButton>
           </Box>
         ) : (

@@ -11,7 +11,7 @@ import QrCode2Icon from '@mui/icons-material/QrCode2';
 import MessageIcon from '@mui/icons-material/Message';
 import LinkIcon from '@mui/icons-material/Link';
 import { useAuth } from '../../context/AuthContext';
-import { useNotifications } from '../../context/NotificationContext';
+import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount';
 
 interface NavUserMenuProps {
   anchorEl: HTMLElement | null;
@@ -27,8 +27,7 @@ export default function NavUserMenu({
   anchorEl, onClose, onOpenProfile, onOpenQRShare, openMessages, userRelations, onRequestLink,
 }: NavUserMenuProps) {
   const { user, logout } = useAuth();
-  const { notifications } = useNotifications();
-  const unreadMessageCount = notifications.filter(n => n.type === 'message' && !n.read).length;
+  const unreadMessageCount = useUnreadMessageCount();
 
   const handleLogout = async () => {
     await logout();

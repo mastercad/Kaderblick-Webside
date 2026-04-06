@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -24,10 +26,11 @@ import { alpha } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import BaseModal from './BaseModal';
 import { apiJson } from '../utils/api';
+import { requestRefreshUnreadMessageCount } from '../hooks/useUnreadMessageCount';
 import { MessageListPane }    from './messages/MessageListPane';
 import { MessageDetailPane }  from './messages/MessageDetailPane';
 import { MessageComposePane } from './messages/MessageComposePane';
-import { ComposeForm, Folder, Message, MessageGroup, MessagesModalProps, OrgRef, User, View } from './messages/types';
+import { ComposeForm, Folder, Message, MessageGroup, MessagesModalProps, OrgRef, User, View, ViewMode } from './messages/types';
 
 export type { MessagesModalProps };
 
@@ -46,6 +49,8 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
   const theme    = useTheme();
   const isDark   = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { user: authUser } = useAuth();
+  const { notifications, markAsRead: markNotificationAsRead } = useNotifications();
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [inbox,    setInbox]    = useState<Message[]>([]);
@@ -56,8 +61,29 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
   const [clubs,    setClubs]    = useState<OrgRef[]>([]);
   const [selected, setSelected] = useState<Message | null>(null);
 
+  // Pagination
+  const [inboxPage,         setInboxPage]         = useState(1);
+  const [inboxHasMore,      setInboxHasMore]       = useState(false);
+  const [inboxLoadingMore,  setInboxLoadingMore]   = useState(false);
+  const [outboxPage,        setOutboxPage]         = useState(1);
+  const [outboxHasMore,     setOutboxHasMore]      = useState(false);
+  const [outboxLoadingMore, setOutboxLoadingMore]  = useState(false);
+
+  // Conversation state (thread view — unified inbox+outbox roots)
+  const [conversations,   setConversations]   = useState<Message[]>([]);
+  const [convPage,        setConvPage]        = useState(1);
+  const [convHasMore,     setConvHasMore]     = useState(false);
+  const [convLoadingMore, setConvLoadingMore] = useState(false);
+
+  // Thread lazy-load cache: rootId → messages[]
+  const [threadMessages, setThreadMessages] = useState<Map<string, Message[]>>(new Map());
+  const [threadLoading,  setThreadLoading]  = useState<Set<string>>(new Set());
+
   // ── UI ────────────────────────────────────────────────────────────────────
   const [folder,        setFolder]        = useState<Folder>(0);
+  const [viewMode,      setViewMode]      = useState<ViewMode>(
+    () => (localStorage.getItem('messages.viewMode') as ViewMode) ?? 'chrono',
+  );
   const [view,          setView]          = useState<View>('list');
   const [search,        setSearch]        = useState('');
   const [loading,       setLoading]       = useState(false);
@@ -136,20 +162,30 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
     setLoading(true);
     setError(null);
     try {
-      const [inboxRes, outboxRes, usersRes, groupsRes, teamsRes, clubsRes] = await Promise.all([
-        apiJson('/api/messages'),
-        apiJson('/api/messages/outbox'),
+      const [inboxRes, outboxRes, convRes, usersRes, groupsRes, teamsRes, clubsRes] = await Promise.all([
+        apiJson('/api/messages?page=1&limit=30'),
+        apiJson('/api/messages/outbox?page=1&limit=30'),
+        apiJson('/api/messages/conversations?page=1&limit=30'),
         apiJson('/api/users/contacts'),
         apiJson('/api/message-groups'),
         apiJson('/api/messaging/teams'),
         apiJson('/api/messaging/clubs'),
       ]);
       setInbox(inboxRes.messages   || []);
+      setInboxPage(1);
+      setInboxHasMore(inboxRes.pagination?.hasMore ?? false);
       setOutbox(outboxRes.messages || []);
+      setOutboxPage(1);
+      setOutboxHasMore(outboxRes.pagination?.hasMore ?? false);
+      setConversations(convRes.messages || []);
+      setConvPage(1);
+      setConvHasMore(convRes.pagination?.hasMore ?? false);
       setUsers(usersRes.users      || []);
       setGroups(groupsRes.groups   || []);
       setTeams(teamsRes.teams      || []);
       setClubs(clubsRes.clubs      || []);
+      // Invalidate any cached thread data on full reload
+      setThreadMessages(new Map());
       lastFetchRef.current = Date.now();
     } catch {
       setError('Fehler beim Laden der Nachrichten');
@@ -158,6 +194,72 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
     }
   };
 
+  const loadMoreInbox = async () => {
+    if (inboxLoadingMore || !inboxHasMore) return;
+    setInboxLoadingMore(true);
+    try {
+      const nextPage = inboxPage + 1;
+      const res = await apiJson(`/api/messages?page=${nextPage}&limit=30`);
+      setInbox(prev => [...prev, ...(res.messages || [])]);
+      setInboxPage(nextPage);
+      setInboxHasMore(res.pagination?.hasMore ?? false);
+    } catch {
+      setError('Fehler beim Laden weiterer Nachrichten');
+    } finally {
+      setInboxLoadingMore(false);
+    }
+  };
+
+  const loadMoreOutbox = async () => {
+    if (outboxLoadingMore || !outboxHasMore) return;
+    setOutboxLoadingMore(true);
+    try {
+      const nextPage = outboxPage + 1;
+      const res = await apiJson(`/api/messages/outbox?page=${nextPage}&limit=30`);
+      setOutbox(prev => [...prev, ...(res.messages || [])]);
+      setOutboxPage(nextPage);
+      setOutboxHasMore(res.pagination?.hasMore ?? false);
+    } catch {
+      setError('Fehler beim Laden weiterer Nachrichten');
+    } finally {
+      setOutboxLoadingMore(false);
+    }
+  };
+
+  const loadMoreConversations = async () => {
+    if (convLoadingMore || !convHasMore) return;
+    setConvLoadingMore(true);
+    try {
+      const nextPage = convPage + 1;
+      const res = await apiJson(`/api/messages/conversations?page=${nextPage}&limit=30`);
+      setConversations(prev => [...prev, ...(res.messages || [])]);
+      setConvPage(nextPage);
+      setConvHasMore(res.pagination?.hasMore ?? false);
+    } catch {
+      setError('Fehler beim Laden weiterer Konversationen');
+    } finally {
+      setConvLoadingMore(false);
+    }
+  };
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('messages.viewMode', mode);
+  }, []);
+
+  const loadThread = useCallback(async (rootId: string) => {
+    if (threadMessages.has(rootId) || threadLoading.has(rootId)) return;
+    setThreadLoading(prev => { const s = new Set(prev); s.add(rootId); return s; });
+    try {
+      const data = await apiJson(`/api/messages/thread/${rootId}`);
+      setThreadMessages(prev => new Map(prev).set(rootId, data.messages || []));
+    } catch {
+      setError('Fehler beim Laden des Threads');
+    } finally {
+      setThreadLoading(prev => { const s = new Set(prev); s.delete(rootId); return s; });
+    }
+  }, [threadMessages, threadLoading]);
+
   const doMessageClick = async (msg: Message) => {
     setDetailLoading(true);
     setSelected(msg);
@@ -165,7 +267,35 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
     try {
       const full = await apiJson(`/api/messages/${msg.id}`);
       setSelected(full);
-      setInbox(prev => prev.map(m => m.id === msg.id ? { ...m, isRead: true } : m));
+      // The show endpoint always marks the message as read – reflect that in all list states.
+      const msgId = String(msg.id);
+      const markRead = (m: Message) => String(m.id) === msgId ? { ...m, isRead: true } : m;
+      setInbox(prev => prev.map(markRead));
+      // For the conversations list: mark the message read; also clear hasUnreadReplies on the
+      // root of this thread if no other unread replies remain after this read.
+      // We do a conservative clear only when the message IS itself a reply (parentId is set)
+      // because the backend will no longer count it as unread.
+      setConversations(prev => prev.map(m => {
+        if (String(m.id) === msgId) return { ...m, isRead: true };
+        // If this read message is a reply in m's thread, clear the unread-reply indicator
+        // (the thread endpoint confirms the current state; we clear optimistically).
+        if (full.parentId != null && String(full.threadId) === String(m.id)) {
+          return { ...m, hasUnreadReplies: false };
+        }
+        return m;
+      }));
+      setThreadMessages(prev => {
+        const next = new Map(prev);
+        for (const [k, msgs] of next) {
+          if (msgs.some(m => String(m.id) === msgId)) next.set(k, msgs.map(markRead));
+        }
+        return next;
+      });
+      // Clear any matching message-type notifications so the bell/profile badge updates.
+      notifications
+        .filter(n => n.type === 'message' && !n.read && String(n.data?.messageId) === String(msg.id))
+        .forEach(n => markNotificationAsRead(n.id));
+      requestRefreshUnreadMessageCount();
     } catch {
       setError('Fehler beim Laden der Nachricht');
     } finally {
@@ -226,8 +356,18 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
     if (!selected) return;
     try {
       await apiJson(`/api/messages/${selected.id}/unread`, { method: 'PATCH' });
-      setInbox(prev => prev.map(m => m.id === selected.id ? { ...m, isRead: false } : m));
+      const markUnread = (m: Message) => String(m.id) === String(selected.id) ? { ...m, isRead: false } : m;
+      setInbox(prev => prev.map(markUnread));
+      setConversations(prev => prev.map(markUnread));
+      setThreadMessages(prev => {
+        const next = new Map(prev);
+        for (const [k, msgs] of next) {
+          if (msgs.some(m => String(m.id) === String(selected.id))) next.set(k, msgs.map(markUnread));
+        }
+        return next;
+      });
       setSelected(prev => prev ? { ...prev, isRead: false } : null);
+      requestRefreshUnreadMessageCount();
     } catch {
       setError('Fehler beim Markieren als ungelesen');
     }
@@ -237,6 +377,13 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
     try {
       await apiJson('/api/messages/read-all', { method: 'PATCH' });
       setInbox(prev => prev.map(m => ({ ...m, isRead: true })));
+      setConversations(prev => prev.map(m => ({ ...m, isRead: true })));
+      setThreadMessages(prev => {
+        const next = new Map<string, Message[]>();
+        for (const [k, msgs] of prev) next.set(k, msgs.map(m => ({ ...m, isRead: true })));
+        return next;
+      });
+      requestRefreshUnreadMessageCount();
     } catch {
       setError('Fehler beim Markieren aller Nachrichten als gelesen');
     }
@@ -314,7 +461,10 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
   });
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const activeMessages = folder === 0 ? inbox : outbox;
+  const activeMessages = viewMode === 'thread' ? conversations : (folder === 0 ? inbox : outbox);
+  const hasMore        = viewMode === 'thread' ? convHasMore        : (folder === 0 ? inboxHasMore    : outboxHasMore);
+  const loadingMore    = viewMode === 'thread' ? convLoadingMore    : (folder === 0 ? inboxLoadingMore : outboxLoadingMore);
+  const handleLoadMore = viewMode === 'thread' ? loadMoreConversations : (folder === 0 ? loadMoreInbox : loadMoreOutbox);
   const filtered = useMemo(() => {
     if (!search.trim()) return activeMessages;
     const q = search.toLowerCase();
@@ -350,13 +500,22 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
       unreadCount={unreadCount}
       onMessageClick={handleMessageClick}
       onMarkAllRead={handleMarkAllRead}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
+      onLoadMore={handleLoadMore}
+      threadMessages={threadMessages}
+      threadLoading={threadLoading}
+      onExpandThread={loadThread}
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
+      currentUserId={authUser?.id != null ? String(authUser.id) : undefined}
     />
   );
 
   const detailPane = (
     <MessageDetailPane
       message={selected} loading={detailLoading}
-      isMobile={isMobile} isOutbox={folder === 1}
+      isMobile={isMobile} isOutbox={(folder === 1 && viewMode === 'chrono') || String(selected?.senderId) === String(authUser?.id)}
       canReply={canReply}
       onBack={() => setView('list')}
       onReply={handleReply}
@@ -424,8 +583,8 @@ export const MessagesModal: React.FC<MessagesModalProps> = ({ open, onClose, ini
           </Box>
         </Box>
 
-        {/* Folder tabs (hidden while composing on mobile) */}
-        {(view !== 'compose' || !isMobile) && (
+        {/* Folder tabs (hidden while composing on mobile, and hidden in thread view) */}
+        {(view !== 'compose' || !isMobile) && viewMode === 'chrono' && (
           <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
             <Tabs
               value={folder}

@@ -2,7 +2,7 @@ import React from 'react';
 import { IconButton, Badge, Typography, Box, ButtonBase } from '@mui/material';
 import MailIcon from '@mui/icons-material/Mail';
 import { useMessagesModal } from '../hooks/useMessagesModal';
-import { useNotifications } from '../context/NotificationContext';
+import { useUnreadMessageCount } from '../hooks/useUnreadMessageCount';
 
 interface NavigationMessagesButtonProps {
   showText?: boolean;
@@ -16,12 +16,7 @@ export const NavigationMessagesButton: React.FC<NavigationMessagesButtonProps> =
   variant = 'icon-only'
 }) => {
   const { openMessages, MessagesModal } = useMessagesModal();
-  const { notifications } = useNotifications();
-  
-  // Zähle ungelesene Nachrichten
-  const unreadMessageCount = notifications.filter(
-    n => n.type === 'message' && !n.read
-  ).length;
+  const unreadMessageCount = useUnreadMessageCount();
 
   // Icon-only variant
   if (variant === 'icon-only') {

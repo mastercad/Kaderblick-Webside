@@ -123,7 +123,8 @@ export const MessageDetailPane: React.FC<Props> = ({
         </Box>
 
       ) : (
-        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <>
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
 
           {/* Header */}
           <Box sx={{
@@ -171,7 +172,7 @@ export const MessageDetailPane: React.FC<Props> = ({
           </Box>
 
           {/* Body */}
-          <Box sx={{ px: 2.5, py: 2.5, flex: 1 }}>
+          <Box sx={{ px: 2.5, py: 2.5 }}>
             {(() => {
               const { body, quote } = parseContent(message.content || '');
               return (
@@ -206,7 +207,9 @@ export const MessageDetailPane: React.FC<Props> = ({
             })()}
           </Box>
 
-          {/* Actions */}
+        </Box>
+
+          {/* Actions – sticky footer */}
           <Box sx={{
             px: 2.5, py: 1.5, borderTop: '1px solid', borderColor: 'divider',
             display: 'flex', gap: 1, flexWrap: 'wrap', flexShrink: 0,
@@ -266,7 +269,7 @@ export const MessageDetailPane: React.FC<Props> = ({
               </Button>
             </Box>
           </Box>
-        </Box>
+        </>
       )}
 
       {/* Confirm delete dialog */}
