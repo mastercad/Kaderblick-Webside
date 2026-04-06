@@ -147,6 +147,40 @@ class NotificationRepository extends ServiceEntityRepository
     }
 
     /**
+     * Find all unread message-type notifications for a user that belong to a specific message.
+     * The messageId is stored in the JSON data column: {"messageId": <id>, ...}.
+     *
+     * @return Notification[]
+     */
+    public function findUnreadMessageNotificationsByMessageId(User $user, int $messageId): array
+    {
+        // MySQL / MariaDB: JSON_UNQUOTE(JSON_EXTRACT(data, '$.messageId')) performs an exact lookup.
+        // The cast to SIGNED avoids type mismatches between stored strings and integer keys.
+        $conn = $this->getEntityManager()->getConnection();
+        $sql = "SELECT id FROM notifications
+                  WHERE user_id   = :userId
+                    AND type      = 'message'
+                    AND is_read   = 0
+                    AND CAST(JSON_UNQUOTE(JSON_EXTRACT(data, '$.messageId')) AS SIGNED) = :messageId";
+
+        $ids = array_column(
+            $conn->executeQuery($sql, ['userId' => $user->getId(), 'messageId' => $messageId])
+                 ->fetchAllAssociative(),
+            'id'
+        );
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('n')
+            ->where('n.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Get push delivery statistics for a user over the last N days.
      *
      * @return array{total: int, sent: int, unsent: int, failRate: float}

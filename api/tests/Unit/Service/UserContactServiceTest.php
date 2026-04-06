@@ -301,7 +301,7 @@ class UserContactServiceTest extends TestCase
         $this->assertSame([], $shared);
     }
 
-    public function testCollectSharedContextsReturnsMultipleContexts(): void
+    public function testCollectSharedContextsPrefersTeamOverClubWhenBothExist(): void
     {
         $team = $this->makeTeam(1, 'U15');
         $club = $this->makeClub(2, 'TSV');
@@ -325,8 +325,34 @@ class UserContactServiceTest extends TestCase
             new DateTimeImmutable()
         );
 
-        $this->assertCount(2, $shared);
+        // Team context takes precedence; club context is suppressed to avoid redundancy.
+        $this->assertCount(1, $shared);
         $this->assertContains('Spieler · U15', $shared);
+        $this->assertNotContains('Spieler · TSV', $shared);
+    }
+
+    public function testCollectSharedContextsReturnsClubContextWhenNoTeamMatch(): void
+    {
+        $club = $this->makeClub(2, 'TSV');
+
+        $player = $this->createMock(Player::class);
+        $player->method('getPlayerTeamAssignments')->willReturn(new ArrayCollection([]));
+        $player->method('getPlayerClubAssignments')->willReturn(new ArrayCollection([
+            $this->makePCA($club, null, null),
+        ]));
+
+        $relation = $this->createMock(UserRelation::class);
+        $relation->method('getPlayer')->willReturn($player);
+        $relation->method('getCoach')->willReturn(null);
+
+        $shared = $this->service->collectSharedContexts(
+            $relation,
+            [],
+            [2 => 'TSV'],
+            new DateTimeImmutable()
+        );
+
+        $this->assertCount(1, $shared);
         $this->assertContains('Spieler · TSV', $shared);
     }
 

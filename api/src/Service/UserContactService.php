@@ -73,27 +73,42 @@ class UserContactService
             }
 
             if (null !== $relation->getPlayer()) {
+                $playerTeamCtx = [];
                 foreach ($relation->getPlayer()->getPlayerTeamAssignments() as $pta) {
                     if ($this->isActive($pta->getStartDate(), $pta->getEndDate(), $now)) {
-                        $byUser[$uid]['contexts'][] = 'Spieler · ' . $pta->getTeam()->getName();
+                        $playerTeamCtx[] = 'Spieler · ' . $pta->getTeam()->getName();
                     }
                 }
-                foreach ($relation->getPlayer()->getPlayerClubAssignments() as $pca) {
-                    if ($pca->getClub() && $this->isActive($pca->getStartDate(), $pca->getEndDate(), $now)) {
-                        $byUser[$uid]['contexts'][] = 'Spieler · ' . $pca->getClub()->getName();
+                if (!empty($playerTeamCtx)) {
+                    // Team assignments exist – skip the coarser club assignments for this role
+                    foreach ($playerTeamCtx as $ctx) {
+                        $byUser[$uid]['contexts'][] = $ctx;
+                    }
+                } else {
+                    foreach ($relation->getPlayer()->getPlayerClubAssignments() as $pca) {
+                        if ($pca->getClub() && $this->isActive($pca->getStartDate(), $pca->getEndDate(), $now)) {
+                            $byUser[$uid]['contexts'][] = 'Spieler · ' . $pca->getClub()->getName();
+                        }
                     }
                 }
             }
 
             if (null !== $relation->getCoach()) {
+                $coachTeamCtx = [];
                 foreach ($relation->getCoach()->getCoachTeamAssignments() as $cta) {
                     if ($this->isActive($cta->getStartDate(), $cta->getEndDate(), $now)) {
-                        $byUser[$uid]['contexts'][] = 'Trainer · ' . $cta->getTeam()->getName();
+                        $coachTeamCtx[] = 'Trainer · ' . $cta->getTeam()->getName();
                     }
                 }
-                foreach ($relation->getCoach()->getCoachClubAssignments() as $cca) {
-                    if ($cca->getClub() && $this->isActive($cca->getStartDate(), $cca->getEndDate(), $now)) {
-                        $byUser[$uid]['contexts'][] = 'Trainer · ' . $cca->getClub()->getName();
+                if (!empty($coachTeamCtx)) {
+                    foreach ($coachTeamCtx as $ctx) {
+                        $byUser[$uid]['contexts'][] = $ctx;
+                    }
+                } else {
+                    foreach ($relation->getCoach()->getCoachClubAssignments() as $cca) {
+                        if ($cca->getClub() && $this->isActive($cca->getStartDate(), $cca->getEndDate(), $now)) {
+                            $byUser[$uid]['contexts'][] = 'Trainer · ' . $cca->getClub()->getName();
+                        }
                     }
                 }
             }
@@ -268,41 +283,55 @@ class UserContactService
         $shared = [];
 
         if (null !== $relation->getPlayer()) {
+            $playerTeamCtx = [];
             foreach ($relation->getPlayer()->getPlayerTeamAssignments() as $pta) {
                 if (
                     isset($myTeamIds[$pta->getTeam()->getId()])
                     && $this->isActive($pta->getStartDate(), $pta->getEndDate(), $now)
                 ) {
-                    $shared[] = 'Spieler · ' . $pta->getTeam()->getName();
+                    $playerTeamCtx[] = 'Spieler · ' . $pta->getTeam()->getName();
                 }
             }
-            foreach ($relation->getPlayer()->getPlayerClubAssignments() as $pca) {
-                if (
-                    $pca->getClub()
-                    && isset($myClubIds[$pca->getClub()->getId()])
-                    && $this->isActive($pca->getStartDate(), $pca->getEndDate(), $now)
-                ) {
-                    $shared[] = 'Spieler · ' . $pca->getClub()->getName();
+            if (!empty($playerTeamCtx)) {
+                foreach ($playerTeamCtx as $ctx) {
+                    $shared[] = $ctx;
+                }
+            } else {
+                foreach ($relation->getPlayer()->getPlayerClubAssignments() as $pca) {
+                    if (
+                        $pca->getClub()
+                        && isset($myClubIds[$pca->getClub()->getId()])
+                        && $this->isActive($pca->getStartDate(), $pca->getEndDate(), $now)
+                    ) {
+                        $shared[] = 'Spieler · ' . $pca->getClub()->getName();
+                    }
                 }
             }
         }
 
         if (null !== $relation->getCoach()) {
+            $coachTeamCtx = [];
             foreach ($relation->getCoach()->getCoachTeamAssignments() as $cta) {
                 if (
                     isset($myTeamIds[$cta->getTeam()->getId()])
                     && $this->isActive($cta->getStartDate(), $cta->getEndDate(), $now)
                 ) {
-                    $shared[] = 'Trainer · ' . $cta->getTeam()->getName();
+                    $coachTeamCtx[] = 'Trainer · ' . $cta->getTeam()->getName();
                 }
             }
-            foreach ($relation->getCoach()->getCoachClubAssignments() as $cca) {
-                if (
-                    $cca->getClub()
-                    && isset($myClubIds[$cca->getClub()->getId()])
-                    && $this->isActive($cca->getStartDate(), $cca->getEndDate(), $now)
-                ) {
-                    $shared[] = 'Trainer · ' . $cca->getClub()->getName();
+            if (!empty($coachTeamCtx)) {
+                foreach ($coachTeamCtx as $ctx) {
+                    $shared[] = $ctx;
+                }
+            } else {
+                foreach ($relation->getCoach()->getCoachClubAssignments() as $cca) {
+                    if (
+                        $cca->getClub()
+                        && isset($myClubIds[$cca->getClub()->getId()])
+                        && $this->isActive($cca->getStartDate(), $cca->getEndDate(), $now)
+                    ) {
+                        $shared[] = 'Trainer · ' . $cca->getClub()->getName();
+                    }
                 }
             }
         }
