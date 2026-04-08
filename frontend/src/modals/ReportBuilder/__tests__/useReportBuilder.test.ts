@@ -177,6 +177,87 @@ describe('useReportBuilder – report-Prop', () => {
 // =============================================================================
 
 describe('useReportBuilder – loadPreview', () => {
+  it('handleConfigChange triggert loadPreview (exakter user-flow: diagramType ändern)', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, SAMPLE_REPORT, jest.fn(), jest.fn()),
+      ));
+    });
+    // Clear mock AFTER initial preview load
+    mockApiJson.mockClear();
+
+    await act(async () => {
+      result.current.handleConfigChange('diagramType', 'line');
+    });
+
+    const previewCalls = mockApiJson.mock.calls.filter(
+      ([url]: [string]) => url === '/api/report/preview',
+    );
+    expect(previewCalls).toHaveLength(1);
+    expect(previewCalls[0][1]?.body?.config?.diagramType).toBe('line');
+  });
+
+  it('handleFilterChange triggert loadPreview', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, SAMPLE_REPORT, jest.fn(), jest.fn()),
+      ));
+    });
+    mockApiJson.mockClear();
+
+    await act(async () => {
+      result.current.handleFilterChange('dateFrom', '2025-01-01');
+    });
+
+    const previewCalls = mockApiJson.mock.calls.filter(
+      ([url]: [string]) => url === '/api/report/preview',
+    );
+    expect(previewCalls).toHaveLength(1);
+    expect(previewCalls[0][1]?.body?.config?.filters?.dateFrom).toBe('2025-01-01');
+  });
+
+  it('ruft /api/report/preview erneut auf wenn setCurrentReport mit neuer Config aufgerufen wird (GuidedWizard-Edit-Cycle)', async () => {
+    // Simulates the goToConfirm → setCurrentReport → loadPreview chain
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, SAMPLE_REPORT, jest.fn(), jest.fn()),
+      ));
+    });
+    const initialPreviewCalls = mockApiJson.mock.calls.filter(
+      ([url]: [string]) => url === '/api/report/preview',
+    ).length;
+    expect(initialPreviewCalls).toBeGreaterThan(0); // initial preview fired
+
+    // Simulate goToConfirm: call setCurrentReport with a new config (new reference)
+    const newConfig = {
+      ...SAMPLE_REPORT.config,
+      filters: { team: '1', dateFrom: '2024-10-01', dateTo: '2024-12-31' }, // new filters
+    };
+    await act(async () => {
+      result.current.setCurrentReport((prev: any) => ({
+        ...prev,
+        name: 'Updated Name',
+        config: newConfig,
+      }));
+    });
+
+    const afterPreviewCalls = mockApiJson.mock.calls.filter(
+      ([url]: [string]) => url === '/api/report/preview',
+    ).length;
+    // Preview must have been called AGAIN after config change
+    expect(afterPreviewCalls).toBeGreaterThan(initialPreviewCalls);
+    // The new preview call must use the new config
+    const lastPreviewCall = mockApiJson.mock.calls
+      .filter(([url]: [string]) => url === '/api/report/preview')
+      .at(-1);
+    expect(lastPreviewCall?.[1]?.body?.config).toEqual(expect.objectContaining({
+      filters: expect.objectContaining({ dateFrom: '2024-10-01' }),
+    }));
+  });
+
   it('ruft /api/report/preview auf wenn xField+yField gesetzt (via report-Prop)', async () => {
     await act(async () => {
       renderHook(() => useReportBuilder(true, SAMPLE_REPORT, jest.fn(), jest.fn()));

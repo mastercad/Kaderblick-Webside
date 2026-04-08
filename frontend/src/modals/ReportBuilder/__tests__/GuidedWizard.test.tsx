@@ -791,6 +791,20 @@ describe('GuidedWizard — Schritt 4: Bestätigung', () => {
     expect(onOpenBuilder).toHaveBeenCalledTimes(1);
   });
 
+  it('[REGRESSION] Anpassen-Button übergibt keinen Event an onOpenBuilder', async () => {
+    // Vor dem Fix: onClick={props.onOpenBuilder} → React übergibt MouseEvent als erstes Argument
+    // → openBuilder(mouseEvent) → presetConfig=mouseEvent (truthy) → event wird in config gespreizt
+    // → JSON.stringify wirft wegen zirkulärer DOM-Referenzen → loadPreview() gibt früh zurück
+    // → kein Backend-Request, keine Preview-Aktualisierung im Report Builder.
+    // Fix: onClick={() => props.onOpenBuilder()} → kein Argument übergeben.
+    const { onOpenBuilder } = await goToStep4();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Anpassen/i }));
+    });
+    // Muss ohne jegliches Argument aufgerufen worden sein (kein MouseEvent)
+    expect(onOpenBuilder).toHaveBeenCalledWith();
+  });
+
   it('"Speichern"-Button ist disabled wenn kein Name eingetragen ist', async () => {
     await goToStep4();
     // currentReport.name='' → setReportName('') → Speichern disabled

@@ -199,7 +199,7 @@ export function isWizardCompatible(config: ReportConfig): boolean {
   if (!['bar', 'line', 'radaroverlay'].includes(config.diagramType)) return false;
   if (!['player', 'team', 'month'].includes(config.xField ?? '')) return false;
   if (config.diagramType !== 'radaroverlay' &&
-      !['goals', 'assists', 'yellowCards'].includes(config.yField ?? '')) return false;
+      !['goals', 'assists', 'yellowCards', 'shots', 'fouls', 'passes'].includes(config.yField ?? '')) return false;
   return true;
 }
 
