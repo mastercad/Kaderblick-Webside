@@ -217,7 +217,7 @@ export const GuidedWizard: React.FC<GuidedWizardProps> = (props) => {
               variant="outlined"
               size="small"
               startIcon={<TuneIcon fontSize="small" />}
-              onClick={props.onOpenBuilder}
+              onClick={() => props.onOpenBuilder()}
             >
               Anpassen
             </Button>

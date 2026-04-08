@@ -642,6 +642,118 @@ describe('Player-Suche – .finally() Callback', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// initialConfig – edit round-trip: zurück navigieren → Änderung → setCurrentReport
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('initialConfig – Edit-Modus: Änderung triggert setCurrentReport für Preview', () => {
+  it('ruft setCurrentReport nach Schritt-4-Init auf wenn zurück + timeRange geändert (1 Team)', async () => {
+    const state = makeState(1); // 1 Team → kein Context-Step
+    const validConfig: ReportConfig = {
+      diagramType: 'bar',
+      xField: 'team',
+      yField: 'goals',
+      filters: { team: '1', dateFrom: `${new Date().getFullYear() - (new Date().getMonth() >= 7 ? 0 : 1)}-08-01` },
+      metrics: [],
+      showLegend: false,
+      showLabels: false,
+    };
+    const { result } = renderHook(() =>
+      useWizardState(makeInput({}, state, { initialConfig: validConfig })),
+    );
+
+    // Initialisierung abwarten
+    await act(async () => {});
+
+    // Nach Initialisierung vom initialConfig muss step=4 gesetzt sein
+    expect(result.current.step).toBe(4);
+    expect(result.current.subject).toBe('team');
+    expect(result.current.topic).toBe('goals');
+
+    // Zurück zu Schritt 3 (Zeitraum-Auswahl)
+    act(() => { result.current.handleBack(); });
+    expect(result.current.step).toBe(3);
+
+    // Zeitraum wechseln → autoAdvance → goToConfirm → setCurrentReport
+    act(() => { result.current.handleSelectTimeRange('last10'); });
+    act(() => { jest.advanceTimersByTime(500); });
+
+    // setCurrentReport MUSS aufgerufen worden sein → Preview-Trigger
+    expect(state.setCurrentReport).toHaveBeenCalled();
+    expect(result.current.step).toBe(4);
+  });
+
+  it('ruft setCurrentReport nach Schritt-4-Init auf wenn zurück bis Thema + Thema geändert', async () => {
+    const state = makeState(1);
+    const validConfig: ReportConfig = {
+      diagramType: 'bar',
+      xField: 'team',
+      yField: 'goals',
+      filters: { team: '1' },
+      metrics: [],
+      showLegend: false,
+      showLabels: false,
+    };
+    const { result } = renderHook(() =>
+      useWizardState(makeInput({}, state, { initialConfig: validConfig })),
+    );
+    await act(async () => {});
+    expect(result.current.step).toBe(4);
+
+    // Zurück bis Thema (step 3 → 2)
+    act(() => { result.current.handleBack(); });  // step 4 → 3
+    act(() => { result.current.handleBack(); });  // step 3 → 2
+    expect(result.current.step).toBe(2);
+
+    // Neues Thema auswählen → autoAdvance → step 3
+    act(() => { result.current.handleSelectTopic('assists'); });
+    act(() => { jest.advanceTimersByTime(500); });
+    expect(result.current.step).toBe(3);
+
+    // Zeitraum bestätigen → goToConfirm → setCurrentReport
+    act(() => {
+      if (result.current.subject && result.current.topic && result.current.timeRange) {
+        result.current.goToConfirm(result.current.subject, result.current.topic, result.current.timeRange);
+      }
+    });
+
+    expect(state.setCurrentReport).toHaveBeenCalled();
+    expect(result.current.step).toBe(4);
+  });
+
+  it('ruft setCurrentReport auf wenn "Weiter →"-Button auf Schritt-3 genutzt wird (goToConfirm direkt)', async () => {
+    const state = makeState(2); // 2 Teams → mit Context-Step
+    const validConfig: ReportConfig = {
+      diagramType: 'bar',
+      xField: 'team',
+      yField: 'goals',
+      filters: { team: '1' },
+      metrics: [],
+      showLegend: false,
+      showLabels: false,
+    };
+    const { result } = renderHook(() =>
+      useWizardState(makeInput({}, state, { initialConfig: validConfig })),
+    );
+    await act(async () => {});
+    expect(result.current.step).toBe(4);
+
+    // Zurück zu Schritt 3
+    act(() => { result.current.handleBack(); });
+    expect(result.current.step).toBe(3);
+
+    // "Weiter →"-Button ruft goToConfirm direkt auf (kein autoAdvance)
+    act(() => {
+      if (result.current.subject && result.current.topic && result.current.timeRange) {
+        result.current.goToConfirm(result.current.subject, result.current.topic, result.current.timeRange);
+      }
+    });
+
+    expect(state.setCurrentReport).toHaveBeenCalled();
+    expect(result.current.step).toBe(4);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // makeInput helper overload accepting initialConfig
 // ─────────────────────────────────────────────────────────────────────────────
 

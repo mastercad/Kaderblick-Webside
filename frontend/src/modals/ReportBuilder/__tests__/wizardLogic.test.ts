@@ -360,14 +360,17 @@ describe('isWizardCompatible', () => {
   it('bar + player + goals → kompatibel', () => yes({}));
   it('bar + player + assists → kompatibel', () => yes({ yField: 'assists' }));
   it('bar + player + yellowCards → kompatibel', () => yes({ yField: 'yellowCards' }));
+  it('bar + player + shots → kompatibel (Wizard kann shots erzeugen)', () => yes({ yField: 'shots' }));
+  it('bar + player + fouls → kompatibel (Wizard kann fouls erzeugen)', () => yes({ yField: 'fouls' }));
+  it('bar + player + passes → kompatibel (Wizard kann passes erzeugen)', () => yes({ yField: 'passes' }));
   it('line + month + goals → kompatibel', () => yes({ diagramType: 'line', xField: 'month' }));
   it('bar + team + goals → kompatibel', () => yes({ xField: 'team' }));
+  it('bar + team + shots → kompatibel (team_comparison shots)', () => yes({ xField: 'team', yField: 'shots' }));
   it('radaroverlay + player → kompatibel (yField wird ignoriert)', () => yes({ diagramType: 'radaroverlay' }));
   it('radaroverlay + unbekanntes yField → trotzdem kompatibel', () => yes({ diagramType: 'radaroverlay', yField: 'shots' }));
 
   it('pie → nicht kompatibel', () => no({ diagramType: 'pie' }));
   it('scatter → nicht kompatibel', () => no({ diagramType: 'scatter' }));
   it('unbekanntes xField → nicht kompatibel', () => no({ xField: 'event_type' }));
-  it('bar + player + shots → nicht kompatibel (yField unbekannt)', () => no({ yField: 'shots' }));
-  it('bar + player + duelsWonPercent → nicht kompatibel', () => no({ yField: 'duelsWonPercent' }));
+  it('bar + player + duelsWonPercent → nicht kompatibel (kein Wizard-Thema)', () => no({ yField: 'duelsWonPercent' }));
 });
