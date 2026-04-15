@@ -74,7 +74,7 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.demo.yml -p demo \
               exec -T --user www-data api \
               bin/console doctrine:fixtures:load \
-              --env=prod --no-interaction --group=master
+              --env=prod --no-interaction --group=master --group=demo
             echo "Fixtures auf Demo geladen."
 
       - name: Disable demo maintenance
