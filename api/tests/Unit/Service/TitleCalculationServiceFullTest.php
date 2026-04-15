@@ -10,7 +10,9 @@ use App\Repository\PlayerTitleRepository;
 use App\Service\GoalCountingService;
 use App\Service\TitleCalculationService;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -124,7 +126,7 @@ class TitleCalculationServiceFullTest extends TestCase
     {
         // The method must return whatever the underlying query returns — no filtering, no transformation.
         $repo = $this->createMock(PlayerTitleRepository::class);
-        $em   = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
 
         $expectedEvent = $this->createGoalMock(42, 'Müller');
 
@@ -135,7 +137,7 @@ class TitleCalculationServiceFullTest extends TestCase
         $goalCountingService->method('getScorerGoalDqlCondition')->willReturn(["gt.code LIKE '%goal%'", ['excludedGoalCodes' => ['offside_goal']]]);
 
         $service = new TitleCalculationService($em, $repo, $goalCountingService);
-        $result  = $service->debugGoalsForSeason('2025/2026');
+        $result = $service->debugGoalsForSeason('2025/2026');
 
         $this->assertCount(1, $result);
         $this->assertSame($expectedEvent, $result[0]);
@@ -146,7 +148,7 @@ class TitleCalculationServiceFullTest extends TestCase
         // When a season string is passed, andWhere() must be called with the date-range condition
         // and setParameter() must receive the corresponding start/end dates.
         $repo = $this->createMock(PlayerTitleRepository::class);
-        $em   = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
 
         [$qb, $query, $repoMock] = $this->buildQueryMocks([]);
         $em->method('getRepository')->willReturn($repoMock);
@@ -155,12 +157,14 @@ class TitleCalculationServiceFullTest extends TestCase
         $setParameterCalls = [];
         $qb->method('setParameter')->willReturnCallback(function ($key, $value) use ($qb, &$setParameterCalls) {
             $setParameterCalls[$key] = $value;
+
             return $qb;
         });
 
         $andWhereCalls = [];
         $qb->method('andWhere')->willReturnCallback(function ($expr) use ($qb, &$andWhereCalls) {
             $andWhereCalls[] = $expr;
+
             return $qb;
         });
 
@@ -181,7 +185,7 @@ class TitleCalculationServiceFullTest extends TestCase
     public function testDebugGoalsForSeasonAppliesTeamFilter(): void
     {
         $repo = $this->createMock(PlayerTitleRepository::class);
-        $em   = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
 
         [$qb, $query, $repoMock] = $this->buildQueryMocks([]);
         $em->method('getRepository')->willReturn($repoMock);
@@ -189,12 +193,14 @@ class TitleCalculationServiceFullTest extends TestCase
         $setParameterCalls = [];
         $qb->method('setParameter')->willReturnCallback(function ($key, $value) use ($qb, &$setParameterCalls) {
             $setParameterCalls[$key] = $value;
+
             return $qb;
         });
 
         $andWhereCalls = [];
         $qb->method('andWhere')->willReturnCallback(function ($expr) use ($qb, &$andWhereCalls) {
             $andWhereCalls[] = $expr;
+
             return $qb;
         });
 
@@ -214,7 +220,7 @@ class TitleCalculationServiceFullTest extends TestCase
     public function testDebugGoalsForSeasonAppliesLeagueFilter(): void
     {
         $repo = $this->createMock(PlayerTitleRepository::class);
-        $em   = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
 
         [$qb, $query, $repoMock] = $this->buildQueryMocks([]);
         $em->method('getRepository')->willReturn($repoMock);
@@ -222,12 +228,14 @@ class TitleCalculationServiceFullTest extends TestCase
         $setParameterCalls = [];
         $qb->method('setParameter')->willReturnCallback(function ($key, $value) use ($qb, &$setParameterCalls) {
             $setParameterCalls[$key] = $value;
+
             return $qb;
         });
 
         $andWhereCalls = [];
         $qb->method('andWhere')->willReturnCallback(function ($expr) use ($qb, &$andWhereCalls) {
             $andWhereCalls[] = $expr;
+
             return $qb;
         });
 
@@ -248,7 +256,7 @@ class TitleCalculationServiceFullTest extends TestCase
     {
         // The DQL returned by GoalCountingService must be passed to the QueryBuilder's where() call.
         $repo = $this->createMock(PlayerTitleRepository::class);
-        $em   = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
 
         [$qb, $query, $repoMock] = $this->buildQueryMocks([]);
         $em->method('getRepository')->willReturn($repoMock);
@@ -256,12 +264,14 @@ class TitleCalculationServiceFullTest extends TestCase
         $whereCalls = [];
         $qb->method('where')->willReturnCallback(function ($expr) use ($qb, &$whereCalls) {
             $whereCalls[] = $expr;
+
             return $qb;
         });
 
         $setParameterCalls = [];
         $qb->method('setParameter')->willReturnCallback(function ($key, $value) use ($qb, &$setParameterCalls) {
             $setParameterCalls[$key] = $value;
+
             return $qb;
         });
 
@@ -280,13 +290,13 @@ class TitleCalculationServiceFullTest extends TestCase
     /**
      * Helper: builds a mocked QueryBuilder/Query/Repository triple.
      *
-     * @param array<mixed> $queryResult  What getResult() should return
+     * @param array<mixed> $queryResult What getResult() should return
      *
-     * @return array{0: \Doctrine\ORM\QueryBuilder, 1: object, 2: object}
+     * @return array{0: QueryBuilder&MockObject, 1: object&MockObject, 2: object&MockObject}
      */
     private function buildQueryMocks(array $queryResult): array
     {
-        $qb = $this->getMockBuilder(\Doctrine\ORM\QueryBuilder::class)
+        $qb = $this->getMockBuilder(QueryBuilder::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['select', 'leftJoin', 'where', 'andWhere', 'setParameter', 'orderBy', 'getQuery'])
             ->getMock();
