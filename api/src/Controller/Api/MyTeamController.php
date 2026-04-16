@@ -11,6 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Liefert eine Übersichtsseite "Mein Team" für alle Nutzer:
@@ -19,6 +20,7 @@ use Symfony\Component\Routing\Annotation\Route;
  * - Nächste Termine des Teams
  * - Offene Aufgaben des Nutzers
  */
+#[IsGranted('ROLE_USER')]
 #[Route('/api/my-team', name: 'api_my_team_')]
 class MyTeamController extends AbstractController
 {
