@@ -230,4 +230,44 @@ final class SurveyOptionControllerTest extends ApiWebTestCase
         self::assertTrue($option['isOwn']);
         self::assertEquals('Eigene zum Anzeigen', $option['optionText']);
     }
+
+    // ========== AUTHENTICATION ==========
+
+    public function testListRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/survey-options');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testCreateRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('POST', '/api/survey-options', [], [], [], json_encode([
+            'optionText' => 'Anon Option',
+        ]));
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testShowRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/survey-options/1');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testDeleteRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('DELETE', '/api/survey-options/1');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
 }
