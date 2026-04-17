@@ -167,10 +167,10 @@ class TaskEventGeneratorService
             ++$userIndex;
 
             $clonedStart = clone $spielEvent->getStartDate();
-            assert($clonedStart instanceof \DateTime);
+            assert($clonedStart instanceof DateTime);
             $startDateWithOffset = $clonedStart->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
             $clonedEnd = clone $spielEvent->getEndDate();
-            assert($clonedEnd instanceof \DateTime);
+            assert($clonedEnd instanceof DateTime);
             $endDateWithOffset = $clonedEnd->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
 
             $assignment = new TaskAssignment();
@@ -290,10 +290,10 @@ class TaskEventGeneratorService
                 ++$userIndex;
 
                 $clonedStart = clone $spielEvent->getStartDate();
-                assert($clonedStart instanceof \DateTime);
+                assert($clonedStart instanceof DateTime);
                 $startDateWithOffset = $clonedStart->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
                 $clonedEnd = clone $spielEvent->getEndDate();
-                assert($clonedEnd instanceof \DateTime);
+                assert($clonedEnd instanceof DateTime);
                 $endDateWithOffset = $clonedEnd->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
 
                 // Erstelle TaskAssignment
