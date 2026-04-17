@@ -166,12 +166,10 @@ class TaskEventGeneratorService
             $assignedUser = $eligibleUsers[$userIndex];
             ++$userIndex;
 
-            $clonedStart = clone $spielEvent->getStartDate();
-            assert($clonedStart instanceof DateTime);
-            $startDateWithOffset = $clonedStart->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
-            $clonedEnd = clone $spielEvent->getEndDate();
-            assert($clonedEnd instanceof DateTime);
-            $endDateWithOffset = $clonedEnd->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
+            $startDateWithOffset = DateTimeImmutable::createFromInterface($spielEvent->getStartDate())
+                ->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
+            $endDateWithOffset = DateTimeImmutable::createFromInterface($spielEvent->getEndDate())
+                ->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
 
             $assignment = new TaskAssignment();
             $assignment->setTask($task);
@@ -289,12 +287,10 @@ class TaskEventGeneratorService
                 $assignedUser = $eligibleUsers[$userIndex];
                 ++$userIndex;
 
-                $clonedStart = clone $spielEvent->getStartDate();
-                assert($clonedStart instanceof DateTime);
-                $startDateWithOffset = $clonedStart->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
-                $clonedEnd = clone $spielEvent->getEndDate();
-                assert($clonedEnd instanceof DateTime);
-                $endDateWithOffset = $clonedEnd->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
+                $startDateWithOffset = DateTimeImmutable::createFromInterface($spielEvent->getStartDate())
+                    ->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
+                $endDateWithOffset = DateTimeImmutable::createFromInterface($spielEvent->getEndDate())
+                    ->modify(($offsetDays >= 0 ? '+' : '') . $offsetDays . ' days');
 
                 // Erstelle TaskAssignment
                 $assignment = new TaskAssignment();
