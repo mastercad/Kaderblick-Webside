@@ -28,6 +28,9 @@ class FormationRepositoryTest extends TestCase
     private Query&MockObject $query;
     private FormationRepository $repository;
 
+    /** @var Formation[] Steuerung des getResult()-Rückgabewerts über Tests hinweg */
+    private array $queryResult = [];
+
     /** Zuletzt übergebene Teams aus setParameter(':teams', ...) */
     private mixed $capturedTeamsParam = null;
 
@@ -60,6 +63,10 @@ class FormationRepositoryTest extends TestCase
             ->method('getQuery')
             ->willReturn($this->query);
 
+        $this->query
+            ->method('getResult')
+            ->willReturnCallback(fn () => $this->queryResult);
+
         $this->em
             ->method('createQueryBuilder')
             ->willReturn($this->qb);
@@ -88,9 +95,8 @@ class FormationRepositoryTest extends TestCase
     {
         $team1 = $this->createMock(Team::class);
         $team2 = $this->createMock(Team::class);
-
         $formation = $this->createMock(Formation::class);
-        $this->query->method('getResult')->willReturn([$formation]);
+        $this->queryResult = [$formation];
 
         $this->repository->findVisibleForUser([1 => $team1, 2 => $team2]);
 
@@ -101,8 +107,7 @@ class FormationRepositoryTest extends TestCase
     {
         $team = $this->createMock(Team::class);
         $formation = $this->createMock(Formation::class);
-
-        $this->query->method('getResult')->willReturn([$formation]);
+        $this->queryResult = [$formation];
 
         $result = $this->repository->findVisibleForUser([10 => $team]);
 
@@ -112,8 +117,7 @@ class FormationRepositoryTest extends TestCase
     public function testReturnsEmptyArrayWhenQueryReturnsNothing(): void
     {
         $team = $this->createMock(Team::class);
-
-        $this->query->method('getResult')->willReturn([]);
+        $this->queryResult = [];
 
         $result = $this->repository->findVisibleForUser([10 => $team]);
 
@@ -131,8 +135,6 @@ class FormationRepositoryTest extends TestCase
 
     public function testFindByTeamSetsTeamIdParameter(): void
     {
-        $this->query->method('getResult')->willReturn([]);
-
         $this->repository->findByTeam(42);
 
         $this->assertArrayHasKey('teamId', $this->capturedParams);
@@ -142,7 +144,7 @@ class FormationRepositoryTest extends TestCase
     public function testFindByTeamReturnsQueryResult(): void
     {
         $formation = $this->createMock(Formation::class);
-        $this->query->method('getResult')->willReturn([$formation]);
+        $this->queryResult = [$formation];
 
         $result = $this->repository->findByTeam(1);
 
@@ -152,7 +154,7 @@ class FormationRepositoryTest extends TestCase
 
     public function testFindByTeamReturnsEmptyArrayWhenNoFormationsFound(): void
     {
-        $this->query->method('getResult')->willReturn([]);
+        $this->queryResult = [];
 
         $result = $this->repository->findByTeam(99);
 
