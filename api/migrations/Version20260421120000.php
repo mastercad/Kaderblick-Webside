@@ -56,7 +56,7 @@ final class Version20260421120000 extends AbstractMigration
                     [$playerId]
                 );
 
-                if ($teamId !== false && $teamId !== null) {
+                if (false !== $teamId && null !== $teamId) {
                     $this->connection->executeStatement(
                         'UPDATE formations SET team_id = ? WHERE id = ?',
                         [(int) $teamId, (int) $row['id']]
