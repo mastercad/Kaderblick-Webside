@@ -52,7 +52,6 @@ class FormationControllerTest extends TestCase
 
         $this->controller = new FormationController(
             $this->coachTeamPlayerService,
-            $this->em,
             $this->formationRepo,
             $logger,
         );
@@ -117,6 +116,7 @@ class FormationControllerTest extends TestCase
         return $formation;
     }
 
+    /** @param array<Team> $teams */
     private function mockCollectCoachTeams(User&MockObject $user, array $teams = []): void
     {
         $this->coachTeamPlayerService

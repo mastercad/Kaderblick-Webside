@@ -35,6 +35,7 @@ class FormationRepositoryTest extends TestCase
     private mixed $capturedTeamsParam = null;
 
     /** Alle setParameter-Aufrufe */
+    /** @var array<string, mixed> */
     private array $capturedParams = [];
 
     protected function setUp(): void

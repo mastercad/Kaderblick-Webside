@@ -23,7 +23,6 @@ class FormationController extends AbstractController
 {
     public function __construct(
         private CoachTeamPlayerService $coachTeamPlayerService,
-        private EntityManagerInterface $entityManager,
         private FormationRepository $formationRepository,
         private LoggerInterface $logger,
     ) {
