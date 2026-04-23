@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import Paper from '@mui/material/Paper';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -35,6 +36,20 @@ export default function NavMobileBottomBar({
 
   const active = (key: string) => isNavItemActive(pathname, key);
   const go = (path: string) => { onMobileMenuClose(); navigate(path); };
+
+  // Untere Navigation verstecken wenn die Taktiktafel offen ist
+  const [tacticsBoardOpen, setTacticsBoardOpen] = useState(
+    () => document.body.classList.contains('tactics-board-open'),
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setTacticsBoardOpen(document.body.classList.contains('tactics-board-open'));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => { observer.disconnect(); };
+  }, []);
+
+  if (tacticsBoardOpen) return null;
 
   const activeValue =
     active('dashboard')    ? 'dashboard' :

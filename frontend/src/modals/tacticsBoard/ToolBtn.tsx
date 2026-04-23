@@ -37,15 +37,20 @@ export const ToolBtn: React.FC<ToolBtnProps> = ({
         onClick={onClick}
         disabled={disabled}
         sx={{
-          color: active ? 'primary.light' : 'rgba(255,255,255,0.6)',
-          bgcolor: active ? 'rgba(33,150,243,0.18)' : 'transparent',
+          color: active ? 'primary.light' : 'rgba(255,255,255,0.72)',
+          bgcolor: active ? 'rgba(33,150,243,0.18)' : 'rgba(255,255,255,0.05)',
           border: active
             ? '1px solid rgba(33,150,243,0.5)'
-            : '1px solid transparent',
+            : '1px solid rgba(255,255,255,0.1)',
           borderRadius: 1.5,
           p: 0.75,
-          '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-          '&.Mui-disabled': { opacity: 0.3 },
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+          '&.Mui-disabled': {
+            opacity: 1,
+            color: 'rgba(255,255,255,0.28) !important',
+            bgcolor: 'rgba(255,255,255,0.02) !important',
+            border: '1px dashed rgba(255,255,255,0.12) !important',
+          },
         }}
       >
         {children}
