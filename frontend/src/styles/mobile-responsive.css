@@ -188,11 +188,21 @@
     max-width: 320px !important;
   }
   
-  /* Better modal spacing */
-  .MuiDialog-paper {
+  /* Better modal spacing – nur für nicht-fullscreen Dialoge */
+  .MuiDialog-paper:not(.MuiDialog-paperFullScreen) {
     margin: 16px !important;
     width: calc(100% - 32px) !important;
     max-height: calc(100% - 64px) !important;
+  }
+
+  /* fullScreen-Dialoge (z.B. Taktiktafel) müssen wirklich den ganzen Bildschirm füllen */
+  .MuiDialog-paperFullScreen {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
   }
 }
 

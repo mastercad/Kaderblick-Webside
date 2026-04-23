@@ -15,14 +15,17 @@ import {
   Dialog, Box, Typography,
   DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
   TextField, InputAdornment, IconButton, CircularProgress, Chip,
-  useTheme,
+  useTheme, Tooltip,
 } from '@mui/material';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useFabStack }      from '../components/FabStackProvider';
+import PortraitHint         from '../components/PortraitHint';
 import { useTacticsBoard }  from './tacticsBoard/useTacticsBoard';
 import { PitchCanvas }      from './tacticsBoard/PitchCanvas';
 import { TacticsToolbar }   from './tacticsBoard/TacticsToolbar';
@@ -44,6 +47,7 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
   open, onClose, formation, onBoardSaved,
 }) => {
   const board = useTacticsBoard(open, formation, onBoardSaved);
+  const fabStack = useFabStack();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isPortrait = useMediaQuery('(orientation: portrait)');
@@ -55,22 +59,34 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
   const [fitPitchToHeight, setFitPitchToHeight] = useState(true);
   const [hideFullscreenChrome, setHideFullscreenChrome] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+  const [leftBarOpen, setLeftBarOpen] = useState(true);
+  const [rightBarOpen, setRightBarOpen] = useState(false);
+  const [topActionsVisible, setTopActionsVisible] = useState(true);
   const forceWidthMode = isMobile && isPortrait;
   const effectiveFitPitchToHeight = fitPitchToHeight && !forceWidthMode;
-  const isPresentationMode = board.isBrowserFS && hideFullscreenChrome;
+  const isPresentationMode = hideFullscreenChrome;
 
+  // FAB (Feedback-Button) ausblenden solange das Board offen ist
   useEffect(() => {
-    if (!board.isBrowserFS) {
-      setHideFullscreenChrome(false);
-      setPresentationMode(false);
+    if (open) {
+      fabStack?.hideForModal();
+      return () => { fabStack?.showAfterModal(); };
     }
-  }, [board.isBrowserFS]);
+  }, [open, fabStack]);
 
   useEffect(() => {
     if (presentationMode) {
       board.setSelectedId?.(null);
     }
   }, [board, presentationMode]);
+
+  // Untere Navigation ausblenden wenn das Board offen ist
+  useEffect(() => {
+    if (open && isMobile) {
+      document.body.classList.add('tactics-board-open');
+    }
+    return () => { document.body.classList.remove('tactics-board-open'); };
+  }, [open, isMobile]);
 
   const togglePresentationMode = useCallback(() => {
     setPresentationMode(prev => {
@@ -174,126 +190,86 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
     >
       <Box
         ref={board.containerRef}
-        sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#0a0f0a' }}
+        onContextMenu={e => e.preventDefault()}
+        sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#0a0f0a', position: 'relative', overflow: 'hidden', WebkitTouchCallout: 'none', userSelect: 'none', pt: isMobile && isPortrait ? '64px' : 0 }}
       >
-        {!isPresentationMode && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 1,
-            px: { xs: 1, sm: 1.5 },
-            py: { xs: 0.75, sm: 1 },
-            bgcolor: 'rgba(255,255,255,0.03)',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            flexShrink: 0,
-          }}
-        >
-          <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.35 }}>
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'rgba(255,255,255,0.42)',
-                fontWeight: 800,
-                letterSpacing: 1.8,
-                lineHeight: 1,
-              }}
-            >
-              TAKTIKTAFEL
+        {/* ── Portrait-mode hint (mobile only) ─────────────────────────── */}
+        <PortraitHint visible={isMobile && isPortrait} />
+
+        {/* ── Presentation mode: minimal exit overlay ───────────────────── */}
+        {isPresentationMode && (
+          <Box
+            onClick={togglePresentationMode}
+            sx={{
+              position: 'absolute', top: 10, right: 10, zIndex: 200,
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              px: 1, py: 0.4,
+              borderRadius: 2,
+              bgcolor: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              cursor: 'pointer',
+              opacity: 0.3,
+              '&:hover': { opacity: 1, bgcolor: 'rgba(255,255,255,0.12)' },
+              transition: 'opacity 0.2s, background 0.2s',
+            }}
+          >
+            <FullscreenExitIcon sx={{ fontSize: 16, color: 'white' }} />
+            <Typography variant="caption" sx={{ color: 'white', fontWeight: 600, fontSize: '0.72rem', userSelect: 'none' }}>
+              Präsentation beenden
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-              <Typography
-                variant="subtitle1"
-                fontWeight={700}
-                sx={{ color: 'white', lineHeight: 1.1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              >
-                {board.formationName}
-              </Typography>
-              {board.formationCode && (
-                <Chip
-                  label={board.formationCode}
-                  size="small"
-                  sx={{
-                    bgcolor: 'primary.main',
-                    color: 'white',
-                    fontWeight: 700,
-                    fontSize: '0.7rem',
-                    height: 22,
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-            </Box>
-            {isMobile && board.saveMsg && (
-              <Typography
-                variant="caption"
-                sx={{
-                  color: board.saveMsg.ok ? '#69f0ae' : '#ff5252',
-                  fontWeight: 700,
-                  fontSize: '0.72rem',
-                  lineHeight: 1.1,
-                }}
-              >
+          </Box>
+        )}
+
+        {/* ── Formation name – top left ─────────────────────────────────── */}
+        {!isPresentationMode && (board.formationName || board.formationCode || formation?.formationType?.name) && (
+        <Box sx={{ position: 'absolute', top: 10, left: leftBarOpen ? 76 : 10, zIndex: 90, display: 'flex', alignItems: 'center', gap: 0.75, pointerEvents: 'none', transition: 'left 0.2s cubic-bezier(0.4,0,0.2,1)' }}>
+          {(board.formationName || formation?.formationType?.name) && (
+            <Typography variant="body2" fontWeight={700} sx={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1, userSelect: 'none' }}>
+              {board.formationName || formation?.formationType?.name}
+            </Typography>
+          )}
+          {board.formationCode && (
+            <Chip label={board.formationCode} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)', fontWeight: 700, fontSize: '0.7rem', height: 20, border: '1px solid rgba(255,255,255,0.1)' }} />
+          )}
+        </Box>
+        )}
+
+        {/* ── Floating action buttons – top right (slides up to hide) ─────── */}
+        {!isPresentationMode && (
+        <Box sx={{
+          position: 'absolute', top: 0, right: 10, zIndex: 100,
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+          transform: topActionsVisible ? 'translateY(0)' : 'translateY(calc(-100% + 14px))',
+          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+        }}>
+          {/* Buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pt: 1.25 }}>
+            {board.saveMsg && (
+              <Typography variant="caption" sx={{ color: board.saveMsg.ok ? '#69f0ae' : '#ff5252', fontWeight: 700, fontSize: '0.72rem', animation: 'fadeIn 0.3s ease', '@keyframes fadeIn': { from: { opacity: 0 }, to: { opacity: 1 } } }}>
                 {board.saveMsg.text}
               </Typography>
             )}
-          </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-            {board.isBrowserFS && (
-              <Button
-                aria-label={presentationMode ? 'Präsentation beenden' : 'Leisten ausblenden'}
-                onClick={presentationMode ? handlePresentationModeOff : () => setHideFullscreenChrome(true)}
-                startIcon={<VisibilityOffIcon sx={{ fontSize: 18 }} />}
-                sx={{
-                  minWidth: 0,
-                  px: 1.1,
-                  py: 0.55,
-                  borderRadius: 1.5,
-                  color: 'rgba(255,255,255,0.85)',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  bgcolor: 'rgba(255,255,255,0.06)',
-                  textTransform: 'none',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
-                }}
-              >
-                {presentationMode ? 'Präsentation beenden' : 'Leisten ausblenden'}
-              </Button>
+            {formation && (
+              <Tooltip title={`Speichern${board.isDirty ? ' – ungespeicherte Änderungen' : ''}`} placement="left">
+                <IconButton
+                  aria-label="Speichern"
+                  onClick={board.saving ? undefined : board.handleSave}
+                  sx={{
+                    color: board.isDirty ? 'primary.light' : 'rgba(255,255,255,0.5)',
+                    bgcolor: board.isDirty ? 'rgba(33,150,243,0.18)' : 'rgba(255,255,255,0.06)',
+                    border: `1px solid ${board.isDirty ? 'rgba(33,150,243,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                    borderRadius: 1.75,
+                    position: 'relative',
+                    '&:hover': { bgcolor: board.isDirty ? 'rgba(33,150,243,0.3)' : 'rgba(255,255,255,0.12)' },
+                  }}
+                >
+                  {board.saving ? <CircularProgress size={20} sx={{ color: 'inherit' }} /> : <SaveIcon />}
+                  {board.isDirty && !board.saving && (
+                    <Box sx={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', bgcolor: '#2196f3', border: '1.5px solid #0a0f0a' }} />
+                  )}
+                </IconButton>
+              </Tooltip>
             )}
-
-            {formation && isMobile && (
-              <Box
-                onClick={board.saving ? undefined : board.handleSave}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  px: 1.1,
-                  py: 0.55,
-                  bgcolor: 'rgba(33,150,243,0.18)',
-                  border: '1px solid rgba(33,150,243,0.45)',
-                  borderRadius: 1.5,
-                  cursor: board.saving ? 'default' : 'pointer',
-                  color: board.saving ? 'rgba(255,255,255,0.4)' : 'primary.light',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  userSelect: 'none',
-                  '&:hover': { bgcolor: board.saving ? undefined : 'rgba(33,150,243,0.3)' },
-                  transition: 'background 0.15s',
-                }}
-              >
-                {board.saving
-                  ? <CircularProgress size={14} sx={{ color: 'inherit' }} />
-                  : <SaveIcon sx={{ fontSize: 16 }} />
-                }
-                <span>Speichern{board.isDirty ? ' *' : ''}</span>
-              </Box>
-            )}
-
             <IconButton
               aria-label="Board schließen"
               onClick={handleCloseRequest}
@@ -308,61 +284,116 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
               <CloseIcon />
             </IconButton>
           </Box>
+          {/* Drawer-Tab – always visible, tap to slide in/out */}
+          <Box
+            role="button"
+            aria-label={topActionsVisible ? 'Aktionsleiste ausblenden' : 'Aktionsleiste einblenden'}
+            onClick={() => setTopActionsVisible(v => !v)}
+            sx={{
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              width: 52, height: 14, mt: 0.5, cursor: 'pointer',
+              borderRadius: '0 0 8px 8px',
+              bgcolor: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderTop: 'none',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.11)' },
+              transition: 'background 0.15s',
+            }}
+          >
+            <Box sx={{ width: 28, height: 3, borderRadius: 2, bgcolor: topActionsVisible ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.38)' }} />
+          </Box>
         </Box>
         )}
 
-        {!isPresentationMode && (
-        <TacticsToolbar
-          notes={board.notes}
-          tool={board.tool}            setTool={board.setTool}
-          color={board.color}          setColor={board.setColor}
-          fullPitch={board.fullPitch}  setFullPitch={board.setFullPitch}
-          fitPitchToHeight={effectiveFitPitchToHeight}
-          setFitPitchToHeight={setFitPitchToHeight}
-          elements={board.elements}    opponents={board.opponents}
-          saving={board.saving}        saveMsg={board.saveMsg}
-          isBrowserFS={board.isBrowserFS}
-          isDirty={board.isDirty}
-          showNotes={board.showNotes}  setShowNotes={board.setShowNotes}
-          formation={formation}
-          onAddOpponent={board.handleAddOpponent}
-          onUndo={board.handleUndo}
-          onClear={board.handleClear}
-          onResetPlayerPositions={board.handleResetPlayerPositions}
-          onSave={board.handleSave}
-          onToggleFullscreen={board.toggleFullscreen}
-          onLoadPreset={board.handleLoadPreset}
-          activeTactic={board.activeTactic}
-          selectedId={board.selectedId}
-          onDeleteSelected={board.handleDeleteSelected}
-          canUndo={board.canUndo}
-          canRedo={board.canRedo}
-          onRedo={board.handleRedo}
-          showStepNumbers={showStepNumbers}
-          onToggleStepNumbers={() => setShowStepNumbers(v => !v)}
-          presentationMode={presentationMode}
-          onTogglePresentationMode={togglePresentationMode}
-        />
+        {/* ── Hauptbereich: Pitch (füllt immer den ganzen Raum) ───────────── */}
+        <Box sx={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+        {/* Left sidebar (tools) – overlay, does not affect pitch size */}
+        {!isPresentationMode && leftBarOpen && (
+          <Box sx={{ position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 40, display: 'flex' }}>
+            <TacticsToolbar
+              isLandscapeMobile={true}
+              notes={board.notes}
+              tool={board.tool}            setTool={board.setTool}
+              color={board.color}          setColor={board.setColor}
+              fullPitch={board.fullPitch}  setFullPitch={board.setFullPitch}
+              fitPitchToHeight={effectiveFitPitchToHeight}
+              setFitPitchToHeight={setFitPitchToHeight}
+              elements={board.elements}    opponents={board.opponents}
+              saving={board.saving}        saveMsg={board.saveMsg}
+              isBrowserFS={board.isBrowserFS}
+              isDirty={board.isDirty}
+              showNotes={board.showNotes}  setShowNotes={board.setShowNotes}
+              formation={formation}
+              onAddOpponent={board.handleAddOpponent}
+              onUndo={board.handleUndo}
+              onClear={board.handleClear}
+              onResetPlayerPositions={board.handleResetPlayerPositions}
+              onSave={board.handleSave}
+              onToggleFullscreen={board.toggleFullscreen}
+              onLoadPreset={board.handleLoadPreset}
+              activeTactic={board.activeTactic}
+              selectedId={board.selectedId}
+              onDeleteSelected={board.handleDeleteSelected}
+              canUndo={board.canUndo}
+              canRedo={board.canRedo}
+              onRedo={board.handleRedo}
+              showStepNumbers={showStepNumbers}
+              onToggleStepNumbers={() => setShowStepNumbers(v => !v)}
+              presentationMode={presentationMode}
+              onTogglePresentationMode={togglePresentationMode}
+            />
+          </Box>
         )}
 
+        {/* Left sidebar toggle strip – inner (right) edge, away from screen corners */}
         {!isPresentationMode && (
-        <TacticsBar
-          tactics={board.tactics}
-          activeTacticId={board.activeTacticId}
-          renamingId={board.renamingId}
-          renameValue={board.renameValue}
-          onSelect={board.setActiveTacticId}
-          onNew={board.handleNewTactic}
-          onDelete={handleDeleteRequest}
-          onStartRename={(id, name) => { board.setRenamingId(id); board.setRenameValue(name); }}
-          onRenameChange={board.setRenameValue}
-          onConfirmRename={board.confirmRename}
-          onCancelRename={() => board.setRenamingId(null)}
-        />
+          <Box
+            role="button"
+            aria-label={leftBarOpen ? 'Linke Werkzeugleiste schließen' : 'Linke Werkzeugleiste öffnen'}
+            onClick={() => setLeftBarOpen(v => !v)}
+            sx={{ position: 'absolute', left: leftBarOpen ? 52 : 0, top: 0, bottom: 0, width: 16, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', bgcolor: leftBarOpen ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)', borderLeft: '1px solid rgba(255,255,255,0.08)', '&:hover': { bgcolor: 'rgba(255,255,255,0.09)' }, transition: 'background 0.15s, left 0.2s' }}
+          >
+            <ChevronLeftIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', transform: leftBarOpen ? 'none' : 'scaleX(-1)', transition: 'transform 0.2s' }} />
+          </Box>
+        )}
+
+        {/* Right sidebar toggle strip – inner (left) edge, away from screen corners */}
+        {!isPresentationMode && (
+          <Box
+            role="button"
+            aria-label={rightBarOpen ? 'Rechte Taktikleiste schließen' : 'Rechte Taktikleiste öffnen'}
+            onClick={() => setRightBarOpen(v => !v)}
+            sx={{ position: 'absolute', right: rightBarOpen ? 180 : 0, top: 0, bottom: 0, width: 16, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', bgcolor: rightBarOpen ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.08)', '&:hover': { bgcolor: 'rgba(255,255,255,0.09)' }, transition: 'background 0.15s, right 0.2s' }}
+          >
+            <ChevronRightIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', transform: rightBarOpen ? 'scaleX(-1)' : 'none', transition: 'transform 0.2s' }} />
+          </Box>
+        )}
+
+        {/* Right sidebar (tactics) – overlay, does not affect pitch size */}
+        {!isPresentationMode && rightBarOpen && (
+          <Box sx={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 180, zIndex: 40, display: 'flex', flexDirection: 'column', bgcolor: 'rgba(10,14,10,0.88)', borderLeft: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
+            <TacticsBar
+              vertical
+              tactics={board.tactics}
+              activeTacticId={board.activeTacticId}
+              renamingId={board.renamingId}
+              renameValue={board.renameValue}
+              onSelect={board.setActiveTacticId}
+              onNew={board.handleNewTactic}
+              onDelete={handleDeleteRequest}
+              onStartRename={(id, name) => { board.setRenamingId(id); board.setRenameValue(name); }}
+              onRenameChange={board.setRenameValue}
+              onConfirmRename={board.confirmRename}
+              onCancelRename={() => board.setRenamingId(null)}
+              onLoadPreset={board.handleLoadPreset}
+              activeTactic={board.activeTactic}
+            />
+          </Box>
         )}
 
         {/* ═══ PITCH + NOTES ═══════════════════════════════════════════════ */}
-        <Box sx={{ position: 'relative', flex: 1, display: 'flex', alignItems: effectiveFitPitchToHeight ? 'center' : 'flex-start', justifyContent: 'center', gap: 2, p: { xs: 1, md: 2 }, overflow: effectiveFitPitchToHeight ? 'hidden' : 'auto', minHeight: 0 }}>
+        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: effectiveFitPitchToHeight ? 'center' : 'flex-start', justifyContent: 'center', gap: 2, p: { xs: 0.5, md: 1 }, overflow: effectiveFitPitchToHeight ? 'hidden' : 'auto' }}>
           {board.isBrowserFS && isPresentationMode && (
             <Box
               sx={{
@@ -487,7 +518,9 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
           )}
         </Box>
 
-        {!isPresentationMode && (
+        </Box>{/* end full-screen pitch area */}
+
+        {!isPresentationMode && !isMobile && (
         <StatusBar
           tool={board.tool}
           elements={board.elements}

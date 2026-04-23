@@ -79,6 +79,8 @@ export interface TacticsToolbarProps {
   onToggleStepNumbers: () => void;
   presentationMode: boolean;
   onTogglePresentationMode: () => void;
+  /** Render als kompakte vertikale Sidebar (Landscape-Mobile) */
+  isLandscapeMobile?: boolean;
 
 }
 
@@ -99,6 +101,7 @@ export const TacticsToolbar: React.FC<TacticsToolbarProps> = ({
   canUndo, showStepNumbers, onToggleStepNumbers,
   canRedo, onRedo,
   presentationMode, onTogglePresentationMode,
+  isLandscapeMobile = false,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -117,6 +120,123 @@ export const TacticsToolbar: React.FC<TacticsToolbarProps> = ({
     bgcolor: 'rgba(255,255,255,0.03)',
     border: '1px solid rgba(255,255,255,0.06)',
   };
+
+  // ── Landscape-Mobile: kompakte vertikale Icon-Sidebar ───────────────────────
+  if (isLandscapeMobile) {
+    return (
+      <>
+        <Box sx={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 0.75, px: 0.5, py: 0.75,
+          bgcolor: 'rgba(255,255,255,0.04)',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
+          width: 52, flexShrink: 0,
+          overflowY: 'auto', scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}>
+          {/* Zeichenwerkzeuge */}
+          <ToolBtn title="Ballweg zeichnen" active={tool === 'arrow'} onClick={() => setTool('arrow')}>
+            <ArrowToolIcon />
+          </ToolBtn>
+          <ToolBtn title="Laufweg zeichnen" active={tool === 'run'} onClick={() => setTool('run')}>
+            <ArrowToolIcon dashed />
+          </ToolBtn>
+          <ToolBtn title="Zone markieren" active={tool === 'zone'} onClick={() => setTool('zone')}>
+            <RadioButtonUncheckedIcon sx={{ fontSize: 18 }} />
+          </ToolBtn>
+
+          <Divider flexItem sx={{ borderColor: 'rgba(255,255,255,0.12)', my: 0.25 }} />
+
+          {/* Farbpalette */}
+          {PALETTE.map(c => (
+            <Tooltip key={c.value} title={c.label} placement="right" arrow>
+              <Box
+                onClick={() => setColor(c.value)}
+                sx={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  bgcolor: c.value, cursor: 'pointer', flexShrink: 0,
+                  border: color === c.value ? '2.5px solid white' : '2.5px solid rgba(255,255,255,0.15)',
+                  boxShadow: color === c.value
+                    ? `0 0 0 2px rgba(255,255,255,0.4), 0 0 8px ${c.value}88`
+                    : 'none',
+                  transition: 'box-shadow 0.15s',
+                }}
+              />
+            </Tooltip>
+          ))}
+
+          <Divider flexItem sx={{ borderColor: 'rgba(255,255,255,0.12)', my: 0.25 }} />
+
+          {/* Undo / Redo / Löschen */}
+          <ToolBtn title="Rükgängig" onClick={onUndo} disabled={!canUndo}>
+            <UndoIcon fontSize="small" />
+          </ToolBtn>
+          <ToolBtn title="Wiederholen" onClick={onRedo} disabled={!canRedo}>
+            <RedoIcon fontSize="small" />
+          </ToolBtn>
+          <ToolBtn
+            title={selectedId ? 'Ausgewähltes löschen' : 'Nichts ausgewählt'}
+            onClick={onDeleteSelected}
+            disabled={!selectedId}
+          >
+            <DeleteIcon fontSize="small" />
+          </ToolBtn>
+
+          <Divider flexItem sx={{ borderColor: 'rgba(255,255,255,0.12)', my: 0.25 }} />
+
+          {/* Gegner hinzufügen */}
+          {fullPitch && (
+            <Tooltip title="Gegner-Token hinzufügen" placement="right" arrow>
+              <Box onClick={onAddOpponent} sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 36, height: 36, borderRadius: 1.5, cursor: 'pointer',
+                bgcolor: 'rgba(244,67,54,0.15)', border: '1px solid rgba(244,67,54,0.4)',
+                color: '#ff8a80', flexShrink: 0,
+                '&:hover': { bgcolor: 'rgba(244,67,54,0.28)' },
+                transition: 'background 0.15s',
+              }}>
+                <PersonAddIcon sx={{ fontSize: 18 }} />
+              </Box>
+            </Tooltip>
+          )}
+
+          {/* Halb-/Volles Feld */}
+          <Tooltip title={fullPitch ? 'Halbes Feld anzeigen' : 'Volles Feld anzeigen'} placement="right" arrow>
+            <Box onClick={() => setFullPitch(v => !v)} sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: 1.5, cursor: 'pointer',
+              bgcolor: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)',
+              color: 'rgba(255,255,255,0.75)', fontSize: '0.85rem',
+              flexShrink: 0,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.14)' },
+              transition: 'background 0.15s',
+            }}>
+              {fullPitch ? '⬛' : '⬜'}
+            </Box>
+          </Tooltip>
+
+          {/* Präsentationsmodus */}
+          <Tooltip title={presentationMode ? 'Präsentation beenden' : 'Präsentationsmodus'} placement="right" arrow>
+            <Box
+              role="button"
+              aria-label={presentationMode ? 'Präsentationsmodus beenden' : 'Präsentationsmodus starten'}
+              onClick={onTogglePresentationMode} sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: 1.5, cursor: 'pointer',
+              bgcolor: presentationMode ? 'rgba(33,150,243,0.28)' : 'rgba(255,255,255,0.07)',
+              border: `1px solid ${presentationMode ? 'rgba(33,150,243,0.7)' : 'rgba(255,255,255,0.18)'}`,
+              color: presentationMode ? 'primary.light' : 'rgba(255,255,255,0.75)',
+              flexShrink: 0,
+              '&:hover': { bgcolor: presentationMode ? 'rgba(33,150,243,0.38)' : 'rgba(255,255,255,0.14)' },
+              transition: 'background 0.15s',
+            }}>
+              <PresentToAllIcon sx={{ fontSize: 18 }} />
+            </Box>
+          </Tooltip>
+        </Box>
+      </>
+    );
+  }
 
   return (
   <>
@@ -257,7 +377,7 @@ export const TacticsToolbar: React.FC<TacticsToolbarProps> = ({
           <Box
             onClick={() => setColor(c.value)}
             sx={{
-              width: 22, height: 22, borderRadius: '50%',
+              width: { xs: 32, md: 22 }, height: { xs: 32, md: 22 }, borderRadius: '50%',
               bgcolor: c.value, cursor: 'pointer', flexShrink: 0,
               border: color === c.value
                 ? '2.5px solid white'
