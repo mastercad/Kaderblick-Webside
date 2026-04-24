@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Button, Box, Typography, Alert, CircularProgress, TextField, MenuItem, Chip, Tooltip,
+  Button, Box, Typography, CircularProgress, TextField, MenuItem, Chip, Tooltip,
   Paper, Stack, Switch, FormControlLabel,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material';
@@ -76,10 +76,16 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({
     initialShowTemplatePicker,
   );
   const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const [errorDialogDismissed, setErrorDialogDismissed] = useState(false);
 
   useEffect(() => {
     if (!open) setShowCloseWarning(false);
   }, [open]);
+
+  // Reset dismissed state whenever a new error arrives
+  useEffect(() => {
+    if (editor.error) setErrorDialogDismissed(false);
+  }, [editor.error]);
 
   const handleCloseRequest = useCallback(() => {
     if (editor.isDirty) {
@@ -167,9 +173,24 @@ const FormationEditModal: React.FC<FormationEditModalProps> = ({
       {editor.loading && (
         <Box display="flex" justifyContent="center" mb={2}><CircularProgress /></Box>
       )}
-      {editor.error && (
-        <Alert severity="error" sx={{ mb: 2 }}>{editor.error}</Alert>
-      )}
+
+      {/* Error dialog – shown regardless of scroll position */}
+      <Dialog
+        open={Boolean(editor.error) && !errorDialogDismissed}
+        onClose={() => setErrorDialogDismissed(true)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Fehler beim Speichern</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{editor.error}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setErrorDialogDismissed(true)} variant="contained" color="primary" autoFocus>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Name + Team */}
       <Box display="flex" gap={2} mb={2} mt={1}>

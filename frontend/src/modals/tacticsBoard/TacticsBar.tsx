@@ -1,9 +1,120 @@
 // ─── TacticsBoard – tactic tab bar ────────────────────────────────────────────
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Box, Typography, Tooltip } from '@mui/material';
 import BookmarksIcon from '@mui/icons-material/BookmarksOutlined';
 import { PresetPicker } from './PresetPicker';
 import type { TacticEntry, TacticPreset } from './types';
+
+// ─── TacticItem (vertical mode) – handles long-press rename ─────────────────
+
+interface TacticItemProps {
+  tactic: TacticEntry;
+  isActive: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  canDelete: boolean;
+  onSelect: () => void;
+  onStartRename: () => void;
+  onRenameChange: (v: string) => void;
+  onConfirmRename: () => void;
+  onCancelRename: () => void;
+  onDelete: () => void;
+}
+
+const LONG_PRESS_MS = 500;
+
+const TacticItem: React.FC<TacticItemProps> = ({
+  tactic, isActive, isRenaming, renameValue, canDelete,
+  onSelect, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete,
+}) => {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+
+  const startPress = useCallback(() => {
+    didLongPress.current = false;
+    timerRef.current = setTimeout(() => {
+      didLongPress.current = true;
+      onStartRename();
+    }, LONG_PRESS_MS);
+  }, [onStartRename]);
+
+  const cancelPress = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (didLongPress.current) return; // already handled by long-press
+    onSelect();
+  }, [onSelect]);
+
+  return (
+    <Box
+      onPointerDown={startPress}
+      onPointerUp={cancelPress}
+      onPointerLeave={cancelPress}
+      onClick={handleClick}
+      sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5,
+        px: 1, py: 0.75,
+        bgcolor: isActive ? 'rgba(33,150,243,0.2)' : 'rgba(255,255,255,0.05)',
+        border: `1px solid ${isActive ? 'rgba(33,150,243,0.5)' : 'rgba(255,255,255,0.1)'}`,
+        borderRadius: '8px', cursor: 'pointer',
+        transition: 'all 0.15s',
+        '&:hover': { bgcolor: isActive ? 'rgba(33,150,243,0.28)' : 'rgba(255,255,255,0.1)' },
+        flexShrink: 0,
+      }}
+    >
+      {isRenaming ? (
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={e => onRenameChange(e.target.value)}
+          onFocus={e => e.target.select()}
+          onBlur={onConfirmRename}
+          onKeyDown={e => {
+            if (e.key === 'Enter')  onConfirmRename();
+            if (e.key === 'Escape') onCancelRename();
+          }}
+          style={{
+            background: 'transparent', border: 'none', outline: 'none',
+            color: 'white', fontSize: '0.72rem', fontWeight: 700,
+            width: '100%', minWidth: 0,
+          }}
+        />
+      ) : (
+        <Typography
+          variant="caption"
+          onDoubleClick={e => { e.stopPropagation(); onStartRename(); }}
+          sx={{
+            fontWeight: isActive ? 700 : 500,
+            color: isActive ? 'primary.light' : 'rgba(255,255,255,0.55)',
+            fontSize: '0.72rem', lineHeight: 1.3, userSelect: 'none',
+            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {tactic.name}
+        </Typography>
+      )}
+      {canDelete && (
+        <Box
+          onClick={e => { e.stopPropagation(); onDelete(); }}
+          sx={{
+            width: 18, height: 18, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: '50%', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.35)', fontSize: '0.9rem', lineHeight: 1,
+            '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.12)' },
+          }}
+        >
+          ×
+        </Box>
+      )}
+    </Box>
+  );
+};
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -49,70 +160,22 @@ export const TacticsBar: React.FC<TacticsBarProps> = ({
         </Typography>
 
         <Box sx={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0.5, px: 0.75 }}>
-          {tactics.map(tactic => {
-            const isActive = tactic.id === activeTacticId;
-            return (
-              <Box
-                key={tactic.id}
-                onClick={() => onSelect(tactic.id)}
-                sx={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5,
-                  px: 1, py: 0.75,
-                  bgcolor: isActive ? 'rgba(33,150,243,0.2)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${isActive ? 'rgba(33,150,243,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                  borderRadius: '8px', cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  '&:hover': { bgcolor: isActive ? 'rgba(33,150,243,0.28)' : 'rgba(255,255,255,0.1)' },
-                  flexShrink: 0,
-                }}
-              >
-                {renamingId === tactic.id ? (
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    onChange={e => onRenameChange(e.target.value)}
-                    onBlur={onConfirmRename}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter')  onConfirmRename();
-                      if (e.key === 'Escape') onCancelRename();
-                    }}
-                    style={{
-                      background: 'transparent', border: 'none', outline: 'none',
-                      color: 'white', fontSize: '0.72rem', fontWeight: 700,
-                      width: '100%', minWidth: 0,
-                    }}
-                  />
-                ) : (
-                  <Typography
-                    variant="caption"
-                    onDoubleClick={e => { e.stopPropagation(); onStartRename(tactic.id, tactic.name); }}
-                    sx={{
-                      fontWeight: isActive ? 700 : 500,
-                      color: isActive ? 'primary.light' : 'rgba(255,255,255,0.55)',
-                      fontSize: '0.72rem', lineHeight: 1.3, userSelect: 'none',
-                      flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {tactic.name}
-                  </Typography>
-                )}
-                {tactics.length > 1 && (
-                  <Box
-                    onClick={e => { e.stopPropagation(); onDelete(tactic.id); }}
-                    sx={{
-                      width: 18, height: 18, flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      borderRadius: '50%', cursor: 'pointer',
-                      color: 'rgba(255,255,255,0.35)', fontSize: '0.9rem', lineHeight: 1,
-                      '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.12)' },
-                    }}
-                  >
-                    ×
-                  </Box>
-                )}
-              </Box>
-            );
-          })}
+          {tactics.map(tactic => (
+            <TacticItem
+              key={tactic.id}
+              tactic={tactic}
+              isActive={tactic.id === activeTacticId}
+              isRenaming={renamingId === tactic.id}
+              renameValue={renameValue}
+              canDelete={tactics.length > 1}
+              onSelect={() => onSelect(tactic.id)}
+              onStartRename={() => onStartRename(tactic.id, tactic.name)}
+              onRenameChange={onRenameChange}
+              onConfirmRename={onConfirmRename}
+              onCancelRename={onCancelRename}
+              onDelete={() => onDelete(tactic.id)}
+            />
+          ))}
         </Box>
 
         {/* Add tactic button */}

@@ -555,7 +555,8 @@ export function useTacticsBoard(
 
     let nextTactics = loaded;
     let nextActiveTacticId = loaded[0].id;
-    let nextFullPitch = true;
+    // Read the persisted pitch mode; fall back to true (full pitch) only if never saved.
+    let nextFullPitch = typeof fd?.tacticsBoardFullPitch === 'boolean' ? fd.tacticsBoardFullPitch : true;
     let restoredLocalDraft = false;
 
     if (formation?.id) {
@@ -737,6 +738,7 @@ export function useTacticsBoard(
       const updatedFormationData = {
         ...formation.formationData,
         tacticsBoardDataArr: boardDataArr,
+        tacticsBoardFullPitch: fullPitch,
       };
       const resp = await apiJson<{ formation: Formation }>(`/formation/${formation.id}/edit`, {
         method: 'POST',
