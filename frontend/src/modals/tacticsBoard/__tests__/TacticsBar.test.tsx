@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TacticsBar } from '../TacticsBar';
 import type { TacticEntry } from '../types';
 
@@ -93,6 +93,114 @@ describe('TacticsBar', () => {
     const onCancelRename = jest.fn();
     render(<TacticsBar {...defaultProps} renamingId="a" renameValue="X" onCancelRename={onCancelRename} />);
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+    expect(onCancelRename).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Vertical mode (TacticItem) ───────────────────────────────────────────────
+
+describe('TacticsBar – vertical mode (TacticItem)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('long-press (≥ 500 ms) calls onStartRename with correct id and name', () => {
+    const onStartRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onStartRename={onStartRename} />);
+
+    fireEvent.pointerDown(screen.getByText('Pressing'));
+    act(() => { jest.advanceTimersByTime(500); });
+
+    expect(onStartRename).toHaveBeenCalledWith('a', 'Pressing');
+  });
+
+  it('short press (< 500 ms) does NOT call onStartRename', () => {
+    const onStartRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onStartRename={onStartRename} />);
+
+    fireEvent.pointerDown(screen.getByText('Pressing'));
+    act(() => { jest.advanceTimersByTime(499); });
+    fireEvent.pointerUp(screen.getByText('Pressing'));
+
+    expect(onStartRename).not.toHaveBeenCalled();
+  });
+
+  it('short press + click calls onSelect', () => {
+    const onSelect = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onSelect={onSelect} />);
+
+    fireEvent.pointerDown(screen.getByText('Pressing'));
+    act(() => { jest.advanceTimersByTime(100); });
+    fireEvent.pointerUp(screen.getByText('Pressing'));
+    fireEvent.click(screen.getByText('Pressing'));
+
+    expect(onSelect).toHaveBeenCalledWith('a');
+  });
+
+  it('click immediately after long-press does NOT call onSelect', () => {
+    const onSelect = jest.fn();
+    const onStartRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onSelect={onSelect} onStartRename={onStartRename} />);
+
+    fireEvent.pointerDown(screen.getByText('Pressing'));
+    act(() => { jest.advanceTimersByTime(500); });
+    fireEvent.click(screen.getByText('Pressing'));
+
+    expect(onStartRename).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('pointer leave cancels a pending long-press', () => {
+    const onStartRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onStartRename={onStartRename} />);
+
+    fireEvent.pointerDown(screen.getByText('Pressing'));
+    fireEvent.pointerLeave(screen.getByText('Pressing'));
+    act(() => { jest.advanceTimersByTime(600); });
+
+    expect(onStartRename).not.toHaveBeenCalled();
+  });
+
+  it('double-click calls onStartRename', () => {
+    const onStartRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical onStartRename={onStartRename} />);
+
+    fireEvent.doubleClick(screen.getByText('Pressing'));
+
+    expect(onStartRename).toHaveBeenCalledWith('a', 'Pressing');
+  });
+
+  it('rename input selects all text on focus', () => {
+    const selectSpy = jest.spyOn(HTMLInputElement.prototype, 'select');
+    render(<TacticsBar {...defaultProps} vertical renamingId="a" renameValue="Pressing" />);
+
+    selectSpy.mockClear(); // ignore the autoFocus-triggered call on mount
+    fireEvent.focus(screen.getByRole('textbox'));
+
+    expect(selectSpy).toHaveBeenCalledTimes(1);
+    selectSpy.mockRestore();
+  });
+
+  it('Enter on rename input calls onConfirmRename', () => {
+    const onConfirmRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical renamingId="a" renameValue="X" onConfirmRename={onConfirmRename} />);
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    expect(onConfirmRename).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape on rename input calls onCancelRename', () => {
+    const onCancelRename = jest.fn();
+    render(<TacticsBar {...defaultProps} vertical renamingId="a" renameValue="X" onCancelRename={onCancelRename} />);
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+
     expect(onCancelRename).toHaveBeenCalledTimes(1);
   });
 });

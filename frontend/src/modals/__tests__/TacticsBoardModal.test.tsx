@@ -412,3 +412,71 @@ describe('TacticsBoardModal – close warning dialog (isDirty=true)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sidebar strip labels ("TOOLS" / "TAKTIKEN")
+// ─────────────────────────────────────────────────────────────────────────────
+describe('TacticsBoardModal – sidebar strip labels', () => {
+  it('renders the "TOOLS" label on the left toggle strip', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    expect(screen.getByText('TOOLS')).toBeInTheDocument();
+  });
+
+  it('renders the "TAKTIKEN" label on the right toggle strip', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    expect(screen.getByText('TAKTIKEN')).toBeInTheDocument();
+  });
+
+  it('"TOOLS" label is hidden in presentation mode', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    enterPresentationMode();
+    expect(screen.queryByText('TOOLS')).not.toBeInTheDocument();
+  });
+
+  it('"TAKTIKEN" label is hidden in presentation mode', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    enterPresentationMode();
+    expect(screen.queryByText('TAKTIKEN')).not.toBeInTheDocument();
+  });
+
+  it('"TOOLS" label remains after the left sidebar is toggled closed', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    fireEvent.click(screen.getByLabelText('Linke Werkzeugleiste schließen'));
+    // Strip itself stays rendered – it is the toggle handle
+    expect(screen.getByText('TOOLS')).toBeInTheDocument();
+  });
+
+  it('"TAKTIKEN" label remains after the right sidebar is toggled open', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    fireEvent.click(screen.getByLabelText('Rechte Taktikleiste öffnen'));
+    expect(screen.getByText('TAKTIKEN')).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Close/Save button position when right panel is open
+// ─────────────────────────────────────────────────────────────────────────────
+describe('TacticsBoardModal – close button stays in DOM with right panel open', () => {
+  it('close button remains in DOM after opening the right sidebar', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    fireEvent.click(screen.getByLabelText('Rechte Taktikleiste öffnen'));
+    // Button shifts right via CSS (right: 202) but is NOT unmounted
+    expect(screen.getByLabelText('Board schließen')).toBeInTheDocument();
+  });
+
+  it('close button is still functional after opening the right sidebar', () => {
+    const onClose = jest.fn();
+    mockBoardClean();
+    render(<TacticsBoardModal {...defaultProps} onClose={onClose} />);
+    fireEvent.click(screen.getByLabelText('Rechte Taktikleiste öffnen'));
+    fireEvent.click(screen.getByLabelText('Board schließen'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('close button stays in DOM when right panel is closed again', () => {
+    render(<TacticsBoardModal {...defaultProps} />);
+    fireEvent.click(screen.getByLabelText('Rechte Taktikleiste öffnen'));
+    fireEvent.click(screen.getByLabelText('Rechte Taktikleiste schließen'));
+    expect(screen.getByLabelText('Board schließen')).toBeInTheDocument();
+  });
+});

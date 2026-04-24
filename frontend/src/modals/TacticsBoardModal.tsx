@@ -222,7 +222,7 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
 
         {/* ── Formation name – top left ─────────────────────────────────── */}
         {!isPresentationMode && (board.formationName || board.formationCode || formation?.formationType?.name) && (
-        <Box sx={{ position: 'absolute', top: 10, left: leftBarOpen ? 76 : 10, zIndex: 90, display: 'flex', alignItems: 'center', gap: 0.75, pointerEvents: 'none', transition: 'left 0.2s cubic-bezier(0.4,0,0.2,1)' }}>
+        <Box sx={{ position: 'absolute', top: 10, left: leftBarOpen ? 82 : 10, zIndex: 90, display: 'flex', alignItems: 'center', gap: 0.75, pointerEvents: 'none', transition: 'left 0.2s cubic-bezier(0.4,0,0.2,1)' }}>
           {(board.formationName || formation?.formationType?.name) && (
             <Typography variant="body2" fontWeight={700} sx={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1, userSelect: 'none' }}>
               {board.formationName || formation?.formationType?.name}
@@ -237,10 +237,10 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
         {/* ── Floating action buttons – top right (slides up to hide) ─────── */}
         {!isPresentationMode && (
         <Box sx={{
-          position: 'absolute', top: 0, right: 10, zIndex: 100,
+          position: 'absolute', top: 0, right: rightBarOpen ? 202 : 10, zIndex: 100,
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
           transform: topActionsVisible ? 'translateY(0)' : 'translateY(calc(-100% + 14px))',
-          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1), right 0.2s cubic-bezier(0.4,0,0.2,1)',
         }}>
           {/* Buttons */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pt: 1.25 }}>
@@ -352,9 +352,10 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
             role="button"
             aria-label={leftBarOpen ? 'Linke Werkzeugleiste schließen' : 'Linke Werkzeugleiste öffnen'}
             onClick={() => setLeftBarOpen(v => !v)}
-            sx={{ position: 'absolute', left: leftBarOpen ? 52 : 0, top: 0, bottom: 0, width: 16, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', bgcolor: leftBarOpen ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)', borderLeft: '1px solid rgba(255,255,255,0.08)', '&:hover': { bgcolor: 'rgba(255,255,255,0.09)' }, transition: 'background 0.15s, left 0.2s' }}
+            sx={{ position: 'absolute', left: leftBarOpen ? 52 : 0, top: 0, bottom: 0, width: 22, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5, cursor: 'pointer', bgcolor: leftBarOpen ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)', borderLeft: '1px solid rgba(255,255,255,0.12)', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }, transition: 'background 0.15s, left 0.2s' }}
           >
-            <ChevronLeftIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', transform: leftBarOpen ? 'none' : 'scaleX(-1)', transition: 'transform 0.2s' }} />
+            <ChevronLeftIcon sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', transform: leftBarOpen ? 'none' : 'scaleX(-1)', transition: 'transform 0.2s' }} />
+            <Typography sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: '0.5rem', fontWeight: 700, letterSpacing: 1.5, color: 'rgba(255,255,255,0.45)', userSelect: 'none' }}>TOOLS</Typography>
           </Box>
         )}
 
@@ -364,9 +365,10 @@ const TacticsBoardModal: React.FC<TacticsBoardModalProps> = ({
             role="button"
             aria-label={rightBarOpen ? 'Rechte Taktikleiste schließen' : 'Rechte Taktikleiste öffnen'}
             onClick={() => setRightBarOpen(v => !v)}
-            sx={{ position: 'absolute', right: rightBarOpen ? 180 : 0, top: 0, bottom: 0, width: 16, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', bgcolor: rightBarOpen ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.08)', '&:hover': { bgcolor: 'rgba(255,255,255,0.09)' }, transition: 'background 0.15s, right 0.2s' }}
+            sx={{ position: 'absolute', right: rightBarOpen ? 180 : 0, top: 0, bottom: 0, width: 22, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5, cursor: 'pointer', bgcolor: rightBarOpen ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)', borderRight: '1px solid rgba(255,255,255,0.12)', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }, transition: 'background 0.15s, right 0.2s' }}
           >
-            <ChevronRightIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', transform: rightBarOpen ? 'scaleX(-1)' : 'none', transition: 'transform 0.2s' }} />
+            <Typography sx={{ writingMode: 'vertical-rl', fontSize: '0.5rem', fontWeight: 700, letterSpacing: 1.5, color: 'rgba(255,255,255,0.45)', userSelect: 'none' }}>TAKTIKEN</Typography>
+            <ChevronRightIcon sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', transform: rightBarOpen ? 'scaleX(-1)' : 'none', transition: 'transform 0.2s' }} />
           </Box>
         )}
 
