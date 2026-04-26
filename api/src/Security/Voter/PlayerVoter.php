@@ -56,15 +56,12 @@ final class PlayerVoter extends Voter
                     break;
                 }
 
-                if (self::CREATE === $attribute) {
-                    // Neuer Spieler hat noch kein Team – jeder aktive Coach darf anlegen
+                if (self::CREATE === $attribute || self::EDIT === $attribute) {
+                    // Neuer Spieler hat noch kein Team – jeder aktive Coach darf anlegen.
+                    // Beim Bearbeiten gilt dasselbe: Was der Coach tatsächlich ändern darf,
+                    // wird im Controller per isFullScope geprüft. So können Coaches auch
+                    // Testspieler/Leihgaben aus anderen Vereinen ihrem Team zuordnen.
                     return true;
-                }
-
-                foreach ($subject->getPlayerTeamAssignments() as $pta) {
-                    if (isset($coachTeams[$pta->getTeam()->getId()])) {
-                        return true;
-                    }
                 }
 
                 break;

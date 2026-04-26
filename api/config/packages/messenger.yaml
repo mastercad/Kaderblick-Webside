@@ -16,6 +16,7 @@ framework:
         routing:
             # Route your messages to the transports
             # 'App\Message\YourMessage': async
+            'App\Message\RecalcPlayerStatsMessage': async
 
 # when@test:
 #    framework:

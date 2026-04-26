@@ -17,6 +17,8 @@ use App\Repository\PlayerNationalityAssignmentRepository;
 use App\Repository\PlayerTeamAssignmentRepository;
 use App\Security\Voter\PlayerVoter;
 use App\Service\CoachTeamPlayerService;
+use App\Service\NotificationService;
+use App\Service\PlayerSerializerService;
 use DateTime;
 use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -34,7 +36,9 @@ class PlayersController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private CoachTeamPlayerService $coachTeamPlayerService
+        private CoachTeamPlayerService $coachTeamPlayerService,
+        private NotificationService $notificationService,
+        private PlayerSerializerService $playerSerializer
     ) {
     }
 
@@ -62,6 +66,8 @@ class PlayersController extends AbstractController
             $availableSeasons[] = $y;
         }
 
+        $searchAll = filter_var($request->query->get('searchAll', false), FILTER_VALIDATE_BOOLEAN);
+
         $repo = $this->entityManager->getRepository(Player::class);
         $qb = $repo->createQueryBuilder('p');
 
@@ -71,21 +77,28 @@ class PlayersController extends AbstractController
         $coachTeamIds = array_keys($this->coachTeamPlayerService->collectCoachTeams($user));
         $isCoach = count($coachTeamIds) > 0;
 
-        // Always join PTA to filter by season
-        $qb->innerJoin('p.playerTeamAssignments', 'pta')
-           ->andWhere('pta.startDate <= :seasonEnd')
-           ->andWhere('pta.endDate IS NULL OR pta.endDate >= :seasonStart')
-           ->setParameter('seasonStart', $seasonStart)
-           ->setParameter('seasonEnd', $seasonEnd);
+        if ($searchAll) {
+            // Spieler-Suche quer über alle Saisons und Vereine (z. B. für "Spieler zuordnen"-Dialog,
+            // Leihgaben, Testspieler). Kein Team-Filter – die Schreibrechte werden in update() geprüft.
+            // leftJoin damit auch Spieler ohne jede Zuordnung gefunden werden.
+            $qb->leftJoin('p.playerTeamAssignments', 'pta');
+        } else {
+            // Normaler Modus: innerJoin + Saison-Filter
+            $qb->innerJoin('p.playerTeamAssignments', 'pta')
+               ->andWhere('pta.startDate <= :seasonEnd')
+               ->andWhere('pta.endDate IS NULL OR pta.endDate >= :seasonStart')
+               ->setParameter('seasonStart', $seasonStart)
+               ->setParameter('seasonEnd', $seasonEnd);
 
-        // Additionally filter by team or coach scope
-        if ($teamId) {
-            $qb->andWhere('pta.team = :teamId')
-               ->setParameter('teamId', (int) $teamId);
-        } elseif (!$isAdmin && $isCoach) {
-            // Coach sieht nur Spieler aus seinen aktiv zugeordneten Teams
-            $qb->andWhere('pta.team IN (:coachTeamIds)')
-               ->setParameter('coachTeamIds', $coachTeamIds);
+            // Additionally filter by team or coach scope
+            if ($teamId) {
+                $qb->andWhere('pta.team = :teamId')
+                   ->setParameter('teamId', (int) $teamId);
+            } elseif (!$isAdmin && $isCoach) {
+                // Coach sieht nur Spieler aus seinen aktiv zugeordneten Teams
+                $qb->andWhere('pta.team IN (:coachTeamIds)')
+                   ->setParameter('coachTeamIds', $coachTeamIds);
+            }
         }
 
         // Filter by search (firstName / lastName)
@@ -199,73 +212,7 @@ class PlayersController extends AbstractController
             return $this->json(['error' => 'Zugriff verweigert'], Response::HTTP_FORBIDDEN);
         }
 
-        return $this->json([
-            'player' => [
-                'id' => $player->getId(),
-                'firstName' => $player->getFirstName(),
-                'lastName' => $player->getLastName(),
-                'fullName' => $player->getFullName(),
-                'birthdate' => $player->getBirthdate()?->format('Y-m-d'),
-                'height' => $player->getHeight(),
-                'weight' => $player->getWeight(),
-                'strongFeet' => [
-                    'id' => $player->getStrongFoot()?->getId(),
-                    'name' => $player->getStrongFoot()?->getName()
-                ],
-                'mainPosition' => [
-                    'id' => $player->getMainPosition()->getId(),
-                    'name' => $player->getMainPosition()->getName()
-                ],
-                'alternativePositions' => array_map(fn ($position) => [
-                    'id' => $position->getId(),
-                    'name' => $position->getName()
-                ], $player->getAlternativePositions()->toArray()),
-                'clubAssignments' => array_map(fn ($assignment) => [
-                    'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
-                    'club' => [
-                        'id' => $assignment->getClub()->getId(),
-                        'name' => $assignment->getClub()->getName()
-                    ]
-                ], $player->getPlayerClubAssignments()->toArray()),
-                'nationalityAssignments' => array_map(fn ($assignment) => [
-                    'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
-                    'nationality' => [
-                        'id' => $assignment->getNationality()->getId(),
-                        'name' => $assignment->getNationality()->getName()
-                    ]
-                ], $player->getPlayerNationalityAssignments()->toArray()),
-                'teamAssignments' => array_map(fn ($assignment) => [
-                    'id' => $assignment->getId(),
-                    'startDate' => $assignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $assignment->getEndDate()?->format('Y-m-d'),
-                    'shirtNumber' => $assignment->getShirtNumber(),
-                    'team' => [
-                        'id' => $assignment->getTeam()->getId(),
-                        'name' => $assignment->getTeam()->getName(),
-                        'ageGroup' => [
-                            'id' => $assignment->getTeam()->getAgeGroup()->getId(),
-                            'name' => $assignment->getTeam()->getAgeGroup()->getName()
-                        ]
-                    ],
-                    'type' => [
-                        'id' => $assignment->getPlayerTeamAssignmentType()?->getId(),
-                        'name' => $assignment->getPlayerTeamAssignmentType()?->getName()
-                    ]
-                ], $player->getPlayerTeamAssignments()->toArray()),
-                'fussballDeUrl' => $player->getFussballDeUrl(),
-                'fussballDeId' => $player->getFussballDeId(),
-                'permissions' => [
-                    'canView' => $this->isGranted(PlayerVoter::VIEW, $player),
-                    'canEdit' => $this->isGranted(PlayerVoter::EDIT, $player),
-                    'canCreate' => $this->isGranted(PlayerVoter::CREATE, $player),
-                    'canDelete' => $this->isGranted(PlayerVoter::DELETE, $player)
-                ]
-            ]
-        ]);
+        return $this->json(['player' => $this->playerSerializer->serializeForCurrentUser($player)]);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
@@ -371,28 +318,54 @@ class PlayersController extends AbstractController
 
         $data = json_decode($request->getContent(), true);
 
-        $player->setFirstName($data['firstName']);
-        $player->setLastName($data['lastName']);
-        $player->setEmail($data['email'] ?? '');
-        $player->setBirthdate(isset($data['birthdate']) ? new DateTime($data['birthdate']) : null);
+        /** @var \App\Entity\User $updateUser */
+        $updateUser = $this->getUser();
+        $updateIsAdmin = $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_SUPERADMIN');
+        $updateCoachTeamIds = array_keys($this->coachTeamPlayerService->collectCoachTeams($updateUser));
 
-        if (isset($data['mainPosition']['id'])) {
-            $mainPosition = $this->entityManager->getRepository(Position::class)->find($data['mainPosition']['id']);
-            $player->setMainPosition($mainPosition);
-        }
+        // Compute full scope BEFORE any assignments are modified.
+        // Full scope = admin OR all of the player's *active* PTAs are in the coach's teams.
+        // Active = endDate IS NULL or endDate >= today. Historical PTAs from previous clubs
+        // are deliberately excluded so that a fully transferred player (all old PTAs ended)
+        // can be claimed by the new club's coach without admin involvement.
+        // An empty active PTA list (brand-new or fully transferred player) also yields full scope.
+        $updateNow = new DateTime('today');
+        $updateActiveAssignments = array_filter(
+            $player->getPlayerTeamAssignments()->toArray(),
+            fn ($pta) => null === $pta->getEndDate() || $pta->getEndDate() >= $updateNow
+        );
+        $updatePlayerTeamIds = array_map(
+            fn ($pta) => $pta->getTeam()->getId(),
+            $updateActiveAssignments
+        );
+        $updateIsFullScope = $updateIsAdmin
+            || 0 === count(array_diff($updatePlayerTeamIds, $updateCoachTeamIds));
 
-        if (isset($data['strongFeet']['id'])) {
-            $strongFeet = $this->entityManager->getRepository(StrongFoot::class)->find($data['strongFeet']['id']);
-            $player->setStrongFoot($strongFeet);
-        }
+        // Stammdaten dürfen nur bei voller Scope-Berechtigung geändert werden
+        if ($updateIsFullScope) {
+            $player->setFirstName($data['firstName']);
+            $player->setLastName($data['lastName']);
+            $player->setEmail($data['email'] ?? '');
+            $player->setBirthdate(isset($data['birthdate']) ? new DateTime($data['birthdate']) : null);
 
-        $newAlternativePositions = [];
-        foreach (($data['alternativePositions'] ?? []) as $alternativePosition) {
-            if (isset($alternativePosition['id']) && !key_exists($alternativePosition['id'], $newAlternativePositions)) {
-                $position = $this->entityManager->getRepository(Position::class)->find($alternativePosition['id']);
-                if ($position && $position !== $player->getMainPosition()) {
-                    $player->addAlternativePosition($position);
-                    $newAlternativePositions[$position->getId()] = $position;
+            if (isset($data['mainPosition']['id'])) {
+                $mainPosition = $this->entityManager->getRepository(Position::class)->find($data['mainPosition']['id']);
+                $player->setMainPosition($mainPosition);
+            }
+
+            if (isset($data['strongFeet']['id'])) {
+                $strongFeet = $this->entityManager->getRepository(StrongFoot::class)->find($data['strongFeet']['id']);
+                $player->setStrongFoot($strongFeet);
+            }
+
+            $newAlternativePositions = [];
+            foreach (($data['alternativePositions'] ?? []) as $alternativePosition) {
+                if (isset($alternativePosition['id']) && !key_exists($alternativePosition['id'], $newAlternativePositions)) {
+                    $position = $this->entityManager->getRepository(Position::class)->find($alternativePosition['id']);
+                    if ($position && $position !== $player->getMainPosition()) {
+                        $player->addAlternativePosition($position);
+                        $newAlternativePositions[$position->getId()] = $position;
+                    }
                 }
             }
         }
@@ -413,92 +386,86 @@ class PlayersController extends AbstractController
             $this->entityManager->getRepository(PlayerClubAssignment::class)->findBy(['player' => $player])
         );
 
-        foreach (($data['clubAssignments'] ?? []) as $clubAssignment) {
-            if (isset($clubAssignment['id']) && isset($clubAssignment['club']) && in_array($clubAssignment['id'], $existingPlayerClubAssignments)) {
-                $existingPlayerClubAssignments = array_filter($existingPlayerClubAssignments, fn ($id) => $id !== $clubAssignment['id']);
-            }
-            if (isset($clubAssignment['id'])) {
-                $playerClubAssignment = $this->entityManager->getRepository(PlayerClubAssignment::class)->find((int) $clubAssignment['id']);
-            } else {
-                $playerClubAssignment = new PlayerClubAssignment();
-            }
-
-            $club = $this->entityManager->getRepository(Club::class)->find($clubAssignment['club']['id']);
-            $playerClubAssignment->setPlayer($player);
-            $playerClubAssignment->setStartDate(isset($clubAssignment['startDate']) ? new DateTime($clubAssignment['startDate']) : null);
-            $playerClubAssignment->setEndDate((isset($clubAssignment['endDate'])
-                && !empty($clubAssignment['endDate'])) ? new DateTime($clubAssignment['endDate']) : null);
-            $playerClubAssignment->setClub($club);
-
-            $this->entityManager->persist($playerClubAssignment);
-        }
-
-        /** @var PlayerClubAssignmentRepository $playerClubAssignmentRepository */
-        $playerClubAssignmentRepository = $this->entityManager->getRepository(PlayerClubAssignment::class);
-        $playerClubAssignmentRepository->deleteByIds($existingPlayerClubAssignments);
-        /*
-                foreach (($data['licenseAssignments'] ?? []) as $licenseAssignment) {
-                    if (isset($licenseAssignment['id'])
-                        && isset($licenseAssignment['license'])
-                        && in_array($licenseAssignment['id'], $existingPlayerLicenseAssignments)
-                    ) {
-                        $existingPlayerLicenseAssignments = array_filter($existingPlayerLicenseAssignments, fn($id) => $id !== $licenseAssignment['id']);
-                    }
-                    if (isset($licenseAssignment['id'])) {
-                        $playerLicenseAssignment = $this->entityManager->getRepository(PlayerLicenseAssignment::class)->find((int) $licenseAssignment['id']);
-                    } else {
-                        $playerLicenseAssignment = new PlayerLicenseAssignment();
-                    }
-
-                    $license = $this->entityManager->getRepository(PlayerLicense::class)->find($licenseAssignment['license']['id']);
-                    $playerLicenseAssignment->setPlayer($player);
-                    $playerLicenseAssignment->setStartDate(isset($licenseAssignment['startDate']) ? new DateTime($licenseAssignment['startDate']) : null);
-                    $playerLicenseAssignment->setEndDate(isset($licenseAssignment['endDate']) ? new DateTime($licenseAssignment['endDate']) : null);
-                    $playerLicenseAssignment->setLicense($license);
-
-                    $this->entityManager->persist($playerLicenseAssignment);
+        // Club- und Nationalitäten-Assignments: nur bei voller Scope-Berechtigung veränderbar
+        if ($updateIsFullScope) {
+            foreach (($data['clubAssignments'] ?? []) as $clubAssignment) {
+                if (isset($clubAssignment['id']) && isset($clubAssignment['club']) && in_array($clubAssignment['id'], $existingPlayerClubAssignments)) {
+                    $existingPlayerClubAssignments = array_filter($existingPlayerClubAssignments, fn ($id) => $id !== $clubAssignment['id']);
+                }
+                if (isset($clubAssignment['id'])) {
+                    $playerClubAssignment = $this->entityManager->getRepository(PlayerClubAssignment::class)->find((int) $clubAssignment['id']);
+                } else {
+                    $playerClubAssignment = new PlayerClubAssignment();
                 }
 
-                $this->entityManager->getRepository(PlayerLicenseAssignment::class)->deleteByIds($existingPlayerLicenseAssignments);
-        */
-        foreach (($data['nationalityAssignments'] ?? []) as $nationalityAssignment) {
-            if (
-                isset($nationalityAssignment['id'])
-                && isset($nationalityAssignment['nationality'])
-                && in_array($nationalityAssignment['id'], $existingPlayerNationalities)
-            ) {
-                $existingPlayerNationalities = array_filter($existingPlayerNationalities, fn ($id) => $id !== $nationalityAssignment['id']);
-            }
-            if (isset($nationalityAssignment['id'])) {
-                $playerNationalityAssignment = $this->entityManager->getRepository(PlayerNationalityAssignment::class)->find((int) $nationalityAssignment['id']);
-            } else {
-                $playerNationalityAssignment = new PlayerNationalityAssignment();
+                $club = $this->entityManager->getRepository(Club::class)->find($clubAssignment['club']['id']);
+                $playerClubAssignment->setPlayer($player);
+                $playerClubAssignment->setStartDate(isset($clubAssignment['startDate']) ? new DateTime($clubAssignment['startDate']) : null);
+                $playerClubAssignment->setEndDate((isset($clubAssignment['endDate'])
+                    && !empty($clubAssignment['endDate'])) ? new DateTime($clubAssignment['endDate']) : null);
+                $playerClubAssignment->setClub($club);
+
+                $this->entityManager->persist($playerClubAssignment);
             }
 
-            $nationality = $this->entityManager->getRepository(Nationality::class)->find($nationalityAssignment['nationality']['id']);
-            $playerNationalityAssignment->setPlayer($player);
-            $playerNationalityAssignment->setStartDate(isset($nationalityAssignment['startDate']) ? new DateTime($nationalityAssignment['startDate']) : null);
-            $playerNationalityAssignment->setEndDate((isset($nationalityAssignment['endDate'])
-                && !empty($nationalityAssignment['endDate'])) ? new DateTime($nationalityAssignment['endDate']) : null);
-            $playerNationalityAssignment->setNationality($nationality);
+            /** @var PlayerClubAssignmentRepository $playerClubAssignmentRepository */
+            $playerClubAssignmentRepository = $this->entityManager->getRepository(PlayerClubAssignment::class);
+            $playerClubAssignmentRepository->deleteByIds($existingPlayerClubAssignments);
 
-            $this->entityManager->persist($playerNationalityAssignment);
+            foreach (($data['nationalityAssignments'] ?? []) as $nationalityAssignment) {
+                if (
+                    isset($nationalityAssignment['id'])
+                    && isset($nationalityAssignment['nationality'])
+                    && in_array($nationalityAssignment['id'], $existingPlayerNationalities)
+                ) {
+                    $existingPlayerNationalities = array_filter($existingPlayerNationalities, fn ($id) => $id !== $nationalityAssignment['id']);
+                }
+                if (isset($nationalityAssignment['id'])) {
+                    $playerNationalityAssignment = $this->entityManager->getRepository(PlayerNationalityAssignment::class)->find((int) $nationalityAssignment['id']);
+                } else {
+                    $playerNationalityAssignment = new PlayerNationalityAssignment();
+                }
+
+                $nationality = $this->entityManager->getRepository(Nationality::class)->find($nationalityAssignment['nationality']['id']);
+                $playerNationalityAssignment->setPlayer($player);
+                $playerNationalityAssignment->setStartDate(isset($nationalityAssignment['startDate']) ? new DateTime($nationalityAssignment['startDate']) : null);
+                $playerNationalityAssignment->setEndDate((isset($nationalityAssignment['endDate'])
+                    && !empty($nationalityAssignment['endDate'])) ? new DateTime($nationalityAssignment['endDate']) : null);
+                $playerNationalityAssignment->setNationality($nationality);
+
+                $this->entityManager->persist($playerNationalityAssignment);
+            }
+
+            /** @var PlayerNationalityAssignmentRepository $playerNationalityAssignmentRepository */
+            $playerNationalityAssignmentRepository = $this->entityManager->getRepository(PlayerNationalityAssignment::class);
+            $playerNationalityAssignmentRepository->deleteByIds($existingPlayerNationalities);
         }
 
-        /** @var PlayerNationalityAssignmentRepository $playerNationalityAssignmentRepository */
-        $playerNationalityAssignmentRepository = $this->entityManager->getRepository(PlayerNationalityAssignment::class);
-        $playerNationalityAssignmentRepository->deleteByIds($existingPlayerNationalities);
+        // Erkennen ob neue Team-Zuordnungen hinzugefügt werden (keine ID = neu)
+        $hasNewTeamAssignments = !empty(array_filter(
+            $data['teamAssignments'] ?? [],
+            fn ($ta) => empty($ta['id'])
+        ));
 
+        // Team-Assignments: immer verarbeitbar, aber nur für Teams die der Coach selbst betreut.
+        // Assignments für fremde Teams werden weder verändert noch gelöscht.
         foreach (($data['teamAssignments'] ?? []) as $teamAssignment) {
-            if (
-                isset($teamAssignment['id'])
-                && isset($teamAssignment['team'])
-                && in_array($teamAssignment['id'], $existingPlayerTeams)
-            ) {
-                $existingPlayerTeams = array_filter($existingPlayerTeams, fn ($id) => $id !== $teamAssignment['id']);
+            // Immer aus der "zu löschenden" Liste herausnehmen, unabhängig vom Scope,
+            // damit fremde PTAs nicht versehentlich gelöscht werden.
+            if (isset($teamAssignment['id']) && in_array((int) $teamAssignment['id'], $existingPlayerTeams)) {
+                $existingPlayerTeams = array_values(array_filter($existingPlayerTeams, fn ($id) => $id !== (int) $teamAssignment['id']));
             }
 
-            $team = $this->entityManager->getRepository(Team::class)->find($teamAssignment['team']['id']);
+            $team = $this->entityManager->getRepository(Team::class)->find($teamAssignment['team']['id'] ?? null);
+            if (!$team) {
+                continue;
+            }
+
+            // Coach darf nur Assignments für seine eigenen Teams schreiben
+            if (!$updateIsAdmin && !in_array($team->getId(), $updateCoachTeamIds)) {
+                continue;
+            }
+
             if (isset($teamAssignment['id'])) {
                 $playerTeamAssignment = $this->entityManager->getRepository(PlayerTeamAssignment::class)->find((int) $teamAssignment['id']);
             } else {
@@ -517,12 +484,29 @@ class PlayersController extends AbstractController
             $this->entityManager->persist($playerTeamAssignment);
         }
 
+        // Nur PTAs löschen, die zu Teams des aktuellen Coaches gehören.
+        // PTAs fremder Teams bleiben immer erhalten.
         /** @var PlayerTeamAssignmentRepository $playerTeamAssignmentRepository */
         $playerTeamAssignmentRepository = $this->entityManager->getRepository(PlayerTeamAssignment::class);
+        if (!$updateIsAdmin) {
+            $existingPlayerTeams = array_values(array_filter($existingPlayerTeams, function (int $ptaId) use ($updateCoachTeamIds): bool {
+                $pta = $this->entityManager->getRepository(PlayerTeamAssignment::class)->find($ptaId);
+
+                return null !== $pta && in_array($pta->getTeam()->getId(), $updateCoachTeamIds);
+            }));
+        }
         $playerTeamAssignmentRepository->deleteByIds($existingPlayerTeams);
 
         $this->entityManager->persist($player);
         $this->entityManager->flush();
+
+        if ($hasNewTeamAssignments) {
+            $this->notifyPlayerUserRelations(
+                $player,
+                'Du wurdest einem Team zugeordnet',
+                'Ein Trainer hat dich einem Team hinzugefügt. Dein Spielerprofil wurde aktualisiert.'
+            );
+        }
 
         return $this->json(['success' => true], Response::HTTP_CREATED);
     }
@@ -558,5 +542,26 @@ class PlayersController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['success' => true]);
+    }
+
+    /**
+     * Sendet eine Benachrichtigung an alle User, die über eine 'self_player'-Relation
+     * mit dem Spieler verknüpft sind.
+     */
+    private function notifyPlayerUserRelations(Player $player, string $title, string $message): void
+    {
+        foreach ($player->getUserRelations() as $userRelation) {
+            if (
+                'player' === $userRelation->getRelationType()->getCategory()
+                && 'self_player' === $userRelation->getRelationType()->getIdentifier()
+            ) {
+                $this->notificationService->createNotification(
+                    $userRelation->getUser(),
+                    'player_assignment',
+                    $title,
+                    $message
+                );
+            }
+        }
     }
 }

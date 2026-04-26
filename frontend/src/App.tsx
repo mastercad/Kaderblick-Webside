@@ -71,6 +71,7 @@ const XpConfig = lazy(() => import('./pages/admin/XpConfig'));
 const Locations = lazy(() => import('./pages/Locations'));
 const Clubs = lazy(() => import('./pages/Clubs'));
 const Players = lazy(() => import('./pages/Players'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
 const Coaches = lazy(() => import('./pages/Coaches'));
 const AgeGroups = lazy(() => import('./pages/AgeGroups'));
 const Positions = lazy(() => import('./pages/Positions'));
@@ -365,6 +366,7 @@ function App() {
                     <Route path="clubs" element={<ProtectedRoute><Clubs /></ProtectedRoute>} />
                     <Route path="coaches" element={<ProtectedRoute><Coaches /></ProtectedRoute>} />
                     <Route path="players" element={<ProtectedRoute><Players /></ProtectedRoute>} />
+                    <Route path="watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
                     <Route path="ageGroups" element={<ProtectedRoute><AgeGroups /></ProtectedRoute>} />
                     <Route path="positions" element={<ProtectedRoute><Positions /></ProtectedRoute>} />
                     <Route path="strongFeets" element={<ProtectedRoute><StrongFeets /></ProtectedRoute>} />

@@ -274,7 +274,7 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u mastercad --password-stdin
             docker pull ghcr.io/mastercad/kaderblick/api:${{ inputs.image_tag || github.sha }}
             docker pull ghcr.io/mastercad/kaderblick/frontend-prod:${{ inputs.image_tag || github.sha }}
-            docker compose -f docker-compose.yml -p production down --remove-orphans --stop-timeout 10 api frontend 2>/dev/null || true
+            docker compose -f docker-compose.yml -p production down --remove-orphans --stop-timeout 10 api frontend worker 2>/dev/null || true
             sleep 2
             # Veraltete NAT-Einträge bereinigen, damit externe Verbindungen (z.B. Google SSO)
             # nach Container-Neustart sofort wieder funktionieren. Nur tote Einträge werden
@@ -284,7 +284,7 @@ jobs:
             IMAGE_TAG=${{ inputs.image_tag || github.sha }} API_IMAGE_TAG=${{ inputs.image_tag || github.sha }} \
             DATABASE_URL="${{ secrets.DATABASE_URL }}" XDEBUG_MODE=off \
             HOST_UID=$(id -u kaderblick-ftp-admin) HOST_GID=$(id -g kaderblick-ftp-admin) \
-            docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend
+            docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend worker
             mkdir -p api/var
             # /usr/local/psa/admin/sbin/httpdmng --reconfigure-all
             /usr/local/psa/admin/sbin/httpdmng --reconfigure-domain kaderblick.de
@@ -346,12 +346,12 @@ jobs:
             OLD=$(cat "${{ secrets.MAIN_PROJECT_PATH }}/.rollback_to" 2>/dev/null || echo "")
             if [ -n "$OLD" ] && [ -d "$OLD" ]; then
               echo "Rollback auf $OLD ..."
-              docker compose -p production down --remove-orphans --stop-timeout 10 api frontend 2>/dev/null || true
+              docker compose -p production down --remove-orphans --stop-timeout 10 api frontend worker 2>/dev/null || true
               sleep 2
               ln -sfn "$OLD" "${{ secrets.MAIN_PROJECT_PATH }}/production_current"
               cd "$OLD"
               IMAGE_TAG=latest API_IMAGE_TAG=latest DATABASE_URL="${{ secrets.DATABASE_URL }}" XDEBUG_MODE=off \
-              docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend 2>/dev/null || true
+              docker compose -f docker-compose.yml -p production up -d --no-build --force-recreate api frontend worker 2>/dev/null || true
               command -v conntrack >/dev/null 2>&1 && conntrack -D -t DNAT 2>/dev/null || true
               command -v conntrack >/dev/null 2>&1 && conntrack -D --state UNREPLIED 2>/dev/null || true
               /usr/local/psa/admin/sbin/httpdmng --reconfigure-all
@@ -443,7 +443,7 @@ jobs:
             docker pull ghcr.io/mastercad/kaderblick/api:${{ inputs.image_tag || github.sha }}
             docker pull ghcr.io/mastercad/kaderblick/frontend-staging:${{ inputs.image_tag || github.sha }}
             docker compose -f docker-compose.yml -f docker-compose.staging.yml -p staging \
-              down --remove-orphans --stop-timeout 10 api frontend 2>/dev/null || true
+              down --remove-orphans --stop-timeout 10 api frontend worker 2>/dev/null || true
             sleep 2
             command -v conntrack >/dev/null 2>&1 && conntrack -D -t DNAT 2>/dev/null || true
             command -v conntrack >/dev/null 2>&1 && conntrack -D --state UNREPLIED 2>/dev/null || true
@@ -453,7 +453,7 @@ jobs:
             PMA_PORT=18082 API_PORT=18081 REACT_PORT=18080 \
             HOST_UID=$(id -u kaderblick-ftp-admin) HOST_GID=$(id -g kaderblick-ftp-admin) \
             docker compose -f docker-compose.yml -f docker-compose.staging.yml -p staging \
-              up -d --no-build --force-recreate api frontend
+              up -d --no-build --force-recreate api frontend worker
             mkdir -p api/var
             # /usr/local/psa/admin/sbin/httpdmng --reconfigure-all
             /usr/local/psa/admin/sbin/httpdmng --reconfigure-domain staging.kaderblick.de
@@ -550,7 +550,7 @@ jobs:
             docker pull ghcr.io/mastercad/kaderblick/api:${{ inputs.image_tag || github.sha }}
             docker pull ghcr.io/mastercad/kaderblick/frontend-demo:${{ inputs.image_tag || github.sha }}
             docker compose -f docker-compose.yml -f docker-compose.demo.yml -p demo \
-              down --remove-orphans --stop-timeout 10 api frontend 2>/dev/null || true
+              down --remove-orphans --stop-timeout 10 api frontend worker 2>/dev/null || true
             sleep 2
             command -v conntrack >/dev/null 2>&1 && conntrack -D -t DNAT 2>/dev/null || true
             command -v conntrack >/dev/null 2>&1 && conntrack -D --state UNREPLIED 2>/dev/null || true
@@ -560,7 +560,7 @@ jobs:
             PMA_PORT=28082 API_PORT=28081 REACT_PORT=28080 \
             HOST_UID=$(id -u kaderblick-ftp-admin) HOST_GID=$(id -g kaderblick-ftp-admin) \
             docker compose -f docker-compose.yml -f docker-compose.demo.yml -p demo \
-              up -d --no-build --force-recreate api frontend
+              up -d --no-build --force-recreate api frontend worker
             mkdir -p api/var
             # /usr/local/psa/admin/sbin/httpdmng --reconfigure-all
             /usr/local/psa/admin/sbin/httpdmng --reconfigure-domain demo.kaderblick.de

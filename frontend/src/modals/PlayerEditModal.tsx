@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button, Box, Typography, TextField, InputAdornment, CircularProgress, Alert, Divider, Chip, Stack, IconButton
 } from '@mui/material';
@@ -43,6 +43,13 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Suche nach bestehendem Spieler (nur relevant beim Neuanlegen, playerId === null)
+    const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+    const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+    const [playerSearchResults, setPlayerSearchResults] = useState<any[]>([]);
+    const [playerSearchLoading, setPlayerSearchLoading] = useState(false);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     
     // Multi-Select States
     const [allClubs, setAllClubs] = useState<Club[]>([]);
@@ -51,6 +58,54 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
     const [allPlayerPositions, setAllPositions] = useState<Position[]>([]);
     const [allStrongFeets, setAllStrongFeets] = useState<StrongFeet[]>([]);
     const [allNationalities, setAllNationalities] = useState<Nationality[]>([]);
+
+    // Debounced Spielersuche (für die "Spieler bereits vorhanden?"-Suche)
+    const handlePlayerSearchInput = useCallback((value: string) => {
+        setPlayerSearchQuery(value);
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        if (value.trim().length < 2) {
+            setPlayerSearchResults([]);
+            return;
+        }
+        searchDebounceRef.current = setTimeout(async () => {
+            setPlayerSearchLoading(true);
+            try {
+                const res = await apiJson(`/api/players?search=${encodeURIComponent(value.trim())}&limit=10&searchAll=1`);
+                setPlayerSearchResults(res.players || []);
+            } catch {
+                setPlayerSearchResults([]);
+            } finally {
+                setPlayerSearchLoading(false);
+            }
+        }, 300);
+    }, []);
+
+    const handleSelectExistingPlayer = useCallback(async (selectedPlayer: any) => {
+        setPlayerSearchQuery('');
+        setPlayerSearchResults([]);
+        setShowPlayerSearch(false);
+        setLoading(true);
+        try {
+            const data = await apiJson(`/api/players/${selectedPlayer.id}`);
+            const p = data.player;
+            if (p && Array.isArray(p.teamAssignments)) {
+                p.teamAssignments = p.teamAssignments.map((a: any) => ({
+                    ...a,
+                    type: a.type && typeof a.type === 'object' ? String(a.type.id)
+                        : a.type !== undefined && a.type !== null ? String(a.type)
+                        : a.team && a.team.type && a.team.type.id ? String(a.team.type.id)
+                        : '',
+                    startDate: toDateInputValue(a.startDate),
+                    endDate: toDateInputValue(a.endDate),
+                }));
+            }
+            setPlayer(p);
+        } catch {
+            setError('Fehler beim Laden des Spielers.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         if (openPlayerEditModal) {
@@ -64,6 +119,17 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
             apiJson('/api/nationalities').then(res => setAllNationalities(res.nationalities || [])).catch(() => setAllNationalities([]));
         }
     }, [openPlayerEditModal]);
+
+    useEffect(() => {
+        // Beim Öffnen mit playerId=null → Suche einblenden
+        if (openPlayerEditModal && !playerId) {
+            setShowPlayerSearch(true);
+            setPlayerSearchQuery('');
+            setPlayerSearchResults([]);
+        } else {
+            setShowPlayerSearch(false);
+        }
+    }, [openPlayerEditModal, playerId]);
 
     useEffect(() => {
         if (openPlayerEditModal && playerId) {
@@ -92,7 +158,7 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
         } else if (openPlayerEditModal) {
             setPlayer(null);
         }
-    }, [openPlayerEditModal, playerId]);
+    }, [openPlayerEditModal, playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handlePlayerEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
@@ -246,7 +312,7 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                 open={openPlayerEditModal}
                 onClose={onPlayerEditModalClose}
                 maxWidth="md"
-                title="Spieler bearbeiten"
+                title={player?.id ? 'Spieler bearbeiten' : 'Spieler anlegen / zuordnen'}
             >
                 {loading ? (
                 <Box display="flex" alignItems="center" justifyContent="center" minHeight={200}>
@@ -259,13 +325,83 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                             {error}
                         </Alert>
                     )}
+
+                    {/* Suche nach bestehendem Spieler – nur beim Neuanlegen */}
+                    {showPlayerSearch && (
+                        <Box mb={3} p={2} sx={{ bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                                Besteht dieser Spieler bereits?
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                                Suche nach einem vorhandenen Spieler (auch aus früheren Saisons), um eine neue Team-Zuordnung hinzuzufügen, statt einen Duplikat anzulegen.
+                            </Typography>
+                            <Box display="flex" gap={1} alignItems="flex-start">
+                                <Autocomplete
+                                    sx={{ flex: 1 }}
+                                    options={playerSearchResults}
+                                    getOptionLabel={(option: any) => {
+                                        const teams = (option.teamAssignments || [])
+                                            .map((a: any) => a.team?.name)
+                                            .filter(Boolean)
+                                            .join(', ');
+                                        const birth = option.birthdate ? ` (Geb.: ${option.birthdate})` : '';
+                                        return `${option.firstName} ${option.lastName}${birth}${teams ? ' · ' + teams : ''}`;
+                                    }}
+                                    filterOptions={(x) => x}
+                                    loading={playerSearchLoading}
+                                    inputValue={playerSearchQuery}
+                                    onInputChange={(_, value) => handlePlayerSearchInput(value)}
+                                    onChange={(_, value) => { if (value) handleSelectExistingPlayer(value); }}
+                                    noOptionsText={playerSearchQuery.length < 2 ? 'Mind. 2 Zeichen eingeben…' : 'Kein Spieler gefunden'}
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Spieler suchen (Name)"
+                                            size="small"
+                                            InputProps={{
+                                                ...params.InputProps,
+                                                endAdornment: (
+                                                    <>
+                                                        {playerSearchLoading ? <CircularProgress size={16} /> : null}
+                                                        {params.InputProps.endAdornment}
+                                                    </>
+                                                ),
+                                            }}
+                                        />
+                                    )}
+                                    isOptionEqualToValue={(option: any, value: any) => option.id === value.id}
+                                />
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    sx={{ whiteSpace: 'nowrap', mt: 0.5 }}
+                                    onClick={() => { setShowPlayerSearch(false); setPlayer(null); }}
+                                >
+                                    Neuen Spieler anlegen
+                                </Button>
+                            </Box>
+                        </Box>
+                    )}
+
                     <form id="playerEditForm" autoComplete="off" onSubmit={handlePlayerEditSubmit}>
                         <input type="hidden" name="id" value={player?.id} />
                         <Box className="modal-body" sx={{ bgcolor: 'background.default', p: 0 }}>
+
+                            {/* Hinweis: eingeschränkter Bearbeitungsmodus */}
+                            {player?.id && player?.permissions?.canEditStammdaten === false && (
+                                <Alert severity="warning" sx={{ mb: 3 }}>
+                                    Dieser Spieler gehört auch anderen Teams an. Du kannst nur die Team-Zuordnungen bearbeiten, die deine Teams betreffen. Stammdaten, Verein- und Nationalitäten-Zuordnungen können nur vom zuständigen Verein/Admin geändert werden.
+                                </Alert>
+                            )}
+
                             {/* Stammdaten zuerst */}
-                            <Box mb={4} pb={2} borderBottom={1} borderColor="divider">
+                            <Box mb={4} pb={2} borderBottom={1} borderColor="divider"
+                                sx={player?.permissions?.canEditStammdaten === false ? { opacity: 0.6, pointerEvents: 'none' } : {}}>
                                 <Typography variant="h6" color="primary" mb={3} display="flex" alignItems="center">
                                     Stammdaten
+                                    {player?.permissions?.canEditStammdaten === false && (
+                                        <Chip label="Nur Ansicht" size="small" sx={{ ml: 1 }} />
+                                    )}
                                 </Typography>
                                 <Box display="flex" flexWrap="wrap" gap={2}>
                                     <Box flex={1} minWidth={250}>
@@ -374,12 +510,14 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                                     Zugehörigkeiten
                                 </Typography>
                                 <Stack spacing={2}>
-                                    <Box>
+                                    {/* Verein-Zuordnungen: immer sichtbar, nur bearbeitbar bei voller Berechtigung */}
+                                    <Box sx={player?.permissions?.canEditStammdaten === false ? { opacity: 0.75 } : {}}>
                                         <Typography variant="subtitle1" mt={2} mb={1}>Verein-Zuordnungen</Typography>
                                         {(player?.clubAssignments ?? []).map((assignment: any) => (
-                                        <Box key={assignment.id} display="flex" gap={2} alignItems="center" mb={1}>
+                                        <Box key={assignment.id} display="flex" gap={2} alignItems="center" mb={1}
+                                            sx={player?.permissions?.canEditStammdaten === false ? { pointerEvents: 'none' } : {}}>
                                             <Autocomplete
-                                                options={[...allClubs, { id: 'new', name: 'Neuen Verein anlegen...' }]}
+                                                options={player?.permissions?.canEditStammdaten !== false ? [...allClubs, { id: 'new', name: 'Neuen Verein anlegen...' }] : allClubs}
                                                 getOptionLabel={(option) => option.name}
                                                 value={assignment.club || null}
                                                 onChange={(_, newValue) => {
@@ -428,17 +566,27 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                                                 InputLabelProps={{ shrink: true }}
                                                 sx={{ minWidth: 120 }}
                                             />
-                                            
-                                            <IconButton onClick={() => handleRemoveClubAssignment(assignment.id)} color="error" size="small"><DeleteIcon /></IconButton>
+                                            {player?.permissions?.canEditStammdaten !== false && (
+                                                <IconButton onClick={() => handleRemoveClubAssignment(assignment.id)} color="error" size="small"><DeleteIcon /></IconButton>
+                                            )}
                                         </Box>
                                         ))}
-                                        <Button onClick={handleAddClubAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>Verein-Zuordnung hinzufügen</Button>
+                                        {player?.permissions?.canEditStammdaten !== false && (
+                                            <Button onClick={handleAddClubAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>Verein-Zuordnung hinzufügen</Button>
+                                        )}
                                     </Box>
 
                                     <Box>
                                         <Typography variant="subtitle1" mt={2} mb={1}>Team-Zuordnungen</Typography>
-                                        {(player?.teamAssignments ?? []).map((assignment: any) => (
-                                            <Box key={assignment.id} display="flex" gap={2} alignItems="center" mb={1}><Autocomplete
+                                        {(player?.teamAssignments ?? []).map((assignment: any) => {
+                                            // canEdit: bei neuen Einträgen (id=null) immer true,
+                                            // bei bestehenden kommt das Flag vom Backend
+                                            const ptaEditable = assignment.id === null || assignment.canEdit !== false;
+                                            return (
+                                            <Box key={assignment.id ?? `new-${Math.random()}`}
+                                                display="flex" gap={2} alignItems="center" mb={1}
+                                                sx={!ptaEditable ? { opacity: 0.55, pointerEvents: 'none' } : {}}>
+                                            <Autocomplete
                                                 options={allTeams}
                                                 getOptionLabel={(option) => option.name}
                                                 value={assignment.team || null}
@@ -485,9 +633,12 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                                                 InputLabelProps={{ shrink: true }}
                                                 sx={{ minWidth: 120 }}
                                             />
-                                            <IconButton onClick={() => handleRemoveTeamAssignment(assignment.id)} color="error" size="small"><DeleteIcon /></IconButton>
+                                            {ptaEditable && (
+                                                <IconButton onClick={() => handleRemoveTeamAssignment(assignment.id)} color="error" size="small"><DeleteIcon /></IconButton>
+                                            )}
                                         </Box>
-                                        ))}
+                                            );
+                                        })}
                                         <Button onClick={handleAddTeamAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>Team-Zuordnung hinzufügen</Button>
                                     </Box>
 {/*
@@ -550,12 +701,14 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                                         <Button onClick={handleAddLicenseAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>Lizenz hinzufügen</Button>
                                     </Box>
 */}
-                                    <Box>
+                                    {/* Nationalitäten: immer sichtbar, nur bearbeitbar bei voller Berechtigung */}
+                                    <Box sx={player?.permissions?.canEditStammdaten === false ? { opacity: 0.75 } : {}}>
                                         <Typography variant="subtitle1" mt={2} mb={1}>Nationalitäten</Typography>
                                         {(player?.nationalityAssignments ?? []).map((assignment: any) => (
-                                        <Box key={assignment.id} display="flex" gap={2} alignItems="center" mb={1}>
+                                        <Box key={assignment.id} display="flex" gap={2} alignItems="center" mb={1}
+                                            sx={player?.permissions?.canEditStammdaten === false ? { pointerEvents: 'none' } : {}}>
                                             <Autocomplete
-                                                options={[...allNationalities, { id: 'new', name: 'Neue Nationalität anlegen...' }]}
+                                                options={player?.permissions?.canEditStammdaten !== false ? [...allNationalities, { id: 'new', name: 'Neue Nationalität anlegen...' }] : allNationalities}
                                                 getOptionLabel={(option) => option.name}
                                                 value={assignment.nationality || null}
                                                 onChange={(_, newValue) => {
@@ -609,9 +762,11 @@ const PlayerEditModal: React.FC<PlayerEditModalProps> = ({ openPlayerEditModal, 
                                             </IconButton>
                                         </Box>
                                         ))}
-                                        <Button onClick={handleAddNationalityAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>
-                                            Nationalität hinzufügen
-                                        </Button>
+                                        {player?.permissions?.canEditStammdaten !== false && (
+                                            <Button onClick={handleAddNationalityAssignment} startIcon={<AddIcon />} size="small" sx={{ mt: 1 }}>
+                                                Nationalität hinzufügen
+                                            </Button>
+                                        )}
                                     </Box>
                                 </Stack>
                             </Box>

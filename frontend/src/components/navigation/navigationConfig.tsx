@@ -31,6 +31,7 @@ import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import { useAuth } from '../../context/AuthContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -119,10 +120,11 @@ export const navigationItems: NavItem[] = [
 ];
 
 export const trainerMenuItems: TrainerMenuItem[] = [
-  { key: 'team-size-guide', label: 'Team Size Guide', icon: <CheckroomIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
-  { key: 'formations',      label: 'Aufstellungen',   icon: <GroupWorkIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
-  { key: 'players',         label: 'Spieler',         icon: <PersonIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
-  { key: 'teams',           label: 'Teams',           icon: <GroupsIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
+  { key: 'team-size-guide', label: 'Team Size Guide',     icon: <CheckroomIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
+  { key: 'formations',      label: 'Aufstellungen',       icon: <GroupWorkIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
+  { key: 'players',         label: 'Spieler',             icon: <PersonIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
+  { key: 'teams',           label: 'Teams',               icon: <GroupsIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
+  { key: 'watchlist',       label: 'Beobachtungsliste',   icon: <BookmarkBorderIcon fontSize="small" sx={{ color: 'text.primary', mr: 1 }} /> },
 ];
 
 export function getAdminMenuSections(isSuperAdmin: boolean): AdminSection[] {

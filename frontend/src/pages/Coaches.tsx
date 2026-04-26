@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import SchoolIcon from '@mui/icons-material/School';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
-import { apiJson } from '../utils/api';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack, IconButton, Tooltip } from '@mui/material';
+import { apiJson, apiRequest } from '../utils/api';
 import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import CoachDetailsModal from '../modals/CoachDetailsModal';
 import CoachDeleteConfirmationModal from '../modals/CoachDeleteConfirmationModal';
@@ -40,6 +42,7 @@ const Coaches = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteCoach, setDeleteCoach] = useState<Coach | null>(null);
   const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
+  const [watchedCoachIds, setWatchedCoachIds] = useState<Set<number>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounce search input
@@ -62,6 +65,39 @@ const Coaches = () => {
       }
     }).catch(() => {});
   }, []);
+
+  // Load watchlist once to show active watch state per coach
+  useEffect(() => {
+    apiJson<{ watchlist: { type: string; coach?: { id: number } }[] }>('/api/watchlist')
+      .then(res => {
+        const ids = (res?.watchlist ?? [])
+          .filter(e => e.type === 'coach' && e.coach?.id)
+          .map(e => e.coach!.id);
+        setWatchedCoachIds(new Set(ids));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleWatch = async (coach: Coach) => {
+    const isWatched = watchedCoachIds.has(coach.id);
+    try {
+      if (isWatched) {
+        const res = await apiJson<{ watchlist: { id: number; type: string; coach?: { id: number } }[] }>('/api/watchlist');
+        const entry = (res?.watchlist ?? []).find(e => e.type === 'coach' && e.coach?.id === coach.id);
+        if (entry) {
+          await apiRequest(`/api/watchlist/${entry.id}`, { method: 'DELETE' });
+        }
+        setWatchedCoachIds(prev => { const next = new Set(prev); next.delete(coach.id); return next; });
+        setSnackbar({ open: true, message: 'Aus Beobachtungsliste entfernt.', severity: 'info' });
+      } else {
+        await apiRequest('/api/watchlist', { method: 'POST', body: { type: 'coach', targetId: coach.id } });
+        setWatchedCoachIds(prev => new Set([...prev, coach.id]));
+        setSnackbar({ open: true, message: 'Zur Beobachtungsliste hinzugefügt.', severity: 'success' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Aktualisieren der Beobachtungsliste.', severity: 'error' });
+    }
+  };
 
   // Fetch paginated coaches whenever page, rowsPerPage, search, or teamId changes
   const loadCoaches = useCallback(async () => {
@@ -174,11 +210,22 @@ const Coaches = () => {
           }}
           onRowClick={c => { setCoachId(c.id); setCoachDetailsModalOpen(true); }}
           renderActions={c => (
-            <AdminActions
-              onDetails={() => { setCoachId(c.id); setCoachDetailsModalOpen(true); }}
-              onEdit={c.permissions?.canEdit ? () => { setCoachId(c.id); setCoachEditModalOpen(true); } : undefined}
-              onDelete={c.permissions?.canDelete ? () => { setDeleteCoach(c); setDeleteModalOpen(true); } : undefined}
-            />
+            <Stack direction="row" alignItems="center" spacing={0}>
+              <Tooltip title={watchedCoachIds.has(c.id) ? 'Beobachtung beenden' : 'Beobachten'}>
+                <IconButton
+                  size="small"
+                  onClick={e => { e.stopPropagation(); handleToggleWatch(c); }}
+                  color={watchedCoachIds.has(c.id) ? 'primary' : 'default'}
+                >
+                  {watchedCoachIds.has(c.id) ? <BookmarkIcon fontSize="small" /> : <BookmarkBorderIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+              <AdminActions
+                onDetails={() => { setCoachId(c.id); setCoachDetailsModalOpen(true); }}
+                onEdit={c.permissions?.canEdit ? () => { setCoachId(c.id); setCoachEditModalOpen(true); } : undefined}
+                onDelete={c.permissions?.canDelete ? () => { setDeleteCoach(c); setDeleteModalOpen(true); } : undefined}
+              />
+            </Stack>
           )}
         />
       )}

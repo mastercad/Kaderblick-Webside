@@ -43,11 +43,31 @@ services:
     depends_on:
       - api
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - kaderblick-net
+
+  worker:
+    image: ghcr.io/mastercad/kaderblick/api:${API_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["php", "/var/www/symfony/bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=256M", "-vv"]
+    volumes:
+      - ./api/.env:/var/www/symfony/.env
+      - ./api/config/jwt:/var/www/symfony/config/jwt
+      - ./api/config/secrets:/var/www/symfony/config/secrets
+      - ./public/uploads:/var/www/symfony/public/uploads
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-mysql://kaderblick:kaderblick@db:3306/kaderblick}
+      XDEBUG_MODE: off
+      HOST_UID: ${HOST_UID:-10000}
+      HOST_GID: ${HOST_GID:-1003}
+    depends_on:
+      api:
+        condition: service_healthy
     networks:
       - kaderblick-net
 
