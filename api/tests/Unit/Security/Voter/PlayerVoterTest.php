@@ -147,8 +147,9 @@ class PlayerVoterTest extends TestCase
         $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
     }
 
-    public function testEditDeniedForCoachWhoseTeamDoesNotContainPlayer(): void
+    public function testEditGrantedForCoachRegardlessOfTeamMembership(): void
     {
+        // Since voter change: any active coach may edit, team-membership is checked in the controller.
         $user = $this->createUser(1);
         $coachTeam = $this->createTeam(10);
         $otherTeam = $this->createTeam(20);
@@ -162,7 +163,7 @@ class PlayerVoterTest extends TestCase
 
         $result = $this->voter->vote($token, $player, [PlayerVoter::EDIT]);
 
-        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
+        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
     }
 
     public function testEditDeniedForRegularUser(): void
@@ -206,8 +207,9 @@ class PlayerVoterTest extends TestCase
         $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
     }
 
-    public function testDeleteGrantedForCoachWhoseTeamContainsPlayer(): void
+    public function testDeleteDeniedForCoachEvenWhenTeamContainsPlayer(): void
     {
+        // Since voter change: DELETE is only granted to ROLE_ADMIN / ROLE_SUPERADMIN.
         $user = $this->createUser(1);
         $team = $this->createTeam(10);
         $player = $this->createPlayer(99, [10 => $team]);
@@ -220,7 +222,7 @@ class PlayerVoterTest extends TestCase
 
         $result = $this->voter->vote($token, $player, [PlayerVoter::DELETE]);
 
-        $this->assertEquals(VoterInterface::ACCESS_GRANTED, $result);
+        $this->assertEquals(VoterInterface::ACCESS_DENIED, $result);
     }
 
     public function testDeleteDeniedForCoachWhoseTeamDoesNotContainPlayer(): void

@@ -124,8 +124,8 @@ describe('navigationItems', () => {
 // ── trainerMenuItems ──────────────────────────────────────────────────────────
 
 describe('trainerMenuItems', () => {
-  it('contains 4 items', () => {
-    expect(trainerMenuItems).toHaveLength(4);
+  it('contains 5 items', () => {
+    expect(trainerMenuItems).toHaveLength(5);
   });
 
   it('every item has key, label and icon', () => {
@@ -139,7 +139,7 @@ describe('trainerMenuItems', () => {
   it('contains expected keys', () => {
     const keys = trainerMenuItems.map(i => i.key);
     expect(keys).toEqual(
-      expect.arrayContaining(['team-size-guide', 'formations', 'players', 'teams']),
+      expect.arrayContaining(['team-size-guide', 'formations', 'players', 'teams', 'watchlist']),
     );
   });
 });

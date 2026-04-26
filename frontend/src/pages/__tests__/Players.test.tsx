@@ -53,6 +53,8 @@ jest.mock('@mui/icons-material/Edit', () => () => <span>✏️</span>);
 jest.mock('@mui/icons-material/Delete', () => () => <span>🗑️</span>);
 jest.mock('@mui/icons-material/InfoOutlined', () => () => <span>ℹ️</span>);
 jest.mock('@mui/icons-material/Clear', () => () => <span>✕</span>);
+jest.mock('@mui/icons-material/BookmarkBorder', () => () => <span data-testid="bookmark-border-icon" />);
+jest.mock('@mui/icons-material/Bookmark', () => () => <span data-testid="bookmark-icon" />);
 
 // Mock child modals
 jest.mock('../../modals/PlayerDetailsModal', () => (props: any) => (
@@ -67,8 +69,10 @@ jest.mock('../../modals/PlayerEditModal', () => (props: any) => (
 
 // Mock API
 const mockApiJson = jest.fn();
+const mockApiRequest = jest.fn();
 jest.mock('../../utils/api', () => ({
   apiJson: (...args: any[]) => mockApiJson(...args),
+  apiRequest: (...args: any[]) => mockApiRequest(...args),
 }));
 
 beforeAll(() => {
@@ -134,8 +138,11 @@ const mockTeamsResponse = {
 
 beforeEach(() => {
   mockApiJson.mockReset();
+  mockApiRequest.mockReset();
+  mockApiRequest.mockResolvedValue({});
   mockApiJson.mockImplementation((url: string) => {
     if (url.includes('/api/teams/list')) return Promise.resolve(mockTeamsResponse);
+    if (url.includes('/api/watchlist')) return Promise.resolve({ watchlist: [] });
     if (url.includes('/api/players')) return Promise.resolve(mockPlayersResponse);
     return Promise.resolve({});
   });
@@ -355,6 +362,109 @@ describe('Players Page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('FC Test')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('Players – Watchlist', () => {
+  it('loads /api/watchlist on mount', async () => {
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(mockApiJson).toHaveBeenCalledWith(expect.stringContaining('/api/watchlist'));
+    });
+  });
+
+  it('shows bookmark-border icon for unwatched players', async () => {
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('bookmark-border-icon').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows filled bookmark icon for a watched player', async () => {
+    mockApiJson.mockImplementation((url: string) => {
+      if (url.includes('/api/teams/list')) return Promise.resolve(mockTeamsResponse);
+      if (url.includes('/api/watchlist')) return Promise.resolve({
+        watchlist: [{ id: 20, type: 'player', isAnonymous: true, player: { id: 1 } }],
+      });
+      if (url.includes('/api/players')) return Promise.resolve(mockPlayersResponse);
+      return Promise.resolve({});
+    });
+
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('bookmark-icon').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('POSTs to /api/watchlist when clicking an unwatched bookmark', async () => {
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('bookmark-border-icon').length).toBeGreaterThanOrEqual(1);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByTestId('bookmark-border-icon')[0]);
+    });
+
+    await waitFor(() => {
+      expect(mockApiRequest).toHaveBeenCalledWith(
+        '/api/watchlist',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('DELETEs from /api/watchlist when clicking a watched bookmark', async () => {
+    mockApiJson.mockImplementation((url: string) => {
+      if (url.includes('/api/teams/list')) return Promise.resolve(mockTeamsResponse);
+      if (url.includes('/api/watchlist')) return Promise.resolve({
+        watchlist: [{ id: 55, type: 'player', isAnonymous: true, player: { id: 1 } }],
+      });
+      if (url.includes('/api/players')) return Promise.resolve(mockPlayersResponse);
+      return Promise.resolve({});
+    });
+
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('bookmark-icon').length).toBeGreaterThanOrEqual(1);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByTestId('bookmark-icon')[0]);
+    });
+
+    await waitFor(() => {
+      expect(mockApiRequest).toHaveBeenCalledWith(
+        '/api/watchlist/55',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('shows success snackbar after adding to watchlist', async () => {
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('bookmark-border-icon').length).toBeGreaterThanOrEqual(1);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByTestId('bookmark-border-icon')[0]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('Snackbar')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('Players – Season filter', () => {
+  it('sends season parameter to API', async () => {
+    await act(async () => { render(<Players />); });
+    await waitFor(() => {
+      const playerCalls = mockApiJson.mock.calls.filter((c: any[]) => c[0].includes('/api/players'));
+      expect(playerCalls.length).toBeGreaterThan(0);
+      expect(playerCalls[playerCalls.length - 1][0]).toContain('season=');
     });
   });
 });

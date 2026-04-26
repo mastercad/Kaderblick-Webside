@@ -17,6 +17,7 @@ use App\Repository\CoachLicenseAssignmentRepository;
 use App\Repository\CoachNationalityAssignmentRepository;
 use App\Repository\CoachTeamAssignmentRepository;
 use App\Security\Voter\CoachVoter;
+use App\Service\CoachSerializerService;
 use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,8 +31,10 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('IS_AUTHENTICATED')]
 class CoachesController extends AbstractController
 {
-    public function __construct(private EntityManagerInterface $entityManager)
-    {
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private CoachSerializerService $coachSerializer
+    ) {
     }
 
     #[Route('', name: 'list', methods: ['GET'])]
@@ -153,70 +156,7 @@ class CoachesController extends AbstractController
             return $this->json(['error' => 'Zugriff verweigert'], Response::HTTP_FORBIDDEN);
         }
 
-        return $this->json([
-            'coach' => [
-                'id' => $coach->getId(),
-                'firstName' => $coach->getFirstName(),
-                'lastName' => $coach->getLastName(),
-                'email' => $coach->getEmail(),
-                'birthdate' => $coach->getBirthdate()?->format('Y-m-d'),
-                'clubAssignments' => $coach->getCoachClubAssignments()->map(fn (CoachClubAssignment $coachClubAssignment) => [
-                    'id' => $coachClubAssignment->getId(),
-                    'startDate' => $coachClubAssignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $coachClubAssignment->getEndDate()?->format('Y-m-d'),
-                    'club' => [
-                        'id' => $coachClubAssignment->getClub()->getId(),
-                        'name' => $coachClubAssignment->getClub()->getName(),
-                    ]
-                ])->toArray(),
-                'teamAssignments' => $coach->getCoachTeamAssignments()->map(fn (CoachTeamAssignment $coachTeamAssignment) => [
-                    'id' => $coachTeamAssignment->getId(),
-                    'startDate' => $coachTeamAssignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $coachTeamAssignment->getEndDate()?->format('Y-m-d'),
-                    'team' => [
-                        'id' => $coachTeamAssignment->getTeam()->getId(),
-                        'name' => $coachTeamAssignment->getTeam()->getName(),
-                        'ageGroup' => [
-                            'id' => $coachTeamAssignment->getTeam()->getAgeGroup()->getId(),
-                            'name' => $coachTeamAssignment->getTeam()->getAgeGroup()->getName()
-                        ],
-                        'league' => [
-                            'id' => $coachTeamAssignment->getTeam()->getLeague()->getId(),
-                            'name' => $coachTeamAssignment->getTeam()->getLeague()->getName()
-                        ],
-                        'type' => [
-                            'id' => $coachTeamAssignment->getCoachTeamAssignmentType()?->getId(),
-                            'name' => $coachTeamAssignment->getCoachTeamAssignmentType()?->getName()
-                        ],
-                    ]
-                ])->toArray(),
-                'licenseAssignments' => $coach->getCoachLicenseAssignments()->map(fn (CoachLicenseAssignment $coachLicenseAssignment) => [
-                    'id' => $coachLicenseAssignment->getId(),
-                    'name' => $coachLicenseAssignment->getLicense()->getName(),
-                    'startDate' => $coachLicenseAssignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $coachLicenseAssignment->getEndDate()?->format('Y-m-d'),
-                    'license' => [
-                        'id' => $coachLicenseAssignment->getLicense()->getId(),
-                        'name' => $coachLicenseAssignment->getLicense()->getName()
-                    ]
-                ])->toArray(),
-                'nationalityAssignments' => $coach->getCoachNationalityAssignments()->map(fn (CoachNationalityAssignment $coachNationalityAssignment) => [
-                    'id' => $coachNationalityAssignment->getId(),
-                    'startDate' => $coachNationalityAssignment->getStartDate()?->format('Y-m-d'),
-                    'endDate' => $coachNationalityAssignment->getEndDate()?->format('Y-m-d'),
-                    'nationality' => [
-                        'id' => $coachNationalityAssignment->getNationality()->getId(),
-                        'name' => $coachNationalityAssignment->getNationality()->getName(),
-                    ]
-                ])->toArray(),
-                'permissions' => [
-                    'canEdit' => $this->isGranted(CoachVoter::EDIT, $coach),
-                    'canDelete' => $this->isGranted(CoachVoter::DELETE, $coach),
-                    'canView' => $this->isGranted(CoachVoter::VIEW, $coach),
-                    'canCreate' => $this->isGranted(CoachVoter::CREATE, $coach)
-                ]
-            ]
-        ]);
+        return $this->json(['coach' => $this->coachSerializer->serializeForCurrentUser($coach)]);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]

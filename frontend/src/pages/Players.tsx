@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PersonIcon from '@mui/icons-material/Person';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
-import { apiJson } from '../utils/api';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { Typography, FormControl, InputLabel, Select, MenuItem, Chip, Stack, IconButton, Tooltip } from '@mui/material';
+import { apiJson, apiRequest } from '../utils/api';
 import { AdminPageLayout, AdminEmptyState, AdminTable, AdminActions, AdminSnackbar, AdminTableColumn } from '../components/AdminPageLayout';
 import PlayerDetailsModal from '../modals/PlayerDetailsModal';
 import PlayerDeleteConfirmationModal from '../modals/PlayerDeleteConfirmationModal';
@@ -50,6 +52,7 @@ const Players = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
   const [snackbar, setSnackbar] = useState<AdminSnackbar>({ open: false, message: '', severity: 'success' });
+  const [watchedPlayerIds, setWatchedPlayerIds] = useState<Set<number>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounce search input
@@ -72,6 +75,40 @@ const Players = () => {
       }
     }).catch(() => {});
   }, []);
+
+  // Load watchlist once so we can show active watch state per player
+  useEffect(() => {
+    apiJson<{ watchlist: { type: string; player?: { id: number } }[] }>('/api/watchlist')
+      .then(res => {
+        const ids = (res?.watchlist ?? [])
+          .filter(e => e.type === 'player' && e.player?.id)
+          .map(e => e.player!.id);
+        setWatchedPlayerIds(new Set(ids));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleWatch = async (player: Player) => {
+    const isWatched = watchedPlayerIds.has(player.id);
+    try {
+      if (isWatched) {
+        // We need the watchlist entry id — simpler to just reload after removal
+        const res = await apiJson<{ watchlist: { id: number; type: string; player?: { id: number } }[] }>('/api/watchlist');
+        const entry = (res?.watchlist ?? []).find(e => e.type === 'player' && e.player?.id === player.id);
+        if (entry) {
+          await apiRequest(`/api/watchlist/${entry.id}`, { method: 'DELETE' });
+        }
+        setWatchedPlayerIds(prev => { const next = new Set(prev); next.delete(player.id); return next; });
+        setSnackbar({ open: true, message: 'Aus Beobachtungsliste entfernt.', severity: 'info' });
+      } else {
+        await apiRequest('/api/watchlist', { method: 'POST', body: { type: 'player', targetId: player.id } });
+        setWatchedPlayerIds(prev => new Set([...prev, player.id]));
+        setSnackbar({ open: true, message: 'Zur Beobachtungsliste hinzugefügt.', severity: 'success' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Fehler beim Aktualisieren der Beobachtungsliste.', severity: 'error' });
+    }
+  };
 
   // Fetch paginated players whenever page, rowsPerPage, search, or teamId changes
   const loadPlayers = useCallback(async () => {
@@ -117,14 +154,22 @@ const Players = () => {
   const columns: AdminTableColumn<Player>[] = [
     { header: 'Name', render: p => `${p.firstName || ''} ${p.lastName || ''}`.trim() },
     { header: 'Verein', render: p => p.clubAssignments?.map((a: PlayerClubAssignment) => a.club.name).join(', ') || '' },
-    { header: 'Teams', render: p => p.teamAssignments?.length > 0
-      ? p.teamAssignments.map((a: PlayerTeamAssignment) => (
-          <Typography key={a.id} variant="body2" component="div" sx={{ lineHeight: 1.5 }}>
-            {a.team.name} ({a.shirtNumber}) - {a.team.ageGroup?.name || ''}
-            {a.type?.name ? ` (${a.type.name})` : ''}
-          </Typography>
-        ))
-      : ''
+    { header: 'Teams', render: p => {
+        // Bei aktivem Team-Filter: nur das gefilterte Team anzeigen.
+        // Sonst: alle Assignments zeigen, die vom Backend für die gewählte Saison zurückkamen
+        // (Backend liefert bereits nur saisongefilterte Assignments im Nicht-searchAll-Modus).
+        const assignments: PlayerTeamAssignment[] = selectedTeamId !== ALL_TEAMS
+          ? (p.teamAssignments || []).filter((a: PlayerTeamAssignment) => String(a.team?.id) === selectedTeamId)
+          : (p.teamAssignments || []);
+        return assignments.length > 0
+          ? assignments.map((a: PlayerTeamAssignment) => (
+              <Typography key={a.id} variant="body2" component="div" sx={{ lineHeight: 1.5 }}>
+                {a.team.name} ({a.shirtNumber}) - {a.team.ageGroup?.name || ''}
+                {a.type?.name ? ` (${a.type.name})` : ''}
+              </Typography>
+            ))
+          : '';
+      }
     },
     { header: 'Nationalitäten', render: p => p.nationalityAssignments?.map((a: PlayerNationalityAssignment) => a.nationality.name).join(', ') || '' },
   ];
@@ -212,11 +257,22 @@ const Players = () => {
           }}
           onRowClick={p => { setPlayerId(p.id); setPlayerDetailsModalOpen(true); }}
           renderActions={p => (
-            <AdminActions
-              onDetails={() => { setPlayerId(p.id); setPlayerDetailsModalOpen(true); }}
-              onEdit={p.permissions?.canEdit ? () => { setPlayerId(p.id); setPlayerEditModalOpen(true); } : undefined}
-              onDelete={p.permissions?.canDelete ? () => { setDeletePlayer(p); setDeleteModalOpen(true); } : undefined}
-            />
+            <Stack direction="row" alignItems="center" spacing={0}>
+              <Tooltip title={watchedPlayerIds.has(p.id) ? 'Beobachtung beenden' : 'Beobachten'}>
+                <IconButton
+                  size="small"
+                  onClick={e => { e.stopPropagation(); handleToggleWatch(p); }}
+                  color={watchedPlayerIds.has(p.id) ? 'primary' : 'default'}
+                >
+                  {watchedPlayerIds.has(p.id) ? <BookmarkIcon fontSize="small" /> : <BookmarkBorderIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+              <AdminActions
+                onDetails={() => { setPlayerId(p.id); setPlayerDetailsModalOpen(true); }}
+                onEdit={p.permissions?.canEdit ? () => { setPlayerId(p.id); setPlayerEditModalOpen(true); } : undefined}
+                onDelete={p.permissions?.canDelete ? () => { setDeletePlayer(p); setDeleteModalOpen(true); } : undefined}
+              />
+            </Stack>
           )}
         />
       )}

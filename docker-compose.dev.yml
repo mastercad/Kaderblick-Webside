@@ -15,8 +15,21 @@ services:
       - ./public/uploads:/var/www/symfony/public/uploads
     environment:
       XDEBUG_MODE: ${XDEBUG_MODE:-develop,debug}
-      XDEBUG_CONFIG: ${XDEBUG_CONFIG:-"client_host=host.docker.internal client_port=9003"}
+      XDEBUG_CONFIG: ${XDEBUG_CONFIG:-client_host=host.docker.internal client_port=9003}
       XDEBUG_LOG: /tmp/xdebug.log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    build:
+      context: ./
+      dockerfile: .docker/api/Dockerfile
+    command: ["php", "/var/www/symfony/bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=256M", "-vv"]
+    volumes:
+      - ./api:/var/www/symfony
+      - ./public/uploads:/var/www/symfony/public/uploads
+    environment:
+      XDEBUG_MODE: off
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

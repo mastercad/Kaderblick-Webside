@@ -11,4 +11,6 @@ export type PlayerTeamAssignment = {
     active: boolean;
     coach: Player;
     team: Team;
+    /** Whether the current user may edit/delete this specific assignment */
+    canEdit?: boolean;
 };

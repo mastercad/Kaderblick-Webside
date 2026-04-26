@@ -184,4 +184,31 @@ class PlayerRepository extends ServiceEntityRepository implements OptimizedRepos
 
         return $qb->getQuery()->getResult();
     }
+
+    /**
+     * Global full-text search across all players regardless of club.
+     * Searches firstName, lastName and their concatenation.
+     *
+     * @return Player[]
+     */
+    public function searchGlobal(string $q, int $limit = 20): array
+    {
+        $term = '%' . addcslashes($q, '%_') . '%';
+
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.playerClubAssignments', 'pca')
+            ->leftJoin('pca.club', 'c')
+            ->addSelect('pca', 'c')
+            ->where(
+                'LOWER(CONCAT(p.firstName, \' \', p.lastName)) LIKE LOWER(:term)'
+                . ' OR LOWER(p.firstName) LIKE LOWER(:term)'
+                . ' OR LOWER(p.lastName) LIKE LOWER(:term)'
+            )
+            ->setParameter('term', $term)
+            ->orderBy('p.lastName', 'ASC')
+            ->addOrderBy('p.firstName', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }

@@ -123,4 +123,30 @@ class CoachRepository extends ServiceEntityRepository implements OptimizedReposi
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    /**
+     * Global full-text search across all coaches regardless of club.
+     *
+     * @return Coach[]
+     */
+    public function searchGlobal(string $q, int $limit = 20): array
+    {
+        $term = '%' . addcslashes($q, '%_') . '%';
+
+        return $this->createQueryBuilder('c')
+            ->leftJoin('c.coachClubAssignments', 'cca')
+            ->leftJoin('cca.club', 'cl')
+            ->addSelect('cca', 'cl')
+            ->where(
+                'LOWER(CONCAT(c.firstName, \' \', c.lastName)) LIKE LOWER(:term)'
+                . ' OR LOWER(c.firstName) LIKE LOWER(:term)'
+                . ' OR LOWER(c.lastName) LIKE LOWER(:term)'
+            )
+            ->setParameter('term', $term)
+            ->orderBy('c.lastName', 'ASC')
+            ->addOrderBy('c.firstName', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }
