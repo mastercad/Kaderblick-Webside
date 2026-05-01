@@ -27,27 +27,11 @@ services:
       HOST_UID: ${HOST_UID:-10000}
       HOST_GID: ${HOST_GID:-1003}
     healthcheck:
-<<<<<<< Updated upstream
-      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
-      interval: 30s
-      timeout: 10s
-<<<<<<< Updated upstream
-      retries: 5
-      start_period: 120s
-=======
-      retries: 3
-      start_period: 60s
-=======
       test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
->>>>>>> Stashed changes
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     networks:
       - kaderblick-net
 
