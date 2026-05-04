@@ -10,7 +10,14 @@ import '@testing-library/jest-dom';
 
 // ── Mock chart components ──
 jest.mock('react-chartjs-2', () => ({
-  Bar: (props: any) => <div data-testid="Bar" data-labels={JSON.stringify(props.data?.labels)} />,
+  Bar: (props: any) => (
+    <div
+      data-testid="Bar"
+      data-labels={JSON.stringify(props.data?.labels)}
+      data-datasets={JSON.stringify(props.data?.datasets)}
+      data-options={JSON.stringify(props.options)}
+    />
+  ),
   Line: (props: any) => (
     <div
       data-testid="Line"
@@ -231,6 +238,167 @@ describe('ChartRenderer', () => {
     );
     // Renders without error – median path taken
     expect(screen.getByTestId('Bar')).toBeInTheDocument();
+  });
+
+  // ── Boxplot dataset structure ──
+
+  it('boxplot: dataset data uses [q1, q3] array format — not {y, base} objects', () => {
+    const bpData = {
+      labels: ['Jan'],
+      datasets: [{ label: 'Rating', data: [[1, 2, 3, 4, 5]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    const boxDs = datasets.find((ds: any) => ds._boxplotBox === true);
+    expect(boxDs).toBeDefined();
+    // data[0] must be a 2-element array [q1, q3], NOT an object
+    expect(Array.isArray(boxDs.data[0])).toBe(true);
+    expect(boxDs.data[0]).toHaveLength(2);
+    expect(typeof boxDs.data[0][0]).toBe('number');
+    expect(typeof boxDs.data[0][1]).toBe('number');
+  });
+
+  it('boxplot: empty entry produces [0, 0] — never null (prevents parseObjectData crash)', () => {
+    const bpData = {
+      labels: ['Jan', 'Feb'],
+      datasets: [{ label: 'Rating', data: [[], [1, 2, 3]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    const boxDs = datasets.find((ds: any) => ds._boxplotBox === true);
+    expect(boxDs).toBeDefined();
+    // Empty entry at index 0 must be [0, 0] — null would crash Chart.js
+    expect(boxDs.data[0]).toEqual([0, 0]);
+    // Non-empty entry at index 1 must NOT be null
+    expect(boxDs.data[1]).not.toBeNull();
+    expect(Array.isArray(boxDs.data[1])).toBe(true);
+  });
+
+  it('boxplot: no null values anywhere in dataset data', () => {
+    const bpData = {
+      labels: ['Jan', 'Feb', 'Mar'],
+      datasets: [{ label: 'Rating', data: [[1], [], [2, 3]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    datasets.forEach((ds: any) => {
+      if (!Array.isArray(ds.data)) return;
+      ds.data.forEach((entry: any) => {
+        expect(entry).not.toBeNull();
+      });
+    });
+  });
+
+  it('boxplot: no type="line" dataset added (plugin draws median)', () => {
+    const bpData = {
+      labels: ['Jan', 'Feb'],
+      datasets: [{ label: 'Rating', data: [[1, 2, 3], [4, 5, 6]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    // No dataset should have type: 'line'
+    const lineDs = datasets.filter((ds: any) => ds.type === 'line');
+    expect(lineDs).toHaveLength(0);
+  });
+
+  it('boxplot: each dataset has _boxplotBox=true and _rawArrays populated', () => {
+    const rawData = [[1, 2, 3], [4, 5, 6]];
+    const bpData = {
+      labels: ['Jan', 'Feb'],
+      datasets: [{ label: 'Rating', data: rawData }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    const boxDs = datasets.find((ds: any) => ds._boxplotBox === true);
+    expect(boxDs).toBeDefined();
+    expect(boxDs._rawArrays).toEqual(rawData);
+  });
+
+  it('boxplot: _drawWhiskers=true set in chart options', () => {
+    const bpData = {
+      labels: ['Jan'],
+      datasets: [{ label: 'Rating', data: [[1, 2, 3]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const options = JSON.parse(el.getAttribute('data-options') ?? '{}');
+    expect(options._drawWhiskers).toBe(true);
+  });
+
+  it('boxplot: single-game entry (Q1===Q3) uses tiny offset so bar is visible', () => {
+    const bpData = {
+      labels: ['Jan'],
+      // Single value → Q1 = Q3 = 3 → must get offset
+      datasets: [{ label: 'Rating', data: [[3]] }],
+      diagramType: 'boxplot',
+    };
+    const { getByTestId } = render(
+      <ChartRenderer
+        {...baseProps}
+        type="boxplot"
+        data={bpData as any}
+        chartData={{ labels: bpData.labels, datasets: bpData.datasets }}
+      />,
+    );
+    const el = getByTestId('Bar');
+    const datasets = JSON.parse(el.getAttribute('data-datasets') ?? '[]');
+    const boxDs = datasets.find((ds: any) => ds._boxplotBox === true);
+    const [lower, upper] = boxDs.data[0];
+    // lower and upper must differ (non-zero height bar)
+    expect(upper).toBeGreaterThan(lower);
   });
 
   // ── Radar Overlay ──

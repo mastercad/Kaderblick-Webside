@@ -191,11 +191,16 @@ export const ReportWidget: React.FC<{
     }),
   };
 
-  // ── Hide-empty filter (applied to labels + all dataset data arrays) ──
-  // Only meaningful for bar / pie / doughnut / polararea (categorical charts).
-  const isFilterable = ['bar', 'pie', 'doughnut', 'polararea'].includes(effectiveType);
+  // ── Hide-empty filter ──
+  // For categorical charts (bar/pie/doughnut/polararea): filter X-axis labels where
+  //   ALL datasets are 0/null at that index.
+  // For line/area/stackedarea: filter DATASETS whose every value is 0/null — removes
+  //   flat-zero lines that clutter the chart while preserving the time axis.
+  const isFilterable = ['bar', 'pie', 'doughnut', 'polararea', 'line', 'area', 'stackedarea'].includes(effectiveType);
+  const isLineLike = ['line', 'area', 'stackedarea'].includes(effectiveType);
+
   const emptyIndices: Set<number> = new Set();
-  if (hideEmpty && isFilterable) {
+  if (hideEmpty && isFilterable && !isLineLike) {
     chartData.labels.forEach((_, idx) => {
       const allZero = chartData.datasets.every((ds) => {
         const v = (ds.data as (number | null | undefined)[])[idx];
@@ -204,16 +209,32 @@ export const ReportWidget: React.FC<{
       if (allZero) emptyIndices.add(idx);
     });
   }
-  const filteredChartData =
-    hideEmpty && isFilterable && emptyIndices.size > 0
-      ? {
-          labels: chartData.labels.filter((_, i) => !emptyIndices.has(i)),
-          datasets: chartData.datasets.map((ds) => ({
-            ...ds,
-            data: (ds.data as any[]).filter((_, i) => !emptyIndices.has(i)),
-          })),
-        }
-      : chartData;
+
+  const filteredChartData = (() => {
+    if (!hideEmpty || !isFilterable) return chartData;
+
+    if (isLineLike) {
+      // Dataset-level filter: drop entire series that have no non-zero value
+      const filteredDs = chartData.datasets.filter((ds) =>
+        (ds.data as (number | null | undefined)[]).some(
+          (v) => v !== null && v !== undefined && v !== 0,
+        ),
+      );
+      return filteredDs.length === chartData.datasets.length
+        ? chartData
+        : { ...chartData, datasets: filteredDs };
+    }
+
+    // Label-index filter for categorical charts
+    if (emptyIndices.size === 0) return chartData;
+    return {
+      labels: chartData.labels.filter((_, i) => !emptyIndices.has(i)),
+      datasets: chartData.datasets.map((ds) => ({
+        ...ds,
+        data: (ds.data as any[]).filter((_, i) => !emptyIndices.has(i)),
+      })),
+    };
+  })();
 
   // ── Moving average overlay (for simple chart types) ──
   let finalChartData = filteredChartData;

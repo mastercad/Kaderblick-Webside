@@ -454,7 +454,7 @@ describe('StepOptions – horizontalBar (Ausrichtung)', () => {
 });
 
 // =============================================================================
-// Anzeige-Optionen: Leere ausblenden (hideEmpty) – für bar/pie/doughnut
+// Anzeige-Optionen: Leere ausblenden (hideEmpty) – für bar/pie/doughnut/line/area/stackedarea
 // =============================================================================
 
 describe('StepOptions – hideEmpty (Leere ausblenden)', () => {
@@ -493,7 +493,7 @@ describe('StepOptions – hideEmpty (Leere ausblenden)', () => {
     expect(screen.getByLabelText('Einträge ohne Wert ausblenden')).toBeInTheDocument();
   });
 
-  it('hideEmpty-Checkbox wird NICHT für diag=line gerendert', () => {
+  it('hideEmpty-Checkbox wird für diag=line gerendert', () => {
     render(
       <StepOptions
         state={makeState({
@@ -501,6 +501,51 @@ describe('StepOptions – hideEmpty (Leere ausblenden)', () => {
           currentReport: {
             name: 'Test', description: '', isTemplate: false,
             config: { diagramType: 'line', xField: 'month', yField: 'goals', filters: {}, metrics: [], showLegend: true, showLabels: false },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByLabelText('Einträge ohne Wert ausblenden')).toBeInTheDocument();
+  });
+
+  it('hideEmpty-Checkbox wird für diag=area gerendert', () => {
+    render(
+      <StepOptions
+        state={makeState({
+          diag: 'area',
+          currentReport: {
+            name: 'Test', description: '', isTemplate: false,
+            config: { diagramType: 'area', xField: 'month', yField: 'goals', filters: {}, metrics: [], showLegend: true, showLabels: false },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByLabelText('Einträge ohne Wert ausblenden')).toBeInTheDocument();
+  });
+
+  it('hideEmpty-Checkbox wird für diag=stackedarea gerendert', () => {
+    render(
+      <StepOptions
+        state={makeState({
+          diag: 'stackedarea',
+          currentReport: {
+            name: 'Test', description: '', isTemplate: false,
+            config: { diagramType: 'stackedarea', xField: 'month', yField: 'goals', filters: {}, metrics: [], showLegend: true, showLabels: false },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByLabelText('Einträge ohne Wert ausblenden')).toBeInTheDocument();
+  });
+
+  it('hideEmpty-Checkbox wird NICHT für diag=scatter gerendert', () => {
+    render(
+      <StepOptions
+        state={makeState({
+          diag: 'scatter',
+          currentReport: {
+            name: 'Test', description: '', isTemplate: false,
+            config: { diagramType: 'scatter', xField: 'month', yField: 'goals', filters: {}, metrics: [], showLegend: true, showLabels: false },
           },
         })}
       />,

@@ -332,70 +332,97 @@ function renderHeatmap(data: ReportData, options: any, isMobile: boolean) {
 
 // ── Boxplot sub-renderer ──
 
+/** Extract sorted numerics from a raw boxplot entry */
+function bpNums(entry: unknown): number[] {
+  if (!Array.isArray(entry)) return [];
+  return entry.map(Number).filter((n) => !isNaN(n)).sort((a: number, b: number) => a - b);
+}
+
+/** Compute median from a sorted numeric array */
+function arrayMedian(sorted: number[]): number {
+  const m = sorted.length;
+  if (m === 0) return 0;
+  return m % 2 === 1 ? sorted[(m - 1) / 2] : (sorted[m / 2 - 1] + sorted[m / 2]) / 2;
+}
+
 function renderBoxplot(data: ReportData, options: any, isMobile: boolean) {
-  const bpData = {
-    labels: data.labels,
-    datasets: data.datasets.map((ds: any, i: number) => ({
+  const labels = data.labels || [];
+  const bpDatasets: any[] = [];
+
+  data.datasets.forEach((ds: any, i: number) => {
+    const rawArrays: unknown[] = Array.isArray(ds.data) ? ds.data : [];
+    const strokeColor = ds.borderColor     || defaultColors[i % defaultColors.length];
+    const fillColor   = ds.backgroundColor || rgbaColors[i % rgbaColors.length];
+
+    // Chart.js floating bars use [min, max] array format.
+    // NEVER pass null: Chart.js parseObjectData crashes with "Cannot read properties of null (reading 'x')".
+    // Use [0, 0] for months with no data → invisible zero-height bar, no crash.
+    const boxData = rawArrays.map((entry) => {
+      const nums = bpNums(entry);
+      if (nums.length === 0) return [0, 0];
+      const q1 = nums[Math.floor(nums.length * 0.25)];
+      const q3 = nums[Math.floor(nums.length * 0.75)];
+      // If Q1 === Q3 (only one game): tiny offset so the bar is still visible
+      return q1 === q3 ? [Math.max(0, q1 - 0.1), q3 + 0.1] : [q1, q3];
+    });
+
+    bpDatasets.push({
       label: ds.label,
-      data: ds.data,
-      backgroundColor: ds.backgroundColor || rgbaColors[i % rgbaColors.length],
-      borderColor: ds.borderColor || defaultColors[i % defaultColors.length],
-      borderWidth: ds.borderWidth || 1.5,
-      _boxplot: true,
-    })),
-  };
-  const bpOptions: ChartOptions = {
+      data: boxData,
+      backgroundColor: fillColor,
+      borderColor: strokeColor,
+      borderWidth: 2,
+      borderSkipped: false,
+      _rawArrays: rawArrays,
+      _boxplotBox: true,
+    });
+  });
+
+  const bpOptions: any = {
     ...(options as any),
-    _drawBoxplots: true,
-    scales: { x: { stacked: false }, y: { stacked: false } },
+    _drawWhiskers: true,
+    scales: { x: { stacked: false }, y: { stacked: false, beginAtZero: true } },
+    plugins: {
+      ...(options?.plugins ?? {}),
+      tooltip: {
+        filter: (item: any) => (item.dataset as any)._boxplotBox === true,
+        callbacks: {
+          label: (context: any) => {
+            const rawArrays = (context.dataset._rawArrays as unknown[]) ?? [];
+            const entry = rawArrays[context.dataIndex];
+            const nums = bpNums(entry);
+            if (nums.length === 0) return `${context.dataset.label}: keine Daten`;
+            const q1     = nums[Math.floor(nums.length * 0.25)];
+            const median = arrayMedian(nums);
+            const q3     = nums[Math.floor(nums.length * 0.75)];
+            return [
+              `${context.dataset.label} (${nums.length} Spiele)`,
+              `Median: ${median}`,
+              `Q1–Q3: ${q1} – ${q3}`,
+              `Min: ${nums[0]}  ·  Max: ${nums[nums.length - 1]}`,
+            ];
+          },
+        },
+      },
+    },
   };
 
   const maCfg = (data as any).config?.movingAverage;
-  let finalBpDatasets = bpData.datasets;
+  let finalDatasets: any[] = bpDatasets;
   if (maCfg && maCfg.enabled && Number.isInteger(maCfg.window) && maCfg.window > 1) {
-    const tempNumericDs: any[] = [];
-    bpData.datasets.forEach((ds: any, idx: number) => {
-      const central: number[] = [];
-      if (Array.isArray(ds.data)) {
-        for (const entry of ds.data) {
-          if (Array.isArray(entry) && entry.length > 0) {
-            const nums: number[] = [];
-            for (const v of entry) {
-              const n = Number(v);
-              if (!isNaN(n)) nums.push(n);
-            }
-            if (nums.length === 0) {
-              central.push(0);
-            } else if (maCfg && maCfg.method === 'median') {
-              nums.sort((a, b) => a - b);
-              const m = nums.length;
-              if (m % 2 === 1) {
-                central.push(nums[(m - 1) / 2]);
-              } else {
-                central.push((nums[m / 2 - 1] + nums[m / 2]) / 2);
-              }
-            } else {
-              const s = nums.reduce((a, b) => a + b, 0);
-              central.push(s / nums.length);
-            }
-          } else if (typeof entry === 'number') {
-            central.push(entry);
-          } else {
-            central.push(0);
-          }
-        }
-      }
-      tempNumericDs.push({
+    const tempNumericDs = data.datasets.map((ds: any, idx: number) => {
+      const rawArrays: unknown[] = Array.isArray(ds.data) ? ds.data : [];
+      return {
         label: ds.label,
-        data: central,
+        data: rawArrays.map((e) => { const s = bpNums(e); return s.length > 0 ? arrayMedian(s) : 0; }),
         borderColor: ds.borderColor || defaultColors[idx % defaultColors.length],
-      });
+      };
     });
     const maDs = applyMovingAverage(tempNumericDs, maCfg.window);
-    finalBpDatasets = [...bpData.datasets, ...maDs];
+    finalDatasets = [...bpDatasets, ...maDs];
   }
 
-  return <Bar data={{ ...bpData, datasets: finalBpDatasets } as any} options={bpOptions as any} />;
+  return <Bar data={{ labels, datasets: finalDatasets } as any} options={bpOptions as any} />;
 }
 
 // ── Radar Overlay sub-renderer ──

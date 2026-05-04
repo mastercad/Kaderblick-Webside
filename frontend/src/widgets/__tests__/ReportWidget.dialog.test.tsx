@@ -155,13 +155,23 @@ describe('ReportWidget — isFilterable: FilterListOffIcon visibility', () => {
     expect(screen.getByTestId('FilterListOffIcon')).toBeInTheDocument();
   });
 
-  it('does NOT show FilterListOffIcon button in dialog for line charts', async () => {
+  it('shows FilterListOffIcon button in dialog for line charts', async () => {
     await renderAndOpenDialog(lineResponse());
-    expect(screen.queryByTestId('FilterListOffIcon')).not.toBeInTheDocument();
+    expect(screen.getByTestId('FilterListOffIcon')).toBeInTheDocument();
   });
 
-  it('does NOT show FilterListOffIcon button in dialog for area charts', async () => {
+  it('shows FilterListOffIcon button in dialog for area charts', async () => {
     await renderAndOpenDialog({ labels: ['A', 'B'], datasets: [{ label: 'X', data: [1, 2] }], diagramType: 'area' });
+    expect(screen.getByTestId('FilterListOffIcon')).toBeInTheDocument();
+  });
+
+  it('shows FilterListOffIcon button in dialog for stackedarea charts', async () => {
+    await renderAndOpenDialog({ labels: ['A', 'B'], datasets: [{ label: 'X', data: [1, 2] }], diagramType: 'stackedarea' });
+    expect(screen.getByTestId('FilterListOffIcon')).toBeInTheDocument();
+  });
+
+  it('does NOT show FilterListOffIcon button in dialog for scatter charts', async () => {
+    await renderAndOpenDialog({ labels: ['A', 'B'], datasets: [{ label: 'X', data: [1, 2] }], diagramType: 'scatter' });
     expect(screen.queryByTestId('FilterListOffIcon')).not.toBeInTheDocument();
   });
 });
@@ -265,19 +275,126 @@ describe('ReportWidget — hideEmpty data filtering', () => {
     expect(labels).toContain('Beta');
   });
 
-  it('does NOT apply hide-empty filter for line charts (isFilterable=false)', async () => {
+  it('line chart: removes datasets that are entirely 0/null when hideEmpty is on', async () => {
     await renderAndOpenDialog({
       labels: ['KW 1', 'KW 2', 'KW 3'],
-      datasets: [{ label: 'Tore', data: [0, 0, 0] }],
+      datasets: [
+        { label: 'Spieler A', data: [3, 0, 5] },   // has values → keep
+        { label: 'Spieler B', data: [0, 0, 0] },   // all zero → remove
+        { label: 'Spieler C', data: [null, 0, null] }, // all 0/null → remove
+      ],
       diagramType: 'line',
     });
-    // No filter button for line → check all labels present
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
+    const renderers = screen.getAllByTestId('ChartRenderer');
+    const last = renderers[renderers.length - 1];
+    // Only 1 dataset should remain (Spieler A)
+    expect(Number(last.getAttribute('data-datasets'))).toBe(1);
+    // Labels (months) are NOT removed for line charts
+    const labels = JSON.parse(last.getAttribute('data-labels') ?? '[]');
+    expect(labels).toHaveLength(3);
+  });
+
+  it('line chart: keeps all labels (time axis preserved) when hideEmpty is on', async () => {
+    await renderAndOpenDialog({
+      labels: ['Aug', 'Sep', 'Okt'],
+      datasets: [
+        { label: 'Spieler A', data: [0, 1, 0] },
+        { label: 'Spieler B', data: [0, 0, 0] },
+      ],
+      diagramType: 'line',
+    });
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
     const renderers = screen.getAllByTestId('ChartRenderer');
     const last = renderers[renderers.length - 1];
     const labels = JSON.parse(last.getAttribute('data-labels') ?? '[]');
-    expect(labels).toContain('KW 1');
-    expect(labels).toContain('KW 2');
-    expect(labels).toContain('KW 3');
+    // All months preserved
+    expect(labels).toEqual(['Aug', 'Sep', 'Okt']);
+  });
+
+  it('line chart: no datasets removed when all have at least one non-zero value', async () => {
+    await renderAndOpenDialog({
+      labels: ['Jan', 'Feb'],
+      datasets: [
+        { label: 'Spieler A', data: [0, 3] },
+        { label: 'Spieler B', data: [1, 0] },
+      ],
+      diagramType: 'line',
+    });
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
+    const renderers = screen.getAllByTestId('ChartRenderer');
+    const last = renderers[renderers.length - 1];
+    // Both datasets kept — each has at least one non-zero value
+    expect(Number(last.getAttribute('data-datasets'))).toBe(2);
+  });
+
+  it('line chart: removes dataset with all undefined values when hideEmpty is on', async () => {
+    await renderAndOpenDialog({
+      labels: ['Jan', 'Feb', 'Mrz'],
+      datasets: [
+        { label: 'Spieler A', data: [5, 3, 0] },
+        { label: 'Spieler B', data: [undefined, undefined, undefined] },
+      ],
+      diagramType: 'line',
+    });
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
+    const renderers = screen.getAllByTestId('ChartRenderer');
+    const last = renderers[renderers.length - 1];
+    expect(Number(last.getAttribute('data-datasets'))).toBe(1);
+  });
+
+  it('area chart: removes entirely-zero datasets when hideEmpty is on', async () => {
+    await renderAndOpenDialog({
+      labels: ['KW 1', 'KW 2'],
+      datasets: [
+        { label: 'Spieler A', data: [0, 4] },
+        { label: 'Spieler B', data: [0, 0] },
+      ],
+      diagramType: 'area',
+    });
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
+    const renderers = screen.getAllByTestId('ChartRenderer');
+    const last = renderers[renderers.length - 1];
+    expect(Number(last.getAttribute('data-datasets'))).toBe(1);
+    // Labels unchanged
+    const labels = JSON.parse(last.getAttribute('data-labels') ?? '[]');
+    expect(labels).toHaveLength(2);
+  });
+
+  it('stackedarea chart: removes entirely-zero datasets when hideEmpty is on', async () => {
+    await renderAndOpenDialog({
+      labels: ['KW 1', 'KW 2'],
+      datasets: [
+        { label: 'Spieler A', data: [2, 0] },
+        { label: 'Spieler B', data: [null, null] },
+      ],
+      diagramType: 'stackedarea',
+    });
+    const filterBtn = screen.getByTestId('FilterListOffIcon').closest('button')!;
+    await act(async () => {
+      fireEvent.click(filterBtn);
+    });
+    const renderers = screen.getAllByTestId('ChartRenderer');
+    const last = renderers[renderers.length - 1];
+    expect(Number(last.getAttribute('data-datasets'))).toBe(1);
+    // Labels unchanged
+    const labels = JSON.parse(last.getAttribute('data-labels') ?? '[]');
+    expect(labels).toHaveLength(2);
   });
 });
 

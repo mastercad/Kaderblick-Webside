@@ -232,7 +232,7 @@ export const StepOptions: React.FC<StepOptionsProps> = ({ state }) => {
             </Tooltip>
           </Box>
         )}
-        {['bar', 'pie', 'doughnut'].includes(diag) && (
+        {['bar', 'pie', 'doughnut', 'line', 'area', 'stackedarea'].includes(diag) && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <FormControlLabel
               control={

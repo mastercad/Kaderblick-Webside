@@ -33,65 +33,55 @@ ChartJS.register(
 );
 
 // ── Boxplot Plugin ──
+// Draws whiskers and median line for boxplot charts.
+// The Q1-Q3 box is rendered natively by Chart.js as a floating bar [q1, q3].
 export const boxplotPlugin = {
   id: 'boxplot',
-  beforeDatasetsDraw: (chart: any) => {
-    if (!chart.options._drawBoxplots) return;
+  afterDatasetsDraw: (chart: any) => {
+    if (!chart.options._drawWhiskers) return;
     const ctx = chart.ctx;
-    const chartArea = chart.chartArea;
-    if (!chartArea) return;
+    const yScale = chart.scales.y;
+    if (!yScale) return;
     chart.data.datasets.forEach((dataset: any, dsIdx: number) => {
-      if (!dataset._boxplot) return;
+      if (!dataset._boxplotBox) return;
       const meta = chart.getDatasetMeta(dsIdx);
-      (dataset.data || []).forEach((rawEntry: any, idx: number) => {
-        if (!Array.isArray(rawEntry)) return;
+      const rawArrays: unknown[] = Array.isArray(dataset._rawArrays) ? dataset._rawArrays : [];
+      const stroke = dataset.borderColor || '#3366CC';
+      rawArrays.forEach((rawEntry: unknown, idx: number) => {
+        if (!Array.isArray(rawEntry) || rawEntry.length === 0) return;
         const nums = rawEntry.map(Number).filter((n: number) => !isNaN(n)).sort((a: number, b: number) => a - b);
         if (nums.length === 0) return;
-        const q1Idx = Math.floor(nums.length * 0.25);
-        const q3Idx = Math.floor(nums.length * 0.75);
-        const medIdx = Math.floor(nums.length * 0.5);
-        const q1 = nums[q1Idx];
-        const q3 = nums[q3Idx];
-        const median = nums[medIdx];
+        const q1     = nums[Math.floor(nums.length * 0.25)];
+        const q3     = nums[Math.floor(nums.length * 0.75)];
+        const median = nums[Math.floor(nums.length * 0.5)];
         const minVal = nums[0];
         const maxVal = nums[nums.length - 1];
-        const yScale = chart.scales.y;
-        if (!yScale) return;
-        const yQ1 = yScale.getPixelForValue(q1);
-        const yQ3 = yScale.getPixelForValue(q3);
+        const element = meta.data[idx];
+        if (!element) return;
+        const x    = element.x;
+        const halfW = (element.width ?? 12) / 2;
+        const capW  = halfW * 0.5;
+        const yQ1  = yScale.getPixelForValue(q1);
+        const yQ3  = yScale.getPixelForValue(q3);
         const yMed = yScale.getPixelForValue(median);
         const yMin = yScale.getPixelForValue(minVal);
         const yMax = yScale.getPixelForValue(maxVal);
-        const element = meta.data[idx];
-        if (!element) return;
-        const x = element.x;
-        const halfWidth = Math.min(30, (chartArea.right - chartArea.left) / (dataset.data.length * chart.data.datasets.length * 2.5));
         ctx.save();
-        // Box (Q1..Q3)
-        ctx.fillStyle = dataset.backgroundColor || 'rgba(100,150,255,0.35)';
-        ctx.fillRect(x - halfWidth, yQ3, halfWidth * 2, yQ1 - yQ3);
-        ctx.strokeStyle = dataset.borderColor || '#3366CC';
-        ctx.lineWidth = dataset.borderWidth || 1.5;
-        ctx.strokeRect(x - halfWidth, yQ3, halfWidth * 2, yQ1 - yQ3);
-        // Median line
-        ctx.beginPath();
-        ctx.moveTo(x - halfWidth, yMed);
-        ctx.lineTo(x + halfWidth, yMed);
-        ctx.strokeStyle = '#c00';
-        ctx.lineWidth = 2;
-        ctx.stroke();
         // Whiskers
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(x, yQ3);
-        ctx.lineTo(x, yMax);
-        ctx.moveTo(x - halfWidth * 0.5, yMax);
-        ctx.lineTo(x + halfWidth * 0.5, yMax);
-        ctx.moveTo(x, yQ1);
-        ctx.lineTo(x, yMin);
-        ctx.moveTo(x - halfWidth * 0.5, yMin);
-        ctx.lineTo(x + halfWidth * 0.5, yMin);
-        ctx.strokeStyle = dataset.borderColor || '#3366CC';
-        ctx.lineWidth = 1;
+        ctx.moveTo(x, yQ1); ctx.lineTo(x, yMin);
+        ctx.moveTo(x - capW, yMin); ctx.lineTo(x + capW, yMin);
+        ctx.moveTo(x, yQ3); ctx.lineTo(x, yMax);
+        ctx.moveTo(x - capW, yMax); ctx.lineTo(x + capW, yMax);
+        ctx.stroke();
+        // Median line (on top of box)
+        ctx.strokeStyle = '#cc0000';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x - halfW, yMed);
+        ctx.lineTo(x + halfW, yMed);
         ctx.stroke();
         ctx.restore();
       });

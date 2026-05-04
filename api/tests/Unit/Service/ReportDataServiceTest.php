@@ -717,6 +717,140 @@ class ReportDataServiceTest extends TestCase
         $this->assertContains('TeamY', $datasetLabels);
     }
 
+    // ── Boxplot: raw-value arrays per bucket ───────────────────────────
+
+    public function testBoxplotWithoutGroupEmitsRawValueArraysPerLabel(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $svc = new ReportDataService($em);
+
+        $playerA = $this->createMock(Player::class);
+        $playerA->method('getFullName')->willReturn('Alice');
+        $playerA->method('__toString')->willReturn('Alice');
+
+        $playerB = $this->createMock(Player::class);
+        $playerB->method('getFullName')->willReturn('Bob');
+        $playerB->method('__toString')->willReturn('Bob');
+
+        $game1 = $this->createMock(Game::class);
+        $game1->method('getId')->willReturn(1);
+
+        $game2 = $this->createMock(Game::class);
+        $game2->method('getId')->willReturn(2);
+
+        // Alice: 2 events in game1, 1 event in game2 → distribution = [2.0, 1.0] (counts per game)
+        $evA1 = $this->createMock(GameEvent::class);
+        $evA1->method('getPlayer')->willReturn($playerA);
+        $evA1->method('getGame')->willReturn($game1);
+
+        $evA2 = $this->createMock(GameEvent::class);
+        $evA2->method('getPlayer')->willReturn($playerA);
+        $evA2->method('getGame')->willReturn($game1);
+
+        $evA3 = $this->createMock(GameEvent::class);
+        $evA3->method('getPlayer')->willReturn($playerA);
+        $evA3->method('getGame')->willReturn($game2);
+
+        // Bob: 1 event in game1 → distribution = [1.0]
+        $evB = $this->createMock(GameEvent::class);
+        $evB->method('getPlayer')->willReturn($playerB);
+        $evB->method('getGame')->willReturn($game1);
+
+        $ref = new ReflectionClass(ReportDataService::class);
+        $m = $ref->getMethod('generateReportDataForLineOrBarWithoutGroup');
+        $m->setAccessible(true);
+
+        // yField='eventType' has no aggregate → count($gameBucket) fallback is used
+        $result = $m->invokeArgs($svc, [[$evA1, $evA2, $evA3, $evB], 'player', 'eventType', 'boxplot']);
+
+        $this->assertArrayHasKey('labels', $result);
+        $this->assertArrayHasKey('datasets', $result);
+        $data = $result['datasets'][0]['data'];
+        // Each data point must be an array (per-game distribution), not a scalar
+        foreach ($data as $point) {
+            $this->assertIsArray($point, 'Boxplot data points must be arrays of per-game values');
+        }
+        $aliceIdx = array_search('Alice', $result['labels']);
+        $bobIdx = array_search('Bob', $result['labels']);
+        $this->assertNotFalse($aliceIdx);
+        $this->assertNotFalse($bobIdx);
+        // Alice: game1 has 2 events (count=2), game2 has 1 event (count=1)
+        $this->assertEqualsCanonicalizing([2.0, 1.0], $data[$aliceIdx]);
+        // Bob: game1 has 1 event (count=1)
+        $this->assertEqualsCanonicalizing([1.0], $data[$bobIdx]);
+    }
+
+    public function testBoxplotWithGroupEmitsRawValueArraysPerLayerAndLabel(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $svc = new ReportDataService($em);
+
+        $teamX = $this->createMock(Team::class);
+        $teamX->method('getName')->willReturn('TeamX');
+        $teamX->method('__toString')->willReturn('TeamX');
+
+        $teamY = $this->createMock(Team::class);
+        $teamY->method('getName')->willReturn('TeamY');
+        $teamY->method('__toString')->willReturn('TeamY');
+
+        $playerA = $this->createMock(Player::class);
+        $playerA->method('getFullName')->willReturn('Alice');
+        $playerA->method('__toString')->willReturn('Alice');
+
+        $game1 = $this->createMock(Game::class);
+        $game1->method('getId')->willReturn(1);
+
+        $game2 = $this->createMock(Game::class);
+        $game2->method('getId')->willReturn(2);
+
+        // Alice in TeamX: 2 events across 2 games (1 each) → distribution = [1.0, 1.0]
+        $evA1 = $this->createMock(GameEvent::class);
+        $evA1->method('getTeam')->willReturn($teamX);
+        $evA1->method('getPlayer')->willReturn($playerA);
+        $evA1->method('getGame')->willReturn($game1);
+
+        $evA2 = $this->createMock(GameEvent::class);
+        $evA2->method('getTeam')->willReturn($teamX);
+        $evA2->method('getPlayer')->willReturn($playerA);
+        $evA2->method('getGame')->willReturn($game2);
+
+        // Alice in TeamY: 1 event in game1 → distribution = [1.0]
+        $evA3 = $this->createMock(GameEvent::class);
+        $evA3->method('getTeam')->willReturn($teamY);
+        $evA3->method('getPlayer')->willReturn($playerA);
+        $evA3->method('getGame')->willReturn($game1);
+
+        $ref = new ReflectionClass(ReportDataService::class);
+        $m = $ref->getMethod('generateReportDataForGroup');
+        $m->setAccessible(true);
+
+        // yField='eventType' has no aggregate → count($gameBucket) fallback is used
+        $result = $m->invokeArgs($svc, [[$evA1, $evA2, $evA3], 'player', 'eventType', ['team'], 'boxplot']);
+
+        $this->assertArrayHasKey('labels', $result);
+        $this->assertArrayHasKey('datasets', $result);
+
+        // Every data point in every dataset must be an array (not a scalar)
+        foreach ($result['datasets'] as $ds) {
+            foreach ($ds['data'] as $point) {
+                $this->assertIsArray($point, 'Boxplot grouped data points must be arrays');
+            }
+        }
+
+        // TeamX dataset: Alice has 2 events in 2 different games → [1.0, 1.0]
+        $teamXDs = null;
+        foreach ($result['datasets'] as $ds) {
+            if ('TeamX' === $ds['label']) {
+                $teamXDs = $ds;
+                break;
+            }
+        }
+        $this->assertNotNull($teamXDs, 'Expected a TeamX dataset');
+        $aliceIdx = array_search('Alice', $result['labels']);
+        $this->assertNotFalse($aliceIdx);
+        $this->assertEqualsCanonicalizing([1.0, 1.0], $teamXDs['data'][$aliceIdx]);
+    }
+
     // ── retrieveFieldValue ─────────────────────────────────────────────
 
     public function testRetrieveFieldValueUsesAliasCallback(): void

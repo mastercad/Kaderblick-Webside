@@ -272,6 +272,11 @@ export const StepDataChart: React.FC<StepDataChartProps> = ({ state }) => {
   const recDiagramTypes = DIAGRAM_TYPES.filter(dt => recommendedTypeKeys.has(dt.value));
   const otherDiagramTypes = DIAGRAM_TYPES.filter(dt => !recommendedTypeKeys.has(dt.value));
 
+  const isBoxplot = currentReport.config.diagramType === 'boxplot';
+  // Y-field is non-numeric (a dimension) — invalid for boxplot
+  const yIsDimension = !!yField && dimensions.some(f => f.key === yField) && !metrics.some(f => f.key === yField);
+  const boxplotYInvalid = isBoxplot && yField && yIsDimension;
+
   /** Hebt ausgewählte Werte in Select-Feldern fett + primärfarbe hervor */
   const selSx = (val: string | undefined | null) =>
     val ? { '& .MuiSelect-select': { fontWeight: 600, color: 'primary.main' } } : undefined;
@@ -283,6 +288,41 @@ export const StepDataChart: React.FC<StepDataChartProps> = ({ state }) => {
       {!xField && !yField && (
         <Alert severity="info" sx={{ mb: 0.5 }}>
           <strong>So funktioniert es:</strong> Die <strong>X-Achse</strong> ist immer eine Dimension (z.B. Spieler, Monat, Team) — sie bestimmt die Beschriftungen. Die <strong>Y-Achse</strong> ist eine Metrik (z.B. Tore, Vorlagen) — sie bestimmt die Höhe der Balken.
+        </Alert>
+      )}
+
+      {/* Boxplot explanation — shown as soon as boxplot is selected */}
+      {isBoxplot && !boxplotYInvalid && (
+        <Alert severity="info" sx={{ mb: 0.5 }}>
+          <strong>Boxplot erklärt:</strong> Zeigt die <em>Streuung</em> einer Metrik über alle Spiele.
+          Jeder Balken steht für die Verteilung der Y-Werte über alle Spieltage —
+          der Strich in der Mitte ist der Median, die Box umfasst den mittleren Bereich (Q1–Q3).{' '}
+          <strong>Sinnvolle Konfigurationen:</strong> X = Spieler + Y = Tore zeigt, ob ein Spieler
+          gleichmäßig trifft oder nur in einzelnen Spielen. X = Monat + Y = Tore zeigt die
+          monatliche Streuung der Tore.
+        </Alert>
+      )}
+
+      {/* Boxplot mis-configuration: Y is a non-numeric dimension */}
+      {boxplotYInvalid && (
+        <Alert
+          severity="warning"
+          action={
+            <Tooltip title="Y-Achse auf eine Metrik ändern">
+              <IconButton
+                size="small"
+                color="inherit"
+                onClick={() => handleConfigChange('yField', metrics[0]?.key ?? '')}
+              >
+                <SwapVertIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          }
+        >
+          <strong>Boxplot braucht eine Metrik auf der Y-Achse.</strong>{' '}
+          „{availableFields.find(f => f.key === yField)?.label ?? yField}" ist eine Kategorie (kein Zahlenwert) —
+          ein Boxplot darüber ist nicht aussagekräftig.
+          Wähle stattdessen eine Metrik wie <em>Tore</em>, <em>Schüsse</em> oder <em>Vorlagen</em>.
         </Alert>
       )}
 
@@ -321,7 +361,17 @@ export const StepDataChart: React.FC<StepDataChartProps> = ({ state }) => {
           <InputLabel>X-Achse (Gruppierung) *</InputLabel>
           <Select
             value={currentReport.config.xField ?? ''}
-            onChange={(e) => handleConfigChange('xField', e.target.value)}
+            onChange={(e) => {
+              const newX = e.target.value;
+              handleConfigChange('xField', newX);
+              // Auto-clear groupBy when it would conflict with the new xField
+              const curGroupBy = Array.isArray(currentReport.config.groupBy)
+                ? (currentReport.config.groupBy[0] || '')
+                : (currentReport.config.groupBy || '');
+              if (curGroupBy && curGroupBy === newX) {
+                handleConfigChange('groupBy', '');
+              }
+            }}
             label="X-Achse (Gruppierung) *"
             sx={selSx(currentReport.config.xField)}
           >
@@ -393,11 +443,12 @@ export const StepDataChart: React.FC<StepDataChartProps> = ({ state }) => {
               .map(f => (
                 <MenuItem key={f.key} value={f.key}>{f.label}</MenuItem>
             ))}
-            {dimensions.length > 0 && [
+            {/* For boxplot, hide dimension options on Y-axis — only numeric metrics make sense */}
+            {!isBoxplot && dimensions.length > 0 && [
               <Divider key="div-dim" />,
               <ListSubheader key="hdr-dim" sx={{ fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.08em', textTransform: 'uppercase', lineHeight: '32px', color: 'text.primary', bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>Gruppierung</ListSubheader>,
             ]}
-            {dimensions
+            {!isBoxplot && dimensions
               .filter(f => f.key !== currentReport.config.xField)
               .map(f => (
                 <MenuItem key={f.key} value={f.key}>{f.label}</MenuItem>
@@ -412,10 +463,17 @@ export const StepDataChart: React.FC<StepDataChartProps> = ({ state }) => {
         <FormControl fullWidth>
           <InputLabel>Gruppierung (optional)</InputLabel>
           <Select
-            value={Array.isArray(currentReport.config.groupBy) ? (currentReport.config.groupBy[0] || '') : (currentReport.config.groupBy || '')}
+            value={(() => {
+              const v = Array.isArray(currentReport.config.groupBy) ? (currentReport.config.groupBy[0] || '') : (currentReport.config.groupBy || '');
+              // Guard: groupBy must not equal xField (that dimension is filtered out of options)
+              return v === currentReport.config.xField ? '' : v;
+            })()}
             onChange={(e) => handleConfigChange('groupBy', e.target.value)}
             label="Gruppierung (optional)"
-            sx={selSx(Array.isArray(currentReport.config.groupBy) ? (currentReport.config.groupBy[0] || '') : (currentReport.config.groupBy || ''))}
+            sx={selSx((() => {
+              const v = Array.isArray(currentReport.config.groupBy) ? (currentReport.config.groupBy[0] || '') : (currentReport.config.groupBy || '');
+              return v === currentReport.config.xField ? '' : v;
+            })())}
           >
             <MenuItem value="">Keine Gruppierung</MenuItem>
             {dimensions

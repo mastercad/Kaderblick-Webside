@@ -748,7 +748,7 @@ class ReportDataService
         $groupBy = array_values(array_filter($groupBy, fn ($gf) => $gf !== $xField));
 
         if (empty($groupBy)) {
-            return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField);
+            return $this->generateReportDataForLineOrBarWithoutGroup($events, $xField, $yField, $diagramType);
         }
 
         return $this->generateReportDataForGroup($events, $xField, $yField, $groupBy, $diagramType);
@@ -795,7 +795,7 @@ class ReportDataService
      *
      * @return array<string, mixed>
      */
-    private function generateReportDataForLineOrBarWithoutGroup(array $events, string $xField, string $yField): array
+    private function generateReportDataForLineOrBarWithoutGroup(array $events, string $xField, string $yField, string $diagramType = ''): array
     {
         // Resolve yField metric aggregate (if available)
         $fieldAliases = ReportFieldAliasService::fieldAliases($this->em);
@@ -822,8 +822,26 @@ class ReportDataService
         // Sort by sort key (handles date/month fields correctly; falls back to display value)
         usort($xLabels, fn ($a, $b) => strcmp($sortKeys[$a] ?? $a, $sortKeys[$b] ?? $b));
         $data = [];
-        foreach ($xLabels as $x) {
-            $data[] = null !== $yAggregate ? (float) $yAggregate($buckets[$x]) : count($buckets[$x]);
+        if ('boxplot' === $diagramType) {
+            // Boxplot: sub-group each x-bucket by game, apply the metric aggregate per game.
+            // This yields a distribution of per-game values (e.g. goals per game per player).
+            foreach ($xLabels as $x) {
+                $gameBuckets = [];
+                foreach ($buckets[$x] as $event) {
+                    $game = $event->getGame();
+                    $gameId = $game ? (string) $game->getId() : 'unknown';
+                    $gameBuckets[$gameId][] = $event;
+                }
+                $rawValues = [];
+                foreach ($gameBuckets as $gameBucket) {
+                    $rawValues[] = null !== $yAggregate ? (float) $yAggregate($gameBucket) : (float) count($gameBucket);
+                }
+                $data[] = $rawValues;
+            }
+        } else {
+            foreach ($xLabels as $x) {
+                $data[] = null !== $yAggregate ? (float) $yAggregate($buckets[$x]) : count($buckets[$x]);
+            }
         }
 
         // Load alias metadata to resolve human-friendly labels for the dataset
@@ -861,7 +879,9 @@ class ReportDataService
         $xValues = [];
         $xSortKeys = [];
         $layerValues = [];
-        // When a metric aggregate is needed, collect event buckets; otherwise count directly
+        // When a metric aggregate is needed, collect event buckets; otherwise count directly.
+        // Boxplot always collects event buckets (to extract raw Y values per group/x combination).
+        $isBoxplot = 'boxplot' === $diagramType;
         /** @var array<string, array<string, list<mixed>>> $eventBuckets */
         $eventBuckets = [];
         $matrix = [];
@@ -881,7 +901,7 @@ class ReportDataService
                 $xSortKeys[$x] = $this->retrieveSortKey($event, $xField);
             }
             $layerValues[$layerKey] = true;
-            if (null !== $yAggregate) {
+            if (null !== $yAggregate || $isBoxplot) {
                 $eventBuckets[$layerKey][$x][] = $event;
             } else {
                 if (!isset($matrix[$layerKey][$x])) {
@@ -901,7 +921,21 @@ class ReportDataService
         foreach ($layers as $layerKey) {
             $data = [];
             foreach ($xLabels as $xVal) {
-                if (null !== $yAggregate) {
+                if ($isBoxplot) {
+                    // Boxplot: sub-group by game within the (layer, x) bucket, apply aggregate per game.
+                    $bucket = $eventBuckets[$layerKey][$xVal] ?? [];
+                    $gameBuckets = [];
+                    foreach ($bucket as $event) {
+                        $game = $event->getGame();
+                        $gameId = $game ? (string) $game->getId() : 'unknown';
+                        $gameBuckets[$gameId][] = $event;
+                    }
+                    $rawValues = [];
+                    foreach ($gameBuckets as $gameBucket) {
+                        $rawValues[] = null !== $yAggregate ? (float) $yAggregate($gameBucket) : (float) count($gameBucket);
+                    }
+                    $data[] = $rawValues;
+                } elseif (null !== $yAggregate) {
                     $bucket = $eventBuckets[$layerKey][$xVal] ?? [];
                     $data[] = !empty($bucket) ? (float) $yAggregate($bucket) : ($isLineLike ? null : 0.0);
                 } else {
