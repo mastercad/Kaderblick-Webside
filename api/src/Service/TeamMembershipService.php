@@ -74,16 +74,17 @@ class TeamMembershipService
             return false;
         }
 
-        // Game events: only self_player / self_coach users of participating teams
-        // (parents and friends are not obligated to respond to games)
+        // Game events: all team members (players, coaches, parents, friends, …)
+        // of either participating team may respond. The dashboard reminder is
+        // separately restricted to self_player / self_coach via isSelfMember.
         if ($event->getGame()) {
             $homeTeam = $event->getGame()->getHomeTeam();
             $awayTeam = $event->getGame()->getAwayTeam();
 
-            if ($homeTeam && $this->isSelfMemberInTeam($user, $homeTeam)) {
+            if ($homeTeam && $this->isUserInTeam($user, $homeTeam)) {
                 return true;
             }
-            if ($awayTeam && $this->isSelfMemberInTeam($user, $awayTeam)) {
+            if ($awayTeam && $this->isUserInTeam($user, $awayTeam)) {
                 return true;
             }
 

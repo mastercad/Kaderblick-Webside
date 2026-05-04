@@ -28,7 +28,7 @@ interface UpcomingEvent {
   cancelled: boolean;
   game: object | null;
   type?: { name: string; color?: string } | null;
-  permissions: { canParticipate: boolean };
+  permissions: { canParticipate: boolean; isSelfMember?: boolean };
   participation_status: {
     id: number;
     name: string;
@@ -219,7 +219,7 @@ export const QuickRsvpWidget: React.FC = () => {
       ]);
 
       const eligible = (upcomingRes?.events ?? []).filter(
-        e => !e.cancelled && e.permissions?.canParticipate,
+        e => !e.cancelled && e.permissions?.canParticipate && e.permissions?.isSelfMember,
       );
 
       setEvents(eligible);

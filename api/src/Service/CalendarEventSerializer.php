@@ -133,6 +133,7 @@ class CalendarEventSerializer
                 'canCancel' => $this->security->isGranted(CalendarEventVoter::CANCEL, $calendarEvent),
                 'canViewRides' => $this->canUserViewRides($calendarEvent),
                 'canParticipate' => $this->canUserParticipate($calendarEvent),
+                'isSelfMember' => $this->isUserSelfMember($calendarEvent),
             ],
             'trainingTeamId' => (static function () use ($calendarEvent): ?int {
                 foreach ($calendarEvent->getPermissions() as $perm) {
@@ -213,21 +214,53 @@ class CalendarEventSerializer
         return $this->teamMembershipService->isUserTeamMemberForEvent($user, $calendarEvent);
     }
 
-    private function canUserParticipate(CalendarEvent $calendarEvent): bool
+    /**
+     * Returns true only when the user is a self_player or self_coach for a team
+     * that is linked to this event. Parents, friends and other supporter relations
+     * always get false — regardless of event type.
+     *
+     * Used exclusively to decide whether the dashboard RSVP reminder is shown.
+     */
+    private function isUserSelfMember(CalendarEvent $calendarEvent): bool
     {
-        // For game and tournament events the SUPERADMIN shortcut is intentionally skipped:
-        // only users with a self_player or self_coach relation to a participating team must
-        // respond — not admins who happen to have no direct team membership.
-        if ($calendarEvent->getGame() || $calendarEvent->getTournament()) {
-            $user = $this->security->getUser();
-            if (!$user instanceof User) {
-                return false;
-            }
-
-            return $this->teamMembershipService->canUserParticipateInEvent($user, $calendarEvent);
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return false;
         }
 
-        // For all other event types (training, meetings, …): SUPERADMIN can always participate.
+        // Game events: check home/away teams directly.
+        if ($calendarEvent->getGame()) {
+            $homeTeam = $calendarEvent->getGame()->getHomeTeam();
+            $awayTeam = $calendarEvent->getGame()->getAwayTeam();
+
+            return ($homeTeam && $this->teamMembershipService->isSelfMemberInTeam($user, $homeTeam))
+                || ($awayTeam && $this->teamMembershipService->isSelfMemberInTeam($user, $awayTeam));
+        }
+
+        // Tournament events: check each registered tournament team.
+        if ($calendarEvent->getTournament()) {
+            foreach ($calendarEvent->getTournament()->getTeams() as $tournamentTeam) {
+                if ($tournamentTeam->getTeam() && $this->teamMembershipService->isSelfMemberInTeam($user, $tournamentTeam->getTeam())) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Training and other events: check all teams linked via event permissions.
+        foreach ($this->teamMembershipService->getEventTeams($calendarEvent) as $team) {
+            if ($this->teamMembershipService->isSelfMemberInTeam($user, $team)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canUserParticipate(CalendarEvent $calendarEvent): bool
+    {
+        // SUPERADMIN can always participate in any event type.
         if ($this->security->isGranted('ROLE_SUPERADMIN')) {
             return true;
         }

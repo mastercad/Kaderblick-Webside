@@ -123,7 +123,9 @@ describe('useCalendarEventState', () => {
   describe('handleAddEvent', () => {
     it('opens modal with today\'s date', () => {
       const { result } = renderHook(() => useCalendarEventState(defaultOptions), { wrapper });
-      const today = new Date().toISOString().substring(0, 10);
+      // Use local date (same as moment().format('YYYY-MM-DD') in the implementation)
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       act(() => result.current.handleAddEvent());
       expect(result.current.eventModalOpen).toBe(true);
       expect(result.current.eventFormData.date).toBe(today);

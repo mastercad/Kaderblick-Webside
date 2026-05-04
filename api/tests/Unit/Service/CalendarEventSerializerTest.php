@@ -73,7 +73,7 @@ class CalendarEventSerializerTest extends TestCase
         $result = $this->serializer->serialize($event, null, null);
 
         $perms = $result['permissions'];
-        foreach (['canCreate', 'canEdit', 'canDelete', 'canCancel', 'canViewRides', 'canParticipate'] as $key) {
+        foreach (['canCreate', 'canEdit', 'canDelete', 'canCancel', 'canViewRides', 'canParticipate', 'isSelfMember'] as $key) {
             $this->assertArrayHasKey($key, $perms, "permissions.$key must be present");
         }
     }
@@ -149,10 +149,10 @@ class CalendarEventSerializerTest extends TestCase
     }
 
     /**
-     * SUPERADMIN should NOT automatically get canParticipate=true for game events.
-     * Only users with a self_player/self_coach relation to the team must RSVP.
+     * SUPERADMIN always gets canParticipate=true, even for game events.
+     * The dashboard reminder is restricted separately via isSelfMember.
      */
-    public function testCanParticipateForGameEventIgnoresSuperAdminShortcut(): void
+    public function testCanParticipateForGameEventSuperAdminAlwaysTrue(): void
     {
         $this->security->method('isGranted')->willReturnCallback(
             fn (string $attr) => 'ROLE_SUPERADMIN' === $attr
@@ -160,17 +160,17 @@ class CalendarEventSerializerTest extends TestCase
 
         $user = $this->createMock(User::class);
         $this->security->method('getUser')->willReturn($user);
-        // No self membership → must return false even for SUPERADMIN
-        $this->membershipService->method('canUserParticipateInEvent')->willReturn(false);
+        // Service must not be called — SUPERADMIN shortcut fires first
+        $this->membershipService->expects($this->never())->method('canUserParticipateInEvent');
 
         $event = $this->makeBaseEvent();
         $game = $this->createMock(Game::class);
         $event->setGame($game);
         $result = $this->serializer->serialize($event, $user, null);
 
-        $this->assertFalse(
+        $this->assertTrue(
             $result['permissions']['canParticipate'],
-            'SUPERADMIN without self_player/self_coach membership must NOT get canParticipate=true for a game event'
+            'SUPERADMIN must always get canParticipate=true, even for game events'
         );
     }
 
@@ -197,9 +197,9 @@ class CalendarEventSerializerTest extends TestCase
     }
 
     /**
-     * Same rule as game events: SUPERADMIN shortcut is skipped for tournament events.
+     * SUPERADMIN always gets canParticipate=true, even for tournament events.
      */
-    public function testCanParticipateForTournamentEventIgnoresSuperAdminShortcut(): void
+    public function testCanParticipateForTournamentEventSuperAdminAlwaysTrue(): void
     {
         $this->security->method('isGranted')->willReturnCallback(
             fn (string $attr) => 'ROLE_SUPERADMIN' === $attr
@@ -207,7 +207,8 @@ class CalendarEventSerializerTest extends TestCase
 
         $user = $this->createMock(User::class);
         $this->security->method('getUser')->willReturn($user);
-        $this->membershipService->method('canUserParticipateInEvent')->willReturn(false);
+        // Service must not be called — SUPERADMIN shortcut fires first
+        $this->membershipService->expects($this->never())->method('canUserParticipateInEvent');
 
         $event = $this->makeBaseEvent();
         $tournament = $this->createMock(Tournament::class);
@@ -215,9 +216,9 @@ class CalendarEventSerializerTest extends TestCase
         $event->setTournament($tournament);
         $result = $this->serializer->serialize($event, $user, null);
 
-        $this->assertFalse(
+        $this->assertTrue(
             $result['permissions']['canParticipate'],
-            'SUPERADMIN without self_player/self_coach membership must NOT get canParticipate=true for a tournament event'
+            'SUPERADMIN must always get canParticipate=true, even for tournament events'
         );
     }
 
@@ -259,7 +260,196 @@ class CalendarEventSerializerTest extends TestCase
 
         $this->assertFalse($result['permissions']['canParticipate']);
     }
+    // ─── isSelfMember — game events ──────────────────────────────────────────
 
+    /**
+     * For game events, isSelfMember=true only when isSelfMemberInTeam() returns true
+     * (i.e. the user has a self_player or self_coach relation to a participating team).
+     */
+    public function testIsSelfMemberIsTrueForGameWhenSelfPlayerInTeam(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+        $this->membershipService->method('isSelfMemberInTeam')->willReturn(true);
+
+        $team = $this->createMock(\App\Entity\Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($team);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $event = $this->makeBaseEvent();
+        $event->setGame($game);
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertTrue(
+            $result['permissions']['isSelfMember'],
+            'isSelfMember must be true for a self_player/coach in the home team',
+        );
+    }
+
+    /**
+     * Parent scenario: canParticipate=true (any team member via isUserInTeam) but
+     * isSelfMember=false (isSelfMemberInTeam returns false for parent relation).
+     * This ensures dashboard reminder is NOT shown for parents while they can still RSVP.
+     */
+    public function testIsSelfMemberIsFalseForGameWhenOnlyParentInTeam(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+        // Parent IS in team (canParticipate=true via isUserInTeam)
+        $this->membershipService->method('canUserParticipateInEvent')->willReturn(true);
+        // But does NOT have self_player / self_coach relation
+        $this->membershipService->method('isSelfMemberInTeam')->willReturn(false);
+
+        $team = $this->createMock(\App\Entity\Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($team);
+        $game->method('getAwayTeam')->willReturn(null);
+
+        $event = $this->makeBaseEvent();
+        $event->setGame($game);
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertTrue(
+            $result['permissions']['canParticipate'],
+            'canParticipate must be true: parent is a team member and can RSVP',
+        );
+        $this->assertFalse(
+            $result['permissions']['isSelfMember'],
+            'isSelfMember must be false: parent must not see the dashboard RSVP reminder',
+        );
+    }
+
+    public function testIsSelfMemberIsFalseForGameWhenBothTeamsReturnFalse(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+        $this->membershipService->method('isSelfMemberInTeam')->willReturn(false);
+
+        $homeTeam = $this->createMock(\App\Entity\Team::class);
+        $awayTeam = $this->createMock(\App\Entity\Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($homeTeam);
+        $game->method('getAwayTeam')->willReturn($awayTeam);
+
+        $event = $this->makeBaseEvent();
+        $event->setGame($game);
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertFalse($result['permissions']['isSelfMember']);
+    }
+
+    public function testIsSelfMemberIsTrueForGameWhenOnlyAwayTeamIsSelfMember(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+
+        $homeTeam = $this->createMock(\App\Entity\Team::class);
+        $awayTeam = $this->createMock(\App\Entity\Team::class);
+        $game = $this->createMock(Game::class);
+        $game->method('getHomeTeam')->willReturn($homeTeam);
+        $game->method('getAwayTeam')->willReturn($awayTeam);
+
+        // home team: not self-member; away team: self-member
+        $this->membershipService->expects($this->exactly(2))
+            ->method('isSelfMemberInTeam')
+            ->willReturnOnConsecutiveCalls(false, true);
+
+        $event = $this->makeBaseEvent();
+        $event->setGame($game);
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertTrue($result['permissions']['isSelfMember']);
+    }
+
+    public function testIsSelfMemberIsFalseForGameWhenUnauthenticated(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+        $this->security->method('getUser')->willReturn(null);
+
+        $game = $this->createMock(Game::class);
+        $event = $this->makeBaseEvent();
+        $event->setGame($game);
+
+        $result = $this->serializer->serialize($event, null, null);
+
+        $this->assertFalse($result['permissions']['isSelfMember']);
+    }
+
+    // ─── isSelfMember — non-game events ──────────────────────────────────
+
+    /**
+     * Training event with a team permission: user is self_player/coach in that team
+     * → isSelfMember must be true.
+     */
+    public function testIsSelfMemberIsTrueForNonGameEventWhenSelfMemberInEventTeam(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+
+        $team = $this->createMock(\App\Entity\Team::class);
+        $this->membershipService->method('getEventTeams')->willReturn([$team]);
+        $this->membershipService->method('isSelfMemberInTeam')->willReturn(true);
+
+        $event = $this->makeBaseEvent(); // no game, no tournament
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertTrue(
+            $result['permissions']['isSelfMember'],
+            'isSelfMember must be true when user is self_player/coach in a linked team',
+        );
+    }
+
+    /**
+     * Training event with a team permission: user is only a parent in that team
+     * → isSelfMember must be false (no dashboard reminder for parents).
+     */
+    public function testIsSelfMemberIsFalseForNonGameEventWhenOnlyParentInEventTeam(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+
+        $user = $this->createMock(User::class);
+        $this->security->method('getUser')->willReturn($user);
+
+        $team = $this->createMock(\App\Entity\Team::class);
+        $this->membershipService->method('getEventTeams')->willReturn([$team]);
+        // Parent relation: isSelfMemberInTeam returns false
+        $this->membershipService->method('isSelfMemberInTeam')->willReturn(false);
+
+        $event = $this->makeBaseEvent();
+
+        $result = $this->serializer->serialize($event, $user, null);
+
+        $this->assertFalse(
+            $result['permissions']['isSelfMember'],
+            'isSelfMember must be false for parents — no dashboard RSVP reminder',
+        );
+    }
+
+    public function testIsSelfMemberIsFalseForNonGameEventWhenUnauthenticated(): void
+    {
+        $this->security->method('isGranted')->willReturn(false);
+        $this->security->method('getUser')->willReturn(null);
+
+        $result = $this->serializer->serialize($this->makeBaseEvent(), null, null);
+
+        $this->assertFalse($result['permissions']['isSelfMember']);
+    }
     // ─── canViewRides ─────────────────────────────────────────────────────────
 
     public function testCanViewRidesIsTrueForSuperAdmin(): void
