@@ -136,10 +136,16 @@ export function useReportBuilder(
   // ──── Handlers ────
 
   const handleConfigChange = useCallback((key: keyof ReportConfig, value: any) => {
-    setCurrentReport(prev => ({
-      ...prev,
-      config: { ...prev.config, [key]: value },
-    }));
+    setCurrentReport(prev => {
+      const next = { ...prev.config, [key]: value };
+      // Auto-derive groupedMetrics: radaroverlay with multiple metrics AND a groupBy
+      // means each dataset = groupBy-value × metric → groupedMetrics must be true.
+      const isRadarOverlay = (next.diagramType ?? '').toLowerCase() === 'radaroverlay';
+      const hasMultiMetrics = Array.isArray(next.metrics) && next.metrics.length > 1;
+      const hasGroupBy = !!(next.groupBy);
+      next.groupedMetrics = isRadarOverlay && hasMultiMetrics && hasGroupBy;
+      return { ...prev, config: next };
+    });
   }, []);
 
   const handleFilterChange = useCallback((filterKey: string, value: any) => {

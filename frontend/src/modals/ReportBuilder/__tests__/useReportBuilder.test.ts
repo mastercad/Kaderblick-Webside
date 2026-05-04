@@ -362,6 +362,107 @@ describe('useReportBuilder – handleConfigChange', () => {
 });
 
 // =============================================================================
+// groupedMetrics – automatische Ableitung
+// =============================================================================
+
+describe('useReportBuilder – groupedMetrics auto-derivation', () => {
+  const radarReport: Report = {
+    ...SAMPLE_REPORT,
+    config: {
+      ...SAMPLE_REPORT.config,
+      diagramType: 'radaroverlay',
+      xField: 'player',
+      yField: 'yellowCards',
+      metrics: ['yellowCards', 'yellowRedCards', 'redCards'],
+      groupBy: 'competitionType',
+    },
+  };
+
+  it('setzt groupedMetrics=true wenn radaroverlay + mehrere Metriken + groupBy', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, radarReport, jest.fn(), jest.fn()),
+      ));
+    });
+    // Trigger via handleConfigChange to ensure derivation runs
+    act(() => {
+      result.current.handleConfigChange('showLegend', true);
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(true);
+  });
+
+  it('setzt groupedMetrics=false wenn diagramType nicht radaroverlay', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, radarReport, jest.fn(), jest.fn()),
+      ));
+    });
+    act(() => {
+      result.current.handleConfigChange('diagramType', 'bar');
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(false);
+  });
+
+  it('setzt groupedMetrics=false wenn nur eine Metrik vorhanden', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, radarReport, jest.fn(), jest.fn()),
+      ));
+    });
+    act(() => {
+      result.current.handleConfigChange('metrics', ['yellowCards']);
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(false);
+  });
+
+  it('setzt groupedMetrics=false wenn groupBy fehlt', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, radarReport, jest.fn(), jest.fn()),
+      ));
+    });
+    act(() => {
+      result.current.handleConfigChange('groupBy', undefined);
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(false);
+  });
+
+  it('setzt groupedMetrics=false wenn metrics leer', async () => {
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, radarReport, jest.fn(), jest.fn()),
+      ));
+    });
+    act(() => {
+      result.current.handleConfigChange('metrics', []);
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(false);
+  });
+
+  it('setzt groupedMetrics=true wenn groupBy nachträglich hinzugefügt wird', async () => {
+    const reportNoGroup: Report = {
+      ...radarReport,
+      config: { ...radarReport.config, groupBy: undefined },
+    };
+    let result: any;
+    await act(async () => {
+      ({ result } = renderHook(() =>
+        useReportBuilder(true, reportNoGroup, jest.fn(), jest.fn()),
+      ));
+    });
+    act(() => {
+      result.current.handleConfigChange('groupBy', 'competitionType');
+    });
+    expect(result.current.currentReport.config.groupedMetrics).toBe(true);
+  });
+});
+
+// =============================================================================
 // handleFilterChange
 // =============================================================================
 
